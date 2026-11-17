@@ -1,0 +1,230 @@
+syntax = "proto3";
+
+package coreadmin.claims.v1;
+
+import "coreadmin/claims/v1/claims.proto";
+import "coreadmin/common/v1/common.proto";
+
+service ClaimsService {
+  // ProcessClaim accepts a new claim, saves it and adjudicates it before
+  // returning. The result is PENDED, APPROVED or DENIED; a claim is left
+  // RECEIVED only if it was saved and adjudication did not complete. A
+  // provider's corrected claim (frequency 7) or void (frequency 8) also
+  // arrives here and is handled as AdjustClaim / VoidClaim of the claim it
+  // references.
+  //
+  // Calls for the same family are safe in any order and concurrently: the
+  // accumulator revision check makes the loser recalculate. Callers
+  // sending batches should still send one subscriber's claims in order, to
+  // keep recalculation rare.
+  //
+  // With dry_run set nothing is saved and no accumulators are posted
+  // (estimates).
+  rpc ProcessClaim(ProcessClaimRequest) returns (ProcessClaimResponse);
+  rpc GetClaim(GetClaimRequest) returns (GetClaimResponse);
+  rpc ListClaims(ListClaimsRequest) returns (ListClaimsResponse);
+
+  // ReprocessClaim re-runs adjudication on a PENDED claim, after an
+  // examiner clears pends or the underlying data changes. Rejected for any
+  // other status: finalized claims change only through AdjustClaim or
+  // VoidClaim. The previous result moves to adjudication_history.
+  rpc ReprocessClaim(ReprocessClaimRequest) returns (ReprocessClaimResponse);
+
+  // AdjustClaim corrects a finalized claim (APPROVED or DENIED) by creating
+  // a replacement claim that references it. The replacement's cost sharing
+  // is calculated against the family's balances as if the original had
+  // never posted. When the replacement is finalized, the original's
+  // postings are reversed and the replacement's posted in one write, and
+  // the original becomes ADJUSTED. If the replacement pends, an unpaid
+  // original is put on payment hold until it is resolved.
+  //
+  // If the replacement's accumulator postings differ from the original's,
+  // every claim for the same subscriber unit and benefit period that was
+  // finalized after the original gets an ACCUMULATOR_CHANGE review flag.
+  // Those claims are not changed.
+  //
+  // Rejected while the original's payment.state is SELECTED, unless
+  // dry_run is set. With dry_run nothing changes and the response carries
+  // the projected result, delta and the claims that would be flagged.
+  rpc AdjustClaim(AdjustClaimRequest) returns (AdjustClaimResponse);
+
+  // VoidClaim cancels a finalized claim by creating a void (frequency 8)
+  // that references it. The void claim is finalized on creation as
+  // APPROVED with zero paid, so the next remittance reports the reversal
+  // and recovers anything paid on the original. The original becomes
+  // VOIDED, its accumulator postings are reversed, and later claims are
+  // flagged as for AdjustClaim. Rejected while the original's
+  // payment.state is SELECTED.
+  rpc VoidClaim(VoidClaimRequest) returns (VoidClaimResponse);
+
+  // PullClaimFromPayment removes a claim whose payment.state is SELECTED
+  // from a payment run that has not been released. Its payment is cleared
+  // and a payment hold is placed, so the next run does not select it
+  // before it is adjusted or voided.
+  rpc PullClaimFromPayment(PullClaimFromPaymentRequest) returns (PullClaimFromPaymentResponse);
+
+  // ReleasePaymentHold removes a payment hold so the next payment run can
+  // select the claim.
+  rpc ReleasePaymentHold(ReleasePaymentHoldRequest) returns (ReleasePaymentHoldResponse);
+
+  // ClearReviewFlag closes an open review flag when the examiner decides
+  // the claim needs no adjustment.
+  rpc ClearReviewFlag(ClearReviewFlagRequest) returns (ClearReviewFlagResponse);
+}
+
+message ProcessClaimRequest {
+  Claim claim = 1;
+  bool dry_run = 2;
+}
+
+message ProcessClaimResponse {
+  Claim claim = 1;
+}
+
+message GetClaimRequest {
+  string id = 1;
+}
+
+message GetClaimResponse {
+  Claim claim = 1;
+}
+
+message ListClaimsRequest {
+  string customer_id = 1;
+  // Optional filters.
+  string member_id = 2;
+  ClaimStatus status = 3;
+  common.v1.DateRange service_dates = 4;
+  common.v1.PageRequest page = 5;
+  // All claims for one subscriber unit.
+  string subscriber_id = 6;
+  PaymentState payment_state = 7;
+  // Only claims with at least one uncleared review flag.
+  bool has_open_review_flag = 8;
+}
+
+message ListClaimsResponse {
+  repeated Claim claims = 1;
+  common.v1.PageResponse page = 2;
+}
+
+message ReprocessClaimRequest {
+  string claim_id = 1;
+  // Pends the examiner is clearing. Empty when re-running because
+  // underlying data changed (eligibility, fee schedule).
+  repeated PendResolution resolutions = 2;
+  // Required. Recorded on the new adjudication run.
+  string reason = 3;
+  bool dry_run = 4;
+}
+
+message PendResolution {
+  string code = 1;
+  // 0 for a claim-level pend.
+  int32 line_number = 2;
+  string note = 3;
+}
+
+message ReprocessClaimResponse {
+  Claim claim = 1;
+}
+
+message AdjustClaimRequest {
+  string original_claim_id = 1;
+  // The claim as it should have been. Leave unset to re-adjudicate the
+  // original's content unchanged against current data (e.g. after a fee
+  // schedule or eligibility correction).
+  Claim corrected_claim = 2;
+  // Required.
+  string reason = 3;
+  bool dry_run = 4;
+}
+
+message AdjustClaimResponse {
+  // The replacement claim (not saved when dry_run is set).
+  Claim claim = 1;
+  AdjustmentDelta delta = 2;
+  // Claims that received (or, on a dry run, would receive) an
+  // ACCUMULATOR_CHANGE review flag.
+  repeated string flagged_claim_ids = 3;
+}
+
+// AdjustmentDelta compares a replacement claim with what the payee holds
+// for the original.
+message AdjustmentDelta {
+  DeltaBasis basis = 1;
+  // What the payee holds for the original, per `basis`.
+  common.v1.Money original_paid = 2;
+  common.v1.Money projected_paid = 3;
+  // projected_paid - original_paid. Negative is a recovery.
+  common.v1.Money delta = 4;
+  // Per-line comparison of the two adjudication results, matched by line
+  // number. A line present on one side only has zero on the other.
+  repeated LineDelta lines = 5;
+}
+
+enum DeltaBasis {
+  DELTA_BASIS_UNSPECIFIED = 0;
+  // Original was paid (issued or cleared): measured against payment.paid.
+  DELTA_BASIS_PAYMENT = 1;
+  // Original is approved but unpaid: measured against its adjudicated
+  // total. Nothing to recover; liability changes before the payment run.
+  DELTA_BASIS_APPROVED_UNPAID = 2;
+  // Original's payment was returned or voided and not reissued: the payee
+  // holds nothing, so measured against zero.
+  DELTA_BASIS_PAYMENT_NOT_HELD = 3;
+  // Original was denied: measured against zero.
+  DELTA_BASIS_DENIED = 4;
+}
+
+message LineDelta {
+  int32 line_number = 1;
+  common.v1.Money original_paid = 2;
+  common.v1.Money projected_paid = 3;
+  common.v1.Money delta = 4;
+}
+
+message VoidClaimRequest {
+  string claim_id = 1;
+  // Required.
+  string reason = 2;
+}
+
+message VoidClaimResponse {
+  // The new void claim.
+  Claim void_claim = 1;
+  // Claims that received an ACCUMULATOR_CHANGE review flag.
+  repeated string flagged_claim_ids = 2;
+}
+
+message PullClaimFromPaymentRequest {
+  string claim_id = 1;
+  // Required. Recorded on the payment hold.
+  string reason = 2;
+}
+
+message PullClaimFromPaymentResponse {
+  Claim claim = 1;
+}
+
+message ReleasePaymentHoldRequest {
+  string claim_id = 1;
+  // Required.
+  string note = 2;
+}
+
+message ReleasePaymentHoldResponse {
+  Claim claim = 1;
+}
+
+message ClearReviewFlagRequest {
+  string claim_id = 1;
+  string code = 2;
+  string source_claim_id = 3;
+  // Required.
+  string note = 4;
+}
+
+message ClearReviewFlagResponse {
+  Claim claim = 1;
+}

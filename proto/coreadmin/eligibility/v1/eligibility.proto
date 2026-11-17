@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package coreadmin.eligibility.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// Member is a covered person. Every member belongs to a subscriber unit
+// (the employee plus dependents); the subscriber's own Member record has
+// relationship SELF and subscriber_id == id.
+message Member {
+  string id = 1;
+  string customer_id = 2;
+  string subscriber_id = 3;
+  Relationship relationship = 4;
+  common.v1.PersonName name = 5;
+  common.v1.Date birth_date = 6;
+  common.v1.Gender gender = 7;
+  common.v1.Address address = 8;
+  // Member id printed on the ID card. Unique within a customer.
+  string card_id = 9;
+  repeated common.v1.ExternalId external_ids = 10;
+  repeated CoverageSpan coverage = 11;
+  common.v1.AuditInfo audit = 15;
+}
+
+enum Relationship {
+  RELATIONSHIP_UNSPECIFIED = 0;
+  RELATIONSHIP_SELF = 1;
+  RELATIONSHIP_SPOUSE = 2;
+  RELATIONSHIP_DOMESTIC_PARTNER = 3;
+  RELATIONSHIP_CHILD = 4;
+  RELATIONSHIP_OTHER_DEPENDENT = 5;
+}
+
+// CoverageSpan is a contiguous period during which a member is enrolled in
+// a plan. Spans for the same member must not overlap within a
+// coverage line (medical, dental, ...). Retroactive terminations shorten
+// `effective.end`; they never delete the span, so claims paid during the
+// span can be identified for recovery.
+message CoverageSpan {
+  string id = 1;
+  string plan_id = 2;
+  string group_id = 3;
+  CoverageLine line = 4;
+  CoverageTier tier = 5;
+  common.v1.DateRange effective = 6;
+  CoverageStatus status = 7;
+  // Paid-through date for premium/funding; claims after this date may pend
+  // during a grace period.
+  common.v1.Date paid_through = 8;
+  // COBRA continuation, if applicable.
+  bool cobra = 9;
+  // The enrollment transaction that created or last changed this span.
+  string source_ingestion_job_id = 10;
+}
+
+enum CoverageLine {
+  COVERAGE_LINE_UNSPECIFIED = 0;
+  COVERAGE_LINE_MEDICAL = 1;
+  COVERAGE_LINE_PHARMACY = 2;
+  COVERAGE_LINE_DENTAL = 3;
+  COVERAGE_LINE_VISION = 4;
+}
+
+// CoverageTier is the subscriber's elected tier. Drives premium/funding and
+// stop-loss aggregate attachment factors.
+enum CoverageTier {
+  COVERAGE_TIER_UNSPECIFIED = 0;
+  COVERAGE_TIER_EMPLOYEE = 1;
+  COVERAGE_TIER_EMPLOYEE_SPOUSE = 2;
+  COVERAGE_TIER_EMPLOYEE_CHILDREN = 3;
+  COVERAGE_TIER_FAMILY = 4;
+}
+
+enum CoverageStatus {
+  COVERAGE_STATUS_UNSPECIFIED = 0;
+  COVERAGE_STATUS_ACTIVE = 1;
+  COVERAGE_STATUS_TERMINATED = 2;
+  // In a premium grace period: claims pend rather than pay.
+  COVERAGE_STATUS_GRACE = 3;
+  COVERAGE_STATUS_SUSPENDED = 4;
+}
+
+// FamilyAccumulators holds every accumulator balance for one subscriber
+// unit, on one plan, for one benefit period. It is a single record on
+// purpose: a claim can touch several balances (individual and family
+// deductible, individual and family out-of-pocket), and keeping them
+// behind one audit.revision makes posting a claim one conditional write.
+// Two claims for the same family cannot both be calculated against a
+// stale balance: the second write is rejected and recalculated.
+//
+// Balances change only through entries, so they can be audited and
+// reversed when claims are adjusted or voided.
+//
+// A dependent who moves to another subscriber mid-period keeps their
+// individual balances here; carrying them over is an explicit transfer
+// (entries with external_source set on the new family's record).
+message FamilyAccumulators {
+  // Deterministic id: {subscriber_id}:{plan_id}:{benefit period start,
+  // YYYY-MM-DD}.
+  string id = 1;
+  string customer_id = 2;
+  string subscriber_id = 3;
+  string plan_id = 4;
+  common.v1.DateRange benefit_period = 5;
+  repeated AccumulatorBalance balances = 6;
+  // Append-only, in posting order.
+  repeated AccumulatorEntry entries = 7;
+  common.v1.AuditInfo audit = 15;
+}
+
+// AccumulatorBalance is the running total for one accumulator (defined on
+// the plan) for one owner.
+message AccumulatorBalance {
+  string accumulator_id = 1;
+  // member_id for INDIVIDUAL accumulators, subscriber_id for FAMILY.
+  string owner_id = 2;
+  // Sum of this balance's entries.
+  common.v1.Money applied = 3;
+  common.v1.Money limit = 4;
+}
+
+message AccumulatorEntry {
+  string accumulator_id = 1;
+  string owner_id = 2;
+  string claim_id = 3;
+  int32 claim_line_number = 4;
+  // Negative amounts reverse a prior posting.
+  common.v1.Money amount = 5;
+  common.v1.Date service_date = 6;
+  google.protobuf.Timestamp posted_time = 7;
+  // Source of an external posting (e.g. pharmacy PBM feed, prior carrier
+  // carryover, transfer from another family record). Empty for claims
+  // adjudicated here.
+  string external_source = 8;
+}

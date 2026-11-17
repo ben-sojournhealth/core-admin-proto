@@ -1,0 +1,7 @@
+{
+  "id": "grp_acme_main",
+  "customerId": "cust_acme",
+  "name": "Acme - All Salaried & Hourly",
+  "planIds": ["plan_acme_ppo"],
+  "effective": {"start": {"year": 2026, "month": 1, "day": 1}}
+}

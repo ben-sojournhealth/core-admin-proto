@@ -1,0 +1,10 @@
+{
+  "id": "ctr_ppo_std",
+  "networkId": "net_ppo",
+  "name": "PPO standard professional",
+  "effective": {"start": {"year": 2026, "month": 1, "day": 1}},
+  "terms": [
+    {"method": "CONTRACT_METHOD_FEE_SCHEDULE", "feeScheduleId": "fs_ppo_2026"},
+    {"method": "CONTRACT_METHOD_PERCENT_OF_BILLED", "percentBps": 6000}
+  ]
+}

@@ -1,0 +1,189 @@
+syntax = "proto3";
+
+package coreadmin.plan.v1;
+
+import "coreadmin/common/v1/common.proto";
+
+// Plan is a customer-specific benefit design. The stable identity (id,
+// customer, name, type) lives here; the benefit design itself lives in
+// versions. A mid-year amendment appends a new PlanVersion, and claims
+// adjudicate against the version effective on the date of service.
+message Plan {
+  string id = 1;
+  string customer_id = 2;
+  string name = 3;
+  PlanType plan_type = 4;
+  // The plan's benefit period (usually a plan year). Accumulators reset at
+  // the start of each benefit period.
+  common.v1.DateRange benefit_period = 5;
+  // Non-overlapping versions, ordered by effective start.
+  repeated PlanVersion versions = 6;
+  common.v1.AuditInfo audit = 15;
+}
+
+message PlanVersion {
+  int32 version = 1;
+  // The range this version is in force. Within the plan's benefit_period.
+  common.v1.DateRange effective = 2;
+
+  // Tiers define how providers map to cost sharing (e.g. "INN", "OON",
+  // or a narrow "TIER1" network).
+  repeated NetworkTier network_tiers = 3;
+  // Accumulator ids must stay stable across versions so balances carry
+  // over within a benefit period.
+  repeated Accumulator accumulators = 4;
+  repeated ServiceCategory service_categories = 5;
+  repeated Benefit benefits = 6;
+  // Applied when no service category matches a claim line.
+  DefaultBenefitBehavior default_behavior = 7;
+}
+
+enum PlanType {
+  PLAN_TYPE_UNSPECIFIED = 0;
+  PLAN_TYPE_PPO = 1;
+  PLAN_TYPE_EPO = 2;
+  PLAN_TYPE_HMO = 3;
+  PLAN_TYPE_POS = 4;
+  // HSA-qualified high-deductible plan: deductible must be met before
+  // non-preventive copays apply.
+  PLAN_TYPE_HDHP = 5;
+}
+
+enum DefaultBenefitBehavior {
+  DEFAULT_BENEFIT_BEHAVIOR_UNSPECIFIED = 0;
+  // Pend the claim for manual review.
+  DEFAULT_BENEFIT_BEHAVIOR_PEND = 1;
+  // Deny the line as not a covered service.
+  DEFAULT_BENEFIT_BEHAVIOR_DENY = 2;
+}
+
+message NetworkTier {
+  // Stable id referenced by CostShare.tier_id and Accumulator.tier_ids,
+  // e.g. "INN".
+  string id = 1;
+  string name = 2;
+  // Provider networks whose participating providers fall in this tier.
+  // A tier with no networks and `is_out_of_network` set catches everyone
+  // else.
+  repeated string network_ids = 3;
+  bool is_out_of_network = 4;
+  // How allowed amounts are determined when the provider has no contract
+  // with any of this tier's networks (typically OON).
+  ReimbursementBasis non_contracted_basis = 5;
+  // Lower number wins when a provider matches several tiers.
+  int32 priority = 6;
+}
+
+// ReimbursementBasis describes how to price a service absent a contract.
+message ReimbursementBasis {
+  ReimbursementMethod method = 1;
+  // Percentage in basis points (14000 = 140% of Medicare).
+  int32 percent_bps = 2;
+}
+
+enum ReimbursementMethod {
+  REIMBURSEMENT_METHOD_UNSPECIFIED = 0;
+  REIMBURSEMENT_METHOD_FEE_SCHEDULE = 1;
+  REIMBURSEMENT_METHOD_PERCENT_OF_BILLED = 2;
+  REIMBURSEMENT_METHOD_PERCENT_OF_MEDICARE = 3;
+  // Usual & customary from an external data source.
+  REIMBURSEMENT_METHOD_UCR = 4;
+}
+
+// Accumulator defines a running total that cost sharing applies to
+// (deductibles, out-of-pocket maximums) and the limit at which it is met.
+message Accumulator {
+  // Stable id referenced by balances and stop-loss, e.g. "DED_INN_IND".
+  string id = 1;
+  AccumulatorType type = 2;
+  AccumulatorLevel level = 3;
+  // Tiers whose cost sharing counts toward this accumulator.
+  repeated string tier_ids = 4;
+  common.v1.Money limit = 5;
+  // For FAMILY accumulators: embedded means each member also has an
+  // individual limit (the matching INDIVIDUAL accumulator) and is covered
+  // once they reach it. Non-embedded means only the family total matters.
+  bool embedded = 6;
+  // For a FAMILY accumulator, the INDIVIDUAL accumulator that is embedded
+  // in it.
+  string individual_accumulator_id = 7;
+}
+
+enum AccumulatorType {
+  ACCUMULATOR_TYPE_UNSPECIFIED = 0;
+  ACCUMULATOR_TYPE_DEDUCTIBLE = 1;
+  ACCUMULATOR_TYPE_OUT_OF_POCKET = 2;
+}
+
+enum AccumulatorLevel {
+  ACCUMULATOR_LEVEL_UNSPECIFIED = 0;
+  ACCUMULATOR_LEVEL_INDIVIDUAL = 1;
+  ACCUMULATOR_LEVEL_FAMILY = 2;
+}
+
+// ServiceCategory groups codes that share a benefit (e.g. "Office visit -
+// PCP", "Advanced imaging", "Inpatient"). Matching is by code criteria on
+// the claim line; the first category (by priority) whose criteria all
+// match wins.
+message ServiceCategory {
+  string id = 1;
+  string name = 2;
+  int32 priority = 3;
+  // CPT/HCPCS ranges. Empty means any procedure code.
+  repeated CodeRange procedure_codes = 4;
+  // UB-04 revenue codes. Empty means any.
+  repeated CodeRange revenue_codes = 5;
+  // CMS place-of-service codes (e.g. "11" office, "23" ER). Empty means
+  // any.
+  repeated string place_of_service_codes = 6;
+  // Provider taxonomy codes for the rendering provider. Empty means any.
+  repeated string provider_taxonomy_codes = 7;
+  // ICD-10 ranges (e.g. preventive Z-codes). Empty means any.
+  repeated CodeRange diagnosis_codes = 8;
+}
+
+// CodeRange is an inclusive lexical range. Set start == end for a single
+// code.
+message CodeRange {
+  string start = 1;
+  string end = 2;
+}
+
+// Benefit attaches cost sharing to a service category, per network tier.
+message Benefit {
+  string service_category_id = 1;
+  repeated CostShare cost_shares = 2;
+  bool requires_prior_auth = 3;
+  repeated BenefitLimit limits = 4;
+}
+
+message CostShare {
+  string tier_id = 1;
+  bool covered = 2;
+  common.v1.Money copay = 3;
+  // Coinsurance the member pays, in basis points (2000 = 20%).
+  int32 coinsurance_bps = 4;
+  // Whether the deductible must be met before the plan pays.
+  bool deductible_applies = 5;
+  // If set, the copay applies only after the deductible is met (common on
+  // HDHPs).
+  bool copay_after_deductible = 6;
+}
+
+message BenefitLimit {
+  BenefitLimitType type = 1;
+  // Maximum visits/units/days, used when type is VISITS, UNITS or DAYS.
+  int32 max_count = 2;
+  // Maximum plan-paid dollars, used when type is DOLLARS.
+  common.v1.Money max_amount = 3;
+  // Tiers that share this limit. Empty means all tiers.
+  repeated string tier_ids = 4;
+}
+
+enum BenefitLimitType {
+  BENEFIT_LIMIT_TYPE_UNSPECIFIED = 0;
+  BENEFIT_LIMIT_TYPE_VISITS = 1;
+  BENEFIT_LIMIT_TYPE_UNITS = 2;
+  BENEFIT_LIMIT_TYPE_DAYS = 3;
+  BENEFIT_LIMIT_TYPE_DOLLARS = 4;
+}

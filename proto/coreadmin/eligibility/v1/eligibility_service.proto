@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package coreadmin.eligibility.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "coreadmin/eligibility/v1/eligibility.proto";
+
+service EligibilityService {
+  rpc GetMember(GetMemberRequest) returns (GetMemberResponse);
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+  rpc CreateMember(CreateMemberRequest) returns (CreateMemberResponse);
+  rpc UpdateMember(UpdateMemberRequest) returns (UpdateMemberResponse);
+
+  // CheckEligibility answers "is this person covered on this date, under
+  // what plan, and where are they on their accumulators" (the 270/271
+  // question).
+  rpc CheckEligibility(CheckEligibilityRequest) returns (CheckEligibilityResponse);
+
+  // GetFamilyAccumulators returns the accumulator record for the member's
+  // subscriber unit, for the coverage and benefit period in force on a
+  // date.
+  rpc GetFamilyAccumulators(GetFamilyAccumulatorsRequest) returns (GetFamilyAccumulatorsResponse);
+}
+
+message GetMemberRequest {
+  string id = 1;
+}
+
+message GetMemberResponse {
+  Member member = 1;
+}
+
+message ListMembersRequest {
+  string customer_id = 1;
+  // Optional: restrict to one subscriber unit.
+  string subscriber_id = 2;
+  common.v1.PageRequest page = 3;
+}
+
+message ListMembersResponse {
+  repeated Member members = 1;
+  common.v1.PageResponse page = 2;
+}
+
+message CreateMemberRequest {
+  Member member = 1;
+}
+
+message CreateMemberResponse {
+  Member member = 1;
+}
+
+message UpdateMemberRequest {
+  Member member = 1;
+}
+
+message UpdateMemberResponse {
+  Member member = 1;
+}
+
+message CheckEligibilityRequest {
+  // Identify the member by internal id, or by customer + card id + DOB.
+  string member_id = 1;
+  string customer_id = 2;
+  string card_id = 3;
+  common.v1.Date birth_date = 4;
+
+  common.v1.Date service_date = 5;
+  CoverageLine line = 6;
+}
+
+message CheckEligibilityResponse {
+  bool eligible = 1;
+  Member member = 2;
+  CoverageSpan coverage = 3;
+  FamilyAccumulators accumulators = 4;
+  // Populated when not eligible, e.g. "NO_COVERAGE_ON_DATE",
+  // "MEMBER_NOT_FOUND", "COVERAGE_IN_GRACE".
+  string reason = 5;
+}
+
+message GetFamilyAccumulatorsRequest {
+  string member_id = 1;
+  common.v1.Date as_of = 2;
+}
+
+message GetFamilyAccumulatorsResponse {
+  FamilyAccumulators accumulators = 1;
+}

@@ -1,0 +1,165 @@
+syntax = "proto3";
+
+package coreadmin.stoploss.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "coreadmin/eligibility/v1/eligibility.proto";
+import "google/protobuf/timestamp.proto";
+
+// StopLossPolicy is the excess-loss coverage a self-funded customer buys
+// from a stop-loss carrier. The TPA tracks claims against it and files
+// reimbursement requests; the carrier pays the customer.
+message StopLossPolicy {
+  string id = 1;
+  string customer_id = 2;
+  string carrier_name = 3;
+  string policy_number = 4;
+  common.v1.DateRange policy_period = 5;
+  ContractBasis contract_basis = 6;
+  SpecificCoverage specific = 7;
+  AggregateCoverage aggregate = 8;
+  // Which claim types count toward the policy.
+  bool covers_medical = 9;
+  bool covers_pharmacy = 10;
+  common.v1.AuditInfo audit = 15;
+}
+
+// ContractBasis is the "incurred/paid" window, written like 12/15 or
+// 24/12. A claim counts if it was incurred within
+//   [policy start - run_in_months, policy end]
+// and paid within
+//   [policy start, policy end + run_out_months].
+// 12/12: run_in 0, run_out 0. 12/15: run_in 0, run_out 3.
+// 24/12: run_in 12, run_out 0. Paid (terminal) basis: unlimited run_in.
+message ContractBasis {
+  int32 run_in_months = 1;
+  int32 run_out_months = 2;
+  // Run-in with no limit (paid contract, e.g. "paid 12").
+  bool unlimited_run_in = 3;
+}
+
+// SpecificCoverage reimburses the plan for any one member's eligible
+// claims above the specific deductible.
+message SpecificCoverage {
+  common.v1.Money deductible = 1;
+  // An additional layer the customer retains across all members before any
+  // specific reimbursement is paid.
+  common.v1.Money aggregating_specific_deductible = 2;
+  // Member-specific higher deductibles (lasers) for known high claimants.
+  repeated Laser lasers = 3;
+  // Per-member maximum reimbursement. Zero means unlimited.
+  common.v1.Money max_reimbursement = 4;
+}
+
+message Laser {
+  string member_id = 1;
+  common.v1.Money deductible = 2;
+  string note = 3;
+}
+
+// AggregateCoverage reimburses the plan when total eligible claims for the
+// policy period exceed the attachment point. The attachment point
+// accrues monthly: sum over months of (enrolled subscribers in tier x
+// tier factor), floored at minimum_attachment.
+message AggregateCoverage {
+  repeated AttachmentFactor attachment_factors = 1;
+  common.v1.Money minimum_attachment = 2;
+  // Claims above the specific deductible are excluded from aggregate
+  // accumulation (they are the specific carrier's risk).
+  bool exclude_specific_excess = 3;
+  // Per-member cap on claims counted toward aggregate. Zero means none.
+  common.v1.Money per_member_aggregate_limit = 4;
+  // Maximum aggregate reimbursement. Zero means unlimited.
+  common.v1.Money max_reimbursement = 5;
+}
+
+message AttachmentFactor {
+  eligibility.v1.CoverageTier tier = 1;
+  // Per-subscriber-per-month factor.
+  common.v1.Money monthly_factor = 2;
+}
+
+// SpecificExposure tracks one member's eligible paid claims against the
+// policy. Updated as claims are paid or adjusted.
+message SpecificExposure {
+  // Deterministic id: {policy_id}:{member_id}.
+  string id = 1;
+  string policy_id = 2;
+  string member_id = 3;
+  common.v1.Money eligible_paid = 4;
+  // The policy deductible, or the member's laser.
+  common.v1.Money deductible = 5;
+  common.v1.Money excess = 6;
+  // Set when eligible_paid crosses a notification threshold (typically
+  // 50% of the deductible): the carrier expects early notice of large
+  // claimants.
+  bool reported_to_carrier = 7;
+  repeated ExposureEntry entries = 8;
+  common.v1.AuditInfo audit = 15;
+}
+
+message ExposureEntry {
+  string claim_id = 1;
+  common.v1.Date incurred_date = 2;
+  common.v1.Date paid_date = 3;
+  common.v1.Money amount = 4;
+}
+
+// AggregateExposure tracks the policy-level total against the attachment
+// point, by month.
+message AggregateExposure {
+  // Deterministic id: same as the policy id.
+  string id = 1;
+  string policy_id = 2;
+  repeated MonthlyAggregate months = 3;
+  common.v1.Money attachment_point = 4;
+  common.v1.Money eligible_paid = 5;
+  common.v1.Money excess = 6;
+  common.v1.AuditInfo audit = 15;
+}
+
+message MonthlyAggregate {
+  int32 year = 1;
+  int32 month = 2;
+  // Subscriber counts by tier, from eligibility.
+  repeated TierCount census = 3;
+  common.v1.Money attachment_accrual = 4;
+  common.v1.Money eligible_paid = 5;
+}
+
+message TierCount {
+  eligibility.v1.CoverageTier tier = 1;
+  int32 subscribers = 2;
+}
+
+// StopLossFiling is a reimbursement request sent to the carrier.
+message StopLossFiling {
+  string id = 1;
+  string policy_id = 2;
+  FilingType type = 3;
+  // For SPECIFIC filings.
+  string member_id = 4;
+  repeated string claim_ids = 5;
+  common.v1.Money amount_requested = 6;
+  common.v1.Money amount_reimbursed = 7;
+  FilingStatus status = 8;
+  google.protobuf.Timestamp submitted_time = 9;
+  google.protobuf.Timestamp closed_time = 10;
+  string notes = 11;
+  common.v1.AuditInfo audit = 15;
+}
+
+enum FilingType {
+  FILING_TYPE_UNSPECIFIED = 0;
+  FILING_TYPE_SPECIFIC = 1;
+  FILING_TYPE_AGGREGATE = 2;
+}
+
+enum FilingStatus {
+  FILING_STATUS_UNSPECIFIED = 0;
+  FILING_STATUS_DRAFT = 1;
+  FILING_STATUS_SUBMITTED = 2;
+  FILING_STATUS_REQUESTED_INFO = 3;
+  FILING_STATUS_REIMBURSED = 4;
+  FILING_STATUS_DENIED = 5;
+}

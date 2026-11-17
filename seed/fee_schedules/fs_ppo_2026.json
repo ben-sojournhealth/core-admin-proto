@@ -1,0 +1,67 @@
+{
+  "id": "fs_ppo_2026",
+  "name": "PPO professional 2026",
+  "effective": {
+    "start": {
+      "year": 2026,
+      "month": 1,
+      "day": 1
+    },
+    "end": {
+      "year": 2026,
+      "month": 12,
+      "day": 31
+    }
+  },
+  "entries": [
+    {
+      "procedureCode": "99213",
+      "allowed": {
+        "cents": 9500
+      }
+    },
+    {
+      "procedureCode": "99214",
+      "allowed": {
+        "cents": 13500
+      }
+    },
+    {
+      "procedureCode": "99396",
+      "allowed": {
+        "cents": 15000
+      }
+    },
+    {
+      "procedureCode": "70551",
+      "allowed": {
+        "cents": 42000
+      }
+    },
+    {
+      "procedureCode": "70551",
+      "modifier": "26",
+      "allowed": {
+        "cents": 9000
+      }
+    },
+    {
+      "procedureCode": "99284",
+      "allowed": {
+        "cents": 60000
+      }
+    },
+    {
+      "procedureCode": "29881",
+      "allowed": {
+        "cents": 120000
+      }
+    },
+    {
+      "procedureCode": "27447",
+      "allowed": {
+        "cents": 1800000
+      }
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "mem_1004",
+  "customerId": "cust_acme",
+  "subscriberId": "mem_1001",
+  "relationship": "RELATIONSHIP_CHILD",
+  "name": {
+    "first": "Avery",
+    "last": "Rivera"
+  },
+  "birthDate": {
+    "year": 2026,
+    "month": 3,
+    "day": 2
+  },
+  "gender": "GENDER_UNKNOWN",
+  "cardId": "ACM100104"
+}
