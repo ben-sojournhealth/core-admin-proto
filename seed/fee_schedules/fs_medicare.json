@@ -1,0 +1,48 @@
+{
+  "id": "fs_medicare",
+  "name": "Medicare physician fee schedule (sample rates)",
+  "effective": {
+    "start": {
+      "year": 2026,
+      "month": 1,
+      "day": 1
+    },
+    "end": {
+      "year": 2026,
+      "month": 12,
+      "day": 31
+    }
+  },
+  "entries": [
+    {
+      "procedureCode": "99213",
+      "allowed": {
+        "cents": 8000
+      }
+    },
+    {
+      "procedureCode": "99214",
+      "allowed": {
+        "cents": 11500
+      }
+    },
+    {
+      "procedureCode": "99284",
+      "allowed": {
+        "cents": 40000
+      }
+    },
+    {
+      "procedureCode": "70551",
+      "allowed": {
+        "cents": 30000
+      }
+    },
+    {
+      "procedureCode": "29881",
+      "allowed": {
+        "cents": 90000
+      }
+    }
+  ]
+}

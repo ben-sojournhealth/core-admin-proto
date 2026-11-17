@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package coreadmin.ingestion.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "coreadmin/ingestion/v1/ingestion.proto";
+
+service IngestionService {
+  // StartIngestion registers a file that has been uploaded to source_uri
+  // and starts processing it asynchronously.
+  rpc StartIngestion(StartIngestionRequest) returns (StartIngestionResponse);
+  rpc GetIngestionJob(GetIngestionJobRequest) returns (GetIngestionJobResponse);
+  rpc ListIngestionJobs(ListIngestionJobsRequest) returns (ListIngestionJobsResponse);
+  // ApproveIngestion releases a job held in AWAITING_APPROVAL.
+  rpc ApproveIngestion(ApproveIngestionRequest) returns (ApproveIngestionResponse);
+}
+
+message StartIngestionRequest {
+  string customer_id = 1;
+  IngestionKind kind = 2;
+  IngestionFormat format = 3;
+  string source_uri = 4;
+  string original_filename = 5;
+  LoadMode mode = 6;
+}
+
+message StartIngestionResponse {
+  IngestionJob job = 1;
+}
+
+message GetIngestionJobRequest {
+  string id = 1;
+}
+
+message GetIngestionJobResponse {
+  IngestionJob job = 1;
+}
+
+message ListIngestionJobsRequest {
+  string customer_id = 1;
+  IngestionKind kind = 2;
+  common.v1.PageRequest page = 3;
+}
+
+message ListIngestionJobsResponse {
+  repeated IngestionJob jobs = 1;
+  common.v1.PageResponse page = 2;
+}
+
+message ApproveIngestionRequest {
+  string id = 1;
+}
+
+message ApproveIngestionResponse {
+  IngestionJob job = 1;
+}

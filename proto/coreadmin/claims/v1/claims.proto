@@ -1,0 +1,408 @@
+syntax = "proto3";
+
+package coreadmin.claims.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "coreadmin/plan/v1/plan.proto";
+import "coreadmin/provider/v1/provider.proto";
+import "google/protobuf/timestamp.proto";
+
+// Claim is a request for payment, modeled on the 837P/837I.
+//
+// Lifecycle:
+//
+//   RECEIVED -> PENDED | APPROVED | DENIED      first adjudication
+//   PENDED   -> PENDED | APPROVED | DENIED      ReprocessClaim
+//   APPROVED | DENIED -> ADJUSTED | VOIDED      AdjustClaim / VoidClaim
+//
+// `status` records the decision only. Payment (selection into a run,
+// issuance, clearing, returns) is tracked separately in `payment`, and
+// does not change the status.
+//
+// A claim is finalized when it reaches APPROVED or DENIED. Finalization is
+// the only point at which accumulators are posted. A finalized claim is
+// never re-adjudicated: corrections and voids create a new Claim that
+// references the original (claim frequency 7 / 8), and the original
+// becomes ADJUSTED or VOIDED.
+message Claim {
+  string id = 1;
+  string customer_id = 2;
+  ClaimType type = 3;
+  ClaimFrequency frequency = 4;
+  // For replacement/void claims: the claim being replaced.
+  string original_claim_id = 5;
+  // Provider-assigned patient control number (837 CLM01), echoed on the
+  // 835. The payer's claim number is `id`.
+  string patient_control_number = 6;
+
+  // Member as submitted, and as resolved by eligibility.
+  string member_card_id = 7;
+  string member_id = 8;
+  string subscriber_id = 9;
+
+  ProviderRef billing_provider = 10;
+  ProviderRef rendering_provider = 11;
+  ProviderRef referring_provider = 12;
+  // Institutional only.
+  ProviderRef facility = 13;
+
+  // ICD-10-CM; the first is principal.
+  repeated string diagnosis_codes = 14;
+  common.v1.DateRange service_dates = 15;
+  common.v1.Money total_charge = 16;
+  repeated ClaimLine lines = 17;
+
+  // Institutional fields.
+  InstitutionalInfo institutional = 18;
+
+  ClaimStatus status = 19;
+  ClaimSource source = 20;
+  // When the claim reached us (intake). Not necessarily the date timely
+  // filing is measured from; see timely_filing_date.
+  google.protobuf.Timestamp received_time = 21;
+  // Prior authorization / referral numbers supplied by the provider.
+  repeated string authorization_numbers = 22;
+
+  // The current adjudication result. Output only: written by the engine,
+  // never edited, and never an input to any later adjudication. Downstream
+  // systems (accumulator ledger, stop-loss, remittance) keep their own
+  // records by claim id and reverse from those.
+  Adjudication adjudication = 23;
+
+  // Clearinghouse that delivered the claim, for EDI submissions.
+  string clearinghouse_id = 24;
+  // When the clearinghouse accepted the claim from the provider. Commonly
+  // the date timely filing is measured from, since the clearinghouse
+  // acceptance report is the provider's proof of filing.
+  google.protobuf.Timestamp clearinghouse_received_time = 25;
+  // The date the timely filing limit is checked against, set at intake from
+  // clearinghouse_received_time or received_time according to the
+  // customer's / contract's rules.
+  common.v1.Date timely_filing_date = 26;
+
+  // Earlier adjudication runs, oldest first (each ReprocessClaim moves the
+  // previous result here), so it stays visible why a claim pended.
+  repeated Adjudication adjudication_history = 27;
+  // Payment and remittance for this claim, written back by the payment
+  // system so adjustment deltas can be computed from the claim alone.
+  // Unset until a payment run selects the claim.
+  ClaimPayment payment = 28;
+  // When set, payment runs skip this claim.
+  PaymentHold payment_hold = 29;
+  // Open and cleared requests for an examiner to look at this claim.
+  repeated ReviewFlag review_flags = 30;
+  // Examiner decisions that let the claim past a pend (e.g. "prior auth
+  // confirmed", "not a duplicate"). These are inputs to adjudication,
+  // unlike the adjudication results.
+  repeated PendOverride pend_overrides = 32;
+
+  common.v1.AuditInfo audit = 31;
+}
+
+enum ClaimType {
+  CLAIM_TYPE_UNSPECIFIED = 0;
+  CLAIM_TYPE_PROFESSIONAL = 1;
+  CLAIM_TYPE_INSTITUTIONAL = 2;
+  CLAIM_TYPE_DENTAL = 3;
+}
+
+enum ClaimFrequency {
+  CLAIM_FREQUENCY_UNSPECIFIED = 0;
+  CLAIM_FREQUENCY_ORIGINAL = 1;
+  CLAIM_FREQUENCY_REPLACEMENT = 7;
+  CLAIM_FREQUENCY_VOID = 8;
+}
+
+enum ClaimStatus {
+  CLAIM_STATUS_UNSPECIFIED = 0;
+  // Accepted at intake, not yet adjudicated.
+  CLAIM_STATUS_RECEIVED = 1;
+  // Adjudication stopped for manual review; see adjudication.pends.
+  CLAIM_STATUS_PENDED = 2;
+  // Finalized as payable.
+  CLAIM_STATUS_APPROVED = 3;
+  // Finalized with nothing payable.
+  CLAIM_STATUS_DENIED = 4;
+  // Replaced by a later claim.
+  CLAIM_STATUS_ADJUSTED = 5;
+  CLAIM_STATUS_VOIDED = 6;
+}
+
+enum ClaimSource {
+  CLAIM_SOURCE_UNSPECIFIED = 0;
+  CLAIM_SOURCE_EDI_837 = 1;
+  CLAIM_SOURCE_PAPER = 2;
+  CLAIM_SOURCE_PORTAL = 3;
+  CLAIM_SOURCE_API = 4;
+}
+
+// ProviderRef is a provider as identified on the claim, plus the internal
+// provider id once resolved.
+message ProviderRef {
+  string npi = 1;
+  string tin = 2;
+  string name = 3;
+  string taxonomy_code = 4;
+  // Resolved by provider lookup during adjudication.
+  string provider_id = 5;
+}
+
+message InstitutionalInfo {
+  // Type of bill, e.g. "0111" inpatient hospital admit-through-discharge.
+  string type_of_bill = 1;
+  common.v1.Date admission_date = 2;
+  common.v1.Date discharge_date = 3;
+  string admission_type_code = 4;
+  string discharge_status_code = 5;
+  // MS-DRG, when billed or assigned by grouper.
+  string drg = 6;
+}
+
+message ClaimLine {
+  int32 line_number = 1;
+  string procedure_code = 2;
+  repeated string modifiers = 3;
+  // Institutional lines.
+  string revenue_code = 4;
+  common.v1.DateRange service_dates = 5;
+  string place_of_service_code = 6;
+  // Units, in thousandths (1000 = 1 unit) to allow anesthesia minutes and
+  // fractional drug units.
+  int64 units_milli = 7;
+  common.v1.Money charge = 8;
+  // 1-based indexes into Claim.diagnosis_codes.
+  repeated int32 diagnosis_pointers = 9;
+  // NDC for drug lines.
+  string ndc = 10;
+
+  LineAdjudication adjudication = 11;
+}
+
+// ClaimPayment is the claim's copy of its payment and remittance, owned and
+// updated by the payment system. Every finalized claim is reported on a
+// remittance, including denials and other zero-pay claims: for those,
+// `paid` is zero and the state stops at ISSUED.
+message ClaimPayment {
+  // Amount issued to the payee for this claim.
+  common.v1.Money paid = 1;
+  // Issue date (check date / EFT effective date).
+  common.v1.Date paid_date = 2;
+  // The remittance (835) the claim was reported on.
+  string remittance_id = 3;
+  // Check number or EFT trace number. Replaced when a payment is reissued.
+  string payment_trace_number = 4;
+  PaymentState state = 5;
+}
+
+enum PaymentState {
+  PAYMENT_STATE_UNSPECIFIED = 0;
+  // Selected into a payment run that has not been released. The claim
+  // cannot be adjusted or voided (dry runs are allowed) until the run is
+  // released or the claim is pulled from it.
+  PAYMENT_STATE_SELECTED = 1;
+  // Run released: file sent to the bank or check printed, and the 835
+  // sent. A reissued payment returns to this state.
+  PAYMENT_STATE_ISSUED = 2;
+  // EFT settled or check cashed.
+  PAYMENT_STATE_CLEARED = 3;
+  // EFT returned by the bank; the payee holds nothing until reissue.
+  PAYMENT_STATE_RETURNED = 4;
+  // Stop-payment succeeded or check went stale; the payee holds nothing.
+  PAYMENT_STATE_VOIDED = 5;
+}
+
+message PaymentHold {
+  string reason = 1;
+  string placed_by = 2;
+  google.protobuf.Timestamp placed_time = 3;
+}
+
+// PendOverride records an examiner clearing a pend. Only pends that are a
+// judgment call can be overridden (prior auth, possible duplicate); pends
+// caused by missing data (eligibility, pricing, benefit match) come back
+// until the data is fixed.
+message PendOverride {
+  string code = 1;
+  // 0 for a claim-level pend.
+  int32 line_number = 2;
+  string note = 3;
+  string resolved_by = 4;
+  google.protobuf.Timestamp resolved_time = 5;
+}
+
+// ReviewFlag asks an examiner to look at a finalized claim without
+// changing it. The examiner either adjusts the claim or clears the flag.
+message ReviewFlag {
+  // Machine code. "ACCUMULATOR_CHANGE": an earlier claim for the same
+  // family was adjusted or voided and its accumulator postings changed, so
+  // this claim's cost sharing may no longer be right.
+  string code = 1;
+  string message = 2;
+  // The claim whose adjustment or void raised the flag.
+  string source_claim_id = 3;
+  google.protobuf.Timestamp raised_time = 4;
+  // Unset while the flag is open.
+  google.protobuf.Timestamp cleared_time = 5;
+  string cleared_by = 6;
+  string clear_note = 7;
+}
+
+// Adjudication is the outcome of one run of a claim through the engine.
+message Adjudication {
+  google.protobuf.Timestamp adjudicated_time = 1;
+  // 1 for the first run, incremented by each ReprocessClaim.
+  int32 run_number = 2;
+  // Why this run happened; empty for the first run.
+  string reason = 3;
+
+  // Plan and coverage the claim was adjudicated against.
+  string plan_id = 4;
+  int32 plan_version = 5;
+  string coverage_span_id = 6;
+  string network_tier_id = 7;
+
+  common.v1.Money total_allowed = 8;
+  common.v1.Money total_paid = 9;
+  common.v1.Money total_member_responsibility = 10;
+
+  repeated Pend pends = 11;
+  // The accumulator postings this result implies. They are applied only
+  // when the claim is finalized, and only if the family's accumulator
+  // record is still at family_accumulators_revision; otherwise cost
+  // sharing is recalculated against the current balances.
+  repeated AccumulatorPosting accumulator_postings = 12;
+  // Engine version / rules hash, so a decision can be reproduced.
+  string engine_version = 13;
+  // The eligibility.v1.FamilyAccumulators record cost sharing was
+  // calculated against, and its audit.revision at that time.
+  string family_accumulators_id = 14;
+  int64 family_accumulators_revision = 15;
+}
+
+// LineAdjudication explains how one line was decided, step by step. Every
+// line must balance:
+//
+//   charge  = pricing.allowed + contractual reductions
+//   allowed = paid + sum(cost_shares)           (payable lines)
+//   charge - paid = sum(cas_adjustments)
+message LineAdjudication {
+  LineStatus status = 1;
+  // Set when status is DENIED.
+  Denial denial = 2;
+  common.v1.Money charge = 3;
+  Pricing pricing = 4;
+  BenefitApplied benefit = 5;
+  // Member cost sharing, in the order it was applied.
+  repeated CostShareApplied cost_shares = 6;
+  // Sum of cost_shares.
+  common.v1.Money member_responsibility = 7;
+  common.v1.Money paid = 8;
+
+  // The 835 CAS view of this line, derived from the fields above.
+  repeated CasAdjustment cas_adjustments = 9;
+  // RARC remark codes, e.g. "N130".
+  repeated string remark_codes = 10;
+}
+
+enum LineStatus {
+  LINE_STATUS_UNSPECIFIED = 0;
+  LINE_STATUS_PAYABLE = 1;
+  LINE_STATUS_DENIED = 2;
+  LINE_STATUS_PENDED = 3;
+}
+
+message Denial {
+  // Machine code, e.g. "NOT_COVERED", "NO_ELIGIBILITY", "DUPLICATE",
+  // "TIMELY_FILING".
+  string code = 1;
+  string message = 2;
+  // Whether the member may be billed for the denied amount (PR) or the
+  // provider must write it off (CO).
+  bool member_liable = 3;
+}
+
+// Pricing records how the allowed amount was determined.
+message Pricing {
+  PricingSource source = 1;
+  common.v1.Money allowed = 2;
+
+  // For CONTRACT: the contract and the term that priced the line.
+  string contract_id = 3;
+  int32 contract_term_index = 4;
+  provider.v1.ContractMethod contract_method = 5;
+  string fee_schedule_id = 6;
+
+  // For NON_CONTRACTED: the tier's basis that was applied.
+  plan.v1.ReimbursementBasis non_contracted_basis = 7;
+}
+
+enum PricingSource {
+  PRICING_SOURCE_UNSPECIFIED = 0;
+  PRICING_SOURCE_CONTRACT = 1;
+  PRICING_SOURCE_NON_CONTRACTED = 2;
+}
+
+// BenefitApplied records which plan benefit covered the line.
+message BenefitApplied {
+  string service_category_id = 1;
+  string network_tier_id = 2;
+  // The cost share rule as it was on the plan version used.
+  plan.v1.CostShare cost_share = 3;
+}
+
+message CostShareApplied {
+  CostShareType type = 1;
+  common.v1.Money amount = 2;
+  // Accumulators this amount counts toward (e.g. the individual and
+  // family deductible).
+  repeated string accumulator_ids = 3;
+}
+
+enum CostShareType {
+  COST_SHARE_TYPE_UNSPECIFIED = 0;
+  COST_SHARE_TYPE_DEDUCTIBLE = 1;
+  COST_SHARE_TYPE_COPAY = 2;
+  COST_SHARE_TYPE_COINSURANCE = 3;
+}
+
+// CasAdjustment mirrors an 835 CAS (claim adjustment segment) entry.
+message CasAdjustment {
+  CasGroup group = 1;
+  // CARC reason code, e.g. "45" (charge exceeds fee schedule), "1"
+  // (deductible), "2" (coinsurance), "3" (copay).
+  string reason_code = 2;
+  common.v1.Money amount = 3;
+}
+
+enum CasGroup {
+  CAS_GROUP_UNSPECIFIED = 0;
+  // CO: contractual obligation (provider write-off).
+  CAS_GROUP_CONTRACTUAL = 1;
+  // PR: patient responsibility.
+  CAS_GROUP_PATIENT_RESPONSIBILITY = 2;
+  // OA: other adjustment.
+  CAS_GROUP_OTHER = 3;
+  // PI: payer initiated reduction.
+  CAS_GROUP_PAYER_INITIATED = 4;
+}
+
+message Pend {
+  // Machine code, e.g. "NO_ELIGIBILITY", "PROVIDER_NOT_FOUND",
+  // "PRIOR_AUTH_REQUIRED", "NO_BENEFIT_MATCH", "COB_REVIEW",
+  // "HIGH_DOLLAR".
+  string code = 1;
+  string message = 2;
+  // 0 when the pend applies to the whole claim.
+  int32 line_number = 3;
+  google.protobuf.Timestamp resolved_time = 4;
+  string resolved_by = 5;
+  string resolution_note = 6;
+}
+
+message AccumulatorPosting {
+  string accumulator_id = 1;
+  // member_id for INDIVIDUAL accumulators, subscriber_id for FAMILY.
+  string owner_id = 2;
+  int32 line_number = 3;
+  common.v1.Money amount = 4;
+}

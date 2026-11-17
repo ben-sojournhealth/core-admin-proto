@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package coreadmin.provider.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "coreadmin/provider/v1/provider.proto";
+
+service ProviderService {
+  rpc GetProvider(GetProviderRequest) returns (GetProviderResponse);
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+  rpc CreateProvider(CreateProviderRequest) returns (CreateProviderResponse);
+  rpc UpdateProvider(UpdateProviderRequest) returns (UpdateProviderResponse);
+
+  // LookupProvider resolves the NPI/TIN on a claim to a provider record
+  // and its network participation on a date.
+  rpc LookupProvider(LookupProviderRequest) returns (LookupProviderResponse);
+
+  rpc GetNetwork(GetNetworkRequest) returns (GetNetworkResponse);
+  rpc ListNetworks(ListNetworksRequest) returns (ListNetworksResponse);
+  rpc GetContract(GetContractRequest) returns (GetContractResponse);
+  rpc GetFeeSchedule(GetFeeScheduleRequest) returns (GetFeeScheduleResponse);
+}
+
+message GetProviderRequest {
+  string id = 1;
+}
+
+message GetProviderResponse {
+  Provider provider = 1;
+}
+
+message ListProvidersRequest {
+  // Optional filters.
+  string network_id = 1;
+  string npi = 2;
+  string tin = 3;
+  common.v1.PageRequest page = 4;
+}
+
+message ListProvidersResponse {
+  repeated Provider providers = 1;
+  common.v1.PageResponse page = 2;
+}
+
+message CreateProviderRequest {
+  Provider provider = 1;
+}
+
+message CreateProviderResponse {
+  Provider provider = 1;
+}
+
+message UpdateProviderRequest {
+  Provider provider = 1;
+}
+
+message UpdateProviderResponse {
+  Provider provider = 1;
+}
+
+message LookupProviderRequest {
+  string npi = 1;
+  string tin = 2;
+  common.v1.Date service_date = 3;
+}
+
+message LookupProviderResponse {
+  Provider provider = 1;
+  // Participations effective on service_date for the given TIN.
+  repeated NetworkParticipation participations = 2;
+}
+
+message GetNetworkRequest {
+  string id = 1;
+}
+
+message GetNetworkResponse {
+  Network network = 1;
+}
+
+message ListNetworksRequest {
+  common.v1.PageRequest page = 1;
+}
+
+message ListNetworksResponse {
+  repeated Network networks = 1;
+  common.v1.PageResponse page = 2;
+}
+
+message GetContractRequest {
+  string id = 1;
+}
+
+message GetContractResponse {
+  Contract contract = 1;
+}
+
+message GetFeeScheduleRequest {
+  string id = 1;
+}
+
+message GetFeeScheduleResponse {
+  FeeSchedule fee_schedule = 1;
+}

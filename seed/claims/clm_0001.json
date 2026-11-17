@@ -1,0 +1,28 @@
+{
+  "id": "clm_0001",
+  "customerId": "cust_acme",
+  "type": "CLAIM_TYPE_PROFESSIONAL",
+  "frequency": "CLAIM_FREQUENCY_ORIGINAL",
+  "patientControlNumber": "DFM-88213",
+  "memberCardId": "ACM100101",
+  "billingProvider": {"npi": "1234567893", "tin": "311234567", "name": "Dayton Family Medicine LLC"},
+  "renderingProvider": {"npi": "1234567893", "taxonomyCode": "207Q00000X"},
+  "diagnosisCodes": ["J06.9"],
+  "serviceDates": {"start": {"year": 2026, "month": 3, "day": 10}, "end": {"year": 2026, "month": 3, "day": 10}},
+  "totalCharge": {"cents": 18000},
+  "lines": [{
+    "lineNumber": 1,
+    "procedureCode": "99213",
+    "serviceDates": {"start": {"year": 2026, "month": 3, "day": 10}, "end": {"year": 2026, "month": 3, "day": 10}},
+    "placeOfServiceCode": "11",
+    "unitsMilli": 1000,
+    "charge": {"cents": 18000},
+    "diagnosisPointers": [1]
+  }],
+  "status": "CLAIM_STATUS_RECEIVED",
+  "source": "CLAIM_SOURCE_EDI_837",
+  "receivedTime": "2026-03-14T15:02:00Z",
+  "clearinghouseId": "ch_example",
+  "clearinghouseReceivedTime": "2026-03-12T22:41:00Z",
+  "timelyFilingDate": {"year": 2026, "month": 3, "day": 12}
+}

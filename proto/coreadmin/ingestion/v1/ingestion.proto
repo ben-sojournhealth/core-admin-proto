@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package coreadmin.ingestion.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// IngestionJob tracks one inbound file (enrollment, provider roster,
+// claims batch, fee schedule) from receipt through load. Records created
+// or changed by a job carry its id (source_ingestion_job_id) for lineage.
+message IngestionJob {
+  string id = 1;
+  // Empty for files that are not customer-specific (e.g. provider
+  // rosters).
+  string customer_id = 2;
+  IngestionKind kind = 3;
+  IngestionFormat format = 4;
+  // Where the raw file lives (object storage URI).
+  string source_uri = 5;
+  string original_filename = 6;
+  // For enrollment: FULL replaces the population, CHANGE applies deltas.
+  LoadMode mode = 7;
+  IngestionStatus status = 8;
+  IngestionCounts counts = 9;
+  // Capped sample of record-level errors; full detail lives with the
+  // file.
+  repeated RecordError errors = 10;
+  google.protobuf.Timestamp received_time = 11;
+  google.protobuf.Timestamp completed_time = 12;
+  common.v1.AuditInfo audit = 15;
+}
+
+enum IngestionKind {
+  INGESTION_KIND_UNSPECIFIED = 0;
+  INGESTION_KIND_ENROLLMENT = 1;
+  INGESTION_KIND_PROVIDER_ROSTER = 2;
+  INGESTION_KIND_CLAIMS = 3;
+  INGESTION_KIND_FEE_SCHEDULE = 4;
+  // Accumulator postings from outside (PBM, prior carrier).
+  INGESTION_KIND_ACCUMULATORS = 5;
+}
+
+enum IngestionFormat {
+  INGESTION_FORMAT_UNSPECIFIED = 0;
+  INGESTION_FORMAT_X12_834 = 1;
+  INGESTION_FORMAT_X12_837 = 2;
+  INGESTION_FORMAT_CSV = 3;
+  // Newline-delimited protojson of the target resource type.
+  INGESTION_FORMAT_PROTOJSON_NDJSON = 4;
+}
+
+enum LoadMode {
+  LOAD_MODE_UNSPECIFIED = 0;
+  LOAD_MODE_FULL = 1;
+  LOAD_MODE_CHANGE = 2;
+}
+
+enum IngestionStatus {
+  INGESTION_STATUS_UNSPECIFIED = 0;
+  INGESTION_STATUS_RECEIVED = 1;
+  INGESTION_STATUS_VALIDATING = 2;
+  // Validation found issues that need approval before load (e.g. a full
+  // file that would terminate >5% of members).
+  INGESTION_STATUS_AWAITING_APPROVAL = 3;
+  INGESTION_STATUS_LOADING = 4;
+  INGESTION_STATUS_COMPLETED = 5;
+  INGESTION_STATUS_COMPLETED_WITH_ERRORS = 6;
+  INGESTION_STATUS_FAILED = 7;
+}
+
+message IngestionCounts {
+  int64 records_total = 1;
+  int64 records_created = 2;
+  int64 records_updated = 3;
+  int64 records_terminated = 4;
+  int64 records_unchanged = 5;
+  int64 records_errored = 6;
+}
+
+message RecordError {
+  // Line or segment number in the source file.
+  int64 record_index = 1;
+  string code = 2;
+  string message = 3;
+  // Identifier of the affected record if it could be parsed (card id,
+  // NPI, claim number).
+  string record_key = 4;
+}

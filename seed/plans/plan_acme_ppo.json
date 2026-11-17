@@ -1,0 +1,317 @@
+{
+  "id": "plan_acme_ppo",
+  "customerId": "cust_acme",
+  "name": "Acme PPO 1500",
+  "planType": "PLAN_TYPE_PPO",
+  "benefitPeriod": {
+    "start": {
+      "year": 2026,
+      "month": 1,
+      "day": 1
+    },
+    "end": {
+      "year": 2026,
+      "month": 12,
+      "day": 31
+    }
+  },
+  "versions": [
+    {
+      "version": 1,
+      "effective": {
+        "start": {
+          "year": 2026,
+          "month": 1,
+          "day": 1
+        },
+        "end": {
+          "year": 2026,
+          "month": 12,
+          "day": 31
+        }
+      },
+      "networkTiers": [
+        {
+          "id": "INN",
+          "name": "In-network",
+          "networkIds": [
+            "net_ppo"
+          ],
+          "priority": 1
+        },
+        {
+          "id": "OON",
+          "name": "Out-of-network",
+          "isOutOfNetwork": true,
+          "priority": 2,
+          "nonContractedBasis": {
+            "method": "REIMBURSEMENT_METHOD_PERCENT_OF_MEDICARE",
+            "percentBps": 14000
+          }
+        }
+      ],
+      "accumulators": [
+        {
+          "id": "DED_INN_IND",
+          "type": "ACCUMULATOR_TYPE_DEDUCTIBLE",
+          "level": "ACCUMULATOR_LEVEL_INDIVIDUAL",
+          "tierIds": [
+            "INN"
+          ],
+          "limit": {
+            "cents": 150000
+          }
+        },
+        {
+          "id": "DED_INN_FAM",
+          "type": "ACCUMULATOR_TYPE_DEDUCTIBLE",
+          "level": "ACCUMULATOR_LEVEL_FAMILY",
+          "tierIds": [
+            "INN"
+          ],
+          "limit": {
+            "cents": 300000
+          },
+          "embedded": true,
+          "individualAccumulatorId": "DED_INN_IND"
+        },
+        {
+          "id": "OOP_INN_IND",
+          "type": "ACCUMULATOR_TYPE_OUT_OF_POCKET",
+          "level": "ACCUMULATOR_LEVEL_INDIVIDUAL",
+          "tierIds": [
+            "INN"
+          ],
+          "limit": {
+            "cents": 500000
+          }
+        },
+        {
+          "id": "OOP_INN_FAM",
+          "type": "ACCUMULATOR_TYPE_OUT_OF_POCKET",
+          "level": "ACCUMULATOR_LEVEL_FAMILY",
+          "tierIds": [
+            "INN"
+          ],
+          "limit": {
+            "cents": 1000000
+          },
+          "embedded": true,
+          "individualAccumulatorId": "OOP_INN_IND"
+        },
+        {
+          "id": "DED_OON_IND",
+          "type": "ACCUMULATOR_TYPE_DEDUCTIBLE",
+          "level": "ACCUMULATOR_LEVEL_INDIVIDUAL",
+          "tierIds": [
+            "OON"
+          ],
+          "limit": {
+            "cents": 300000
+          }
+        },
+        {
+          "id": "OOP_OON_IND",
+          "type": "ACCUMULATOR_TYPE_OUT_OF_POCKET",
+          "level": "ACCUMULATOR_LEVEL_INDIVIDUAL",
+          "tierIds": [
+            "OON"
+          ],
+          "limit": {
+            "cents": 1000000
+          }
+        }
+      ],
+      "serviceCategories": [
+        {
+          "id": "ER",
+          "name": "Emergency room",
+          "priority": 5,
+          "placeOfServiceCodes": [
+            "23"
+          ]
+        },
+        {
+          "id": "PREVENTIVE",
+          "name": "Preventive care",
+          "priority": 10,
+          "procedureCodes": [
+            {
+              "start": "99381",
+              "end": "99397"
+            }
+          ]
+        },
+        {
+          "id": "OFFICE_VISIT",
+          "name": "Office visit",
+          "priority": 20,
+          "procedureCodes": [
+            {
+              "start": "99202",
+              "end": "99215"
+            }
+          ],
+          "placeOfServiceCodes": [
+            "11",
+            "02",
+            "10"
+          ]
+        },
+        {
+          "id": "ADV_IMAGING",
+          "name": "Advanced imaging (CT/MRI)",
+          "priority": 30,
+          "procedureCodes": [
+            {
+              "start": "70450",
+              "end": "70498"
+            },
+            {
+              "start": "70540",
+              "end": "70559"
+            },
+            {
+              "start": "72125",
+              "end": "72158"
+            }
+          ]
+        },
+        {
+          "id": "OUTPATIENT_SURGERY",
+          "name": "Outpatient surgery",
+          "priority": 35,
+          "procedureCodes": [
+            {
+              "start": "20000",
+              "end": "69999"
+            }
+          ]
+        },
+        {
+          "id": "INPATIENT",
+          "name": "Inpatient facility",
+          "priority": 40,
+          "revenueCodes": [
+            {
+              "start": "0100",
+              "end": "0219"
+            }
+          ]
+        }
+      ],
+      "benefits": [
+        {
+          "serviceCategoryId": "PREVENTIVE",
+          "costShares": [
+            {
+              "tierId": "INN",
+              "covered": true
+            },
+            {
+              "tierId": "OON",
+              "covered": true,
+              "coinsuranceBps": 4000,
+              "deductibleApplies": true
+            }
+          ]
+        },
+        {
+          "serviceCategoryId": "OFFICE_VISIT",
+          "costShares": [
+            {
+              "tierId": "INN",
+              "covered": true,
+              "copay": {
+                "cents": 3000
+              }
+            },
+            {
+              "tierId": "OON",
+              "covered": true,
+              "coinsuranceBps": 4000,
+              "deductibleApplies": true
+            }
+          ]
+        },
+        {
+          "serviceCategoryId": "ER",
+          "costShares": [
+            {
+              "tierId": "INN",
+              "covered": true,
+              "copay": {
+                "cents": 25000
+              },
+              "coinsuranceBps": 2000,
+              "deductibleApplies": true
+            },
+            {
+              "tierId": "OON",
+              "covered": true,
+              "copay": {
+                "cents": 25000
+              },
+              "coinsuranceBps": 2000,
+              "deductibleApplies": true
+            }
+          ]
+        },
+        {
+          "serviceCategoryId": "ADV_IMAGING",
+          "requiresPriorAuth": true,
+          "costShares": [
+            {
+              "tierId": "INN",
+              "covered": true,
+              "coinsuranceBps": 2000,
+              "deductibleApplies": true
+            },
+            {
+              "tierId": "OON",
+              "covered": true,
+              "coinsuranceBps": 4000,
+              "deductibleApplies": true
+            }
+          ]
+        },
+        {
+          "serviceCategoryId": "INPATIENT",
+          "requiresPriorAuth": true,
+          "costShares": [
+            {
+              "tierId": "INN",
+              "covered": true,
+              "coinsuranceBps": 2000,
+              "deductibleApplies": true
+            },
+            {
+              "tierId": "OON",
+              "covered": true,
+              "coinsuranceBps": 4000,
+              "deductibleApplies": true
+            }
+          ]
+        },
+        {
+          "serviceCategoryId": "OUTPATIENT_SURGERY",
+          "costShares": [
+            {
+              "tierId": "INN",
+              "covered": true,
+              "coinsuranceBps": 2000,
+              "deductibleApplies": true
+            },
+            {
+              "tierId": "OON",
+              "covered": true,
+              "coinsuranceBps": 4000,
+              "deductibleApplies": true
+            }
+          ]
+        }
+      ],
+      "defaultBehavior": "DEFAULT_BENEFIT_BEHAVIOR_PEND"
+    }
+  ]
+}

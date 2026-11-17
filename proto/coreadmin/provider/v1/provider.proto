@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+package coreadmin.provider.v1;
+
+import "coreadmin/common/v1/common.proto";
+
+// Provider is an individual practitioner (NPI type 1) or an organization
+// (NPI type 2). Providers are shared across customers; network
+// participation and contracts determine how they are paid.
+message Provider {
+  string id = 1;
+  string npi = 2;
+  ProviderKind kind = 3;
+  // For individuals.
+  common.v1.PersonName name = 4;
+  // For organizations.
+  string organization_name = 5;
+  // NUCC taxonomy codes; the first is primary.
+  repeated string taxonomy_codes = 6;
+  repeated ServiceLocation locations = 7;
+  // Billing affiliations: the TINs this provider bills under.
+  repeated TinAffiliation tins = 8;
+  repeated NetworkParticipation participations = 9;
+  ProviderStatus status = 10;
+  repeated common.v1.ExternalId external_ids = 11;
+  // Roster ingestion that last touched this record.
+  string source_ingestion_job_id = 12;
+  common.v1.AuditInfo audit = 15;
+}
+
+enum ProviderKind {
+  PROVIDER_KIND_UNSPECIFIED = 0;
+  PROVIDER_KIND_INDIVIDUAL = 1;
+  PROVIDER_KIND_ORGANIZATION = 2;
+}
+
+enum ProviderStatus {
+  PROVIDER_STATUS_UNSPECIFIED = 0;
+  PROVIDER_STATUS_ACTIVE = 1;
+  PROVIDER_STATUS_INACTIVE = 2;
+  // Excluded (e.g. OIG exclusion list): claims must deny.
+  PROVIDER_STATUS_SANCTIONED = 3;
+}
+
+message ServiceLocation {
+  string id = 1;
+  common.v1.Address address = 2;
+  string phone = 3;
+  bool accepting_new_patients = 4;
+}
+
+message TinAffiliation {
+  string tin = 1;
+  string billing_name = 2;
+  common.v1.DateRange effective = 3;
+}
+
+// NetworkParticipation says a provider, billing under a TIN, is in a
+// network for a period, paid under a contract.
+message NetworkParticipation {
+  string network_id = 1;
+  string tin = 2;
+  string contract_id = 3;
+  common.v1.DateRange effective = 4;
+}
+
+// Network is a set of contracted providers (owned, rented, or a
+// customer-specific direct contract).
+message Network {
+  string id = 1;
+  string name = 2;
+  NetworkKind kind = 3;
+  // For rented networks, the vendor (e.g. a national PPO).
+  string vendor = 4;
+  common.v1.AuditInfo audit = 15;
+}
+
+enum NetworkKind {
+  NETWORK_KIND_UNSPECIFIED = 0;
+  NETWORK_KIND_OWNED = 1;
+  NETWORK_KIND_RENTED = 2;
+  NETWORK_KIND_DIRECT_CONTRACT = 3;
+}
+
+// Contract defines how a participating provider is reimbursed.
+message Contract {
+  string id = 1;
+  string network_id = 2;
+  string name = 3;
+  common.v1.DateRange effective = 4;
+  // Evaluated in order; the first term whose criteria match a line prices
+  // it.
+  repeated ContractTerm terms = 5;
+  common.v1.AuditInfo audit = 15;
+}
+
+message ContractTerm {
+  // Criteria. Empty means any.
+  repeated string procedure_codes = 1;
+  repeated string revenue_codes = 2;
+  repeated string place_of_service_codes = 3;
+
+  ContractMethod method = 4;
+  // For FEE_SCHEDULE.
+  string fee_schedule_id = 5;
+  // For PERCENT_OF_BILLED / PERCENT_OF_MEDICARE, in basis points.
+  int32 percent_bps = 6;
+  // For FLAT_RATE / PER_DIEM / CASE_RATE.
+  common.v1.Money rate = 7;
+}
+
+enum ContractMethod {
+  CONTRACT_METHOD_UNSPECIFIED = 0;
+  CONTRACT_METHOD_FEE_SCHEDULE = 1;
+  CONTRACT_METHOD_PERCENT_OF_BILLED = 2;
+  CONTRACT_METHOD_PERCENT_OF_MEDICARE = 3;
+  CONTRACT_METHOD_FLAT_RATE = 4;
+  CONTRACT_METHOD_PER_DIEM = 5;
+  CONTRACT_METHOD_CASE_RATE = 6;
+}
+
+message FeeSchedule {
+  string id = 1;
+  string name = 2;
+  common.v1.DateRange effective = 3;
+  repeated FeeScheduleEntry entries = 4;
+  common.v1.AuditInfo audit = 15;
+}
+
+message FeeScheduleEntry {
+  string procedure_code = 1;
+  // Empty matches any modifier; a specific entry (e.g. "26", "TC") wins.
+  string modifier = 2;
+  // Allowed amount per unit.
+  common.v1.Money allowed = 3;
+}

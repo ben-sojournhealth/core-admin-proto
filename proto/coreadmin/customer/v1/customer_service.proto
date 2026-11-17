@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package coreadmin.customer.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "coreadmin/customer/v1/customer.proto";
+
+service CustomerService {
+  rpc GetCustomer(GetCustomerRequest) returns (GetCustomerResponse);
+  rpc ListCustomers(ListCustomersRequest) returns (ListCustomersResponse);
+  rpc CreateCustomer(CreateCustomerRequest) returns (CreateCustomerResponse);
+  rpc UpdateCustomer(UpdateCustomerRequest) returns (UpdateCustomerResponse);
+
+  rpc GetGroup(GetGroupRequest) returns (GetGroupResponse);
+  rpc ListGroups(ListGroupsRequest) returns (ListGroupsResponse);
+  rpc CreateGroup(CreateGroupRequest) returns (CreateGroupResponse);
+  rpc UpdateGroup(UpdateGroupRequest) returns (UpdateGroupResponse);
+}
+
+message GetCustomerRequest {
+  string id = 1;
+}
+
+message GetCustomerResponse {
+  Customer customer = 1;
+}
+
+message ListCustomersRequest {
+  common.v1.PageRequest page = 1;
+}
+
+message ListCustomersResponse {
+  repeated Customer customers = 1;
+  common.v1.PageResponse page = 2;
+}
+
+message CreateCustomerRequest {
+  Customer customer = 1;
+}
+
+message CreateCustomerResponse {
+  Customer customer = 1;
+}
+
+message UpdateCustomerRequest {
+  Customer customer = 1;
+}
+
+message UpdateCustomerResponse {
+  Customer customer = 1;
+}
+
+message GetGroupRequest {
+  string id = 1;
+}
+
+message GetGroupResponse {
+  Group group = 1;
+}
+
+message ListGroupsRequest {
+  string customer_id = 1;
+  common.v1.PageRequest page = 2;
+}
+
+message ListGroupsResponse {
+  repeated Group groups = 1;
+  common.v1.PageResponse page = 2;
+}
+
+message CreateGroupRequest {
+  Group group = 1;
+}
+
+message CreateGroupResponse {
+  Group group = 1;
+}
+
+message UpdateGroupRequest {
+  Group group = 1;
+}
+
+message UpdateGroupResponse {
+  Group group = 1;
+}

@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package coreadmin.customer.v1;
+
+import "coreadmin/common/v1/common.proto";
+
+// Customer is the tenant boundary. For TPA business it is the plan sponsor
+// (typically an employer); for fully insured business it is the
+// group policyholder. Nearly every other resource carries a customer_id.
+message Customer {
+  string id = 1;
+  string name = 2;
+  FundingType funding_type = 3;
+  common.v1.Address address = 4;
+  // Federal EIN of the plan sponsor.
+  string ein = 5;
+  CustomerStatus status = 6;
+  common.v1.DateRange effective = 7;
+  repeated common.v1.ExternalId external_ids = 8;
+  common.v1.AuditInfo audit = 15;
+}
+
+enum FundingType {
+  FUNDING_TYPE_UNSPECIFIED = 0;
+  FUNDING_TYPE_FULLY_INSURED = 1;
+  FUNDING_TYPE_SELF_FUNDED = 2;
+  FUNDING_TYPE_LEVEL_FUNDED = 3;
+}
+
+enum CustomerStatus {
+  CUSTOMER_STATUS_UNSPECIFIED = 0;
+  CUSTOMER_STATUS_IMPLEMENTING = 1;
+  CUSTOMER_STATUS_ACTIVE = 2;
+  CUSTOMER_STATUS_TERMINATED = 3;
+}
+
+// Group is a subdivision of a customer (division, location, union vs
+// non-union class) used for eligibility rules, billing and reporting.
+message Group {
+  string id = 1;
+  string customer_id = 2;
+  string name = 3;
+  // Plans this group's members may enroll in.
+  repeated string plan_ids = 4;
+  common.v1.DateRange effective = 5;
+  repeated common.v1.ExternalId external_ids = 6;
+  common.v1.AuditInfo audit = 15;
+}

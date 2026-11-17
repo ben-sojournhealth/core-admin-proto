@@ -1,0 +1,9 @@
+{
+  "id": "cust_acme",
+  "name": "Acme Manufacturing",
+  "fundingType": "FUNDING_TYPE_SELF_FUNDED",
+  "ein": "831234567",
+  "status": "CUSTOMER_STATUS_ACTIVE",
+  "address": {"lines": ["100 Industrial Way"], "city": "Dayton", "state": "OH", "postalCode": "45402", "countryCode": "US"},
+  "effective": {"start": {"year": 2026, "month": 1, "day": 1}}
+}

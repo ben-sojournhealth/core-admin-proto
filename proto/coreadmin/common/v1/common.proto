@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package coreadmin.common.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Money is a USD amount in integer cents. Avoids floating point in
+// adjudication math. Rounding to cents happens at pricing time.
+message Money {
+  int64 cents = 1;
+}
+
+// Date is a calendar date with no time zone (date of service, effective
+// date, DOB). Mirrors google.type.Date.
+message Date {
+  int32 year = 1;
+  int32 month = 2;
+  int32 day = 3;
+}
+
+// DateRange is inclusive on both ends. An unset `end` means open-ended.
+message DateRange {
+  Date start = 1;
+  Date end = 2;
+}
+
+message Address {
+  repeated string lines = 1;
+  string city = 2;
+  string state = 3;
+  string postal_code = 4;
+  string country_code = 5;
+}
+
+message PersonName {
+  string first = 1;
+  string middle = 2;
+  string last = 3;
+  string suffix = 4;
+}
+
+enum Gender {
+  GENDER_UNSPECIFIED = 0;
+  GENDER_FEMALE = 1;
+  GENDER_MALE = 2;
+  GENDER_OTHER = 3;
+  GENDER_UNKNOWN = 4;
+}
+
+// AuditInfo is carried on every top-level persisted resource. `revision`
+// is incremented by the store on every write and used for optimistic
+// concurrency.
+message AuditInfo {
+  google.protobuf.Timestamp create_time = 1;
+  google.protobuf.Timestamp update_time = 2;
+  string created_by = 3;
+  string updated_by = 4;
+  int64 revision = 5;
+}
+
+// ExternalId links a resource to an identifier in another system
+// (e.g. an employer's HRIS id, a legacy member number, a carrier id).
+message ExternalId {
+  string system = 1;
+  string value = 2;
+}
+
+// PageRequest / PageResponse are used by all List RPCs.
+message PageRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message PageResponse {
+  string next_page_token = 1;
+}

@@ -1,0 +1,34 @@
+{
+  "id": "mem_1002",
+  "customerId": "cust_acme",
+  "subscriberId": "mem_1001",
+  "relationship": "RELATIONSHIP_SPOUSE",
+  "name": {
+    "first": "Sam",
+    "last": "Rivera"
+  },
+  "birthDate": {
+    "year": 1987,
+    "month": 9,
+    "day": 3
+  },
+  "gender": "GENDER_UNKNOWN",
+  "cardId": "ACM100102",
+  "coverage": [
+    {
+      "id": "cov_1002_med_2026",
+      "planId": "plan_acme_ppo",
+      "groupId": "grp_acme_main",
+      "line": "COVERAGE_LINE_MEDICAL",
+      "tier": "COVERAGE_TIER_FAMILY",
+      "effective": {
+        "start": {
+          "year": 2026,
+          "month": 1,
+          "day": 1
+        }
+      },
+      "status": "COVERAGE_STATUS_ACTIVE"
+    }
+  ]
+}
