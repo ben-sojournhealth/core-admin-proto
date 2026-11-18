@@ -8,6 +8,7 @@ import (
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	"coreadmin/internal/adjudication"
 	"coreadmin/internal/dates"
+	"coreadmin/internal/ids"
 	"coreadmin/internal/store"
 )
 
@@ -57,7 +58,7 @@ func (s *Service) SelectForPayment(ctx context.Context, ids []string) ([]string,
 			}
 		}
 		for _, c := range skipped {
-			s.logf("%s skipped: on payment hold (%s).", c.GetId(), c.GetPaymentHold().GetReason())
+			s.logf("%s skipped: on payment hold (%s).", s.ref(c), c.GetPaymentHold().GetReason())
 		}
 		if len(picked) == 0 {
 			return nil, rejectf("no claims are eligible for payment")
@@ -73,7 +74,7 @@ func (s *Service) SelectForPayment(ctx context.Context, ids []string) ([]string,
 			return nil, err
 		}
 		out = append(out, c.GetId())
-		s.logf("%s selected for payment: %s.", c.GetId(), USD(c.GetPayment().GetPaid().GetCents()))
+		s.logf("%s selected for payment: %s.", s.ref(c), USD(c.GetPayment().GetPaid().GetCents()))
 	}
 	return out, nil
 }
@@ -102,12 +103,12 @@ func (s *Service) ReleasePaymentRun(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		out = append(out, c.GetId())
-		line := fmt.Sprintf("%s payment issued: %s on %s.", c.GetId(), USD(c.GetPayment().GetPaid().GetCents()), remit)
+		line := fmt.Sprintf("%s payment issued: %s on %s.", s.ref(c), USD(c.GetPayment().GetPaid().GetCents()), remit)
 		if c.GetOriginalClaimId() != "" {
 			if orig, err := s.Repos.Claims.Get(ctx, c.GetOriginalClaimId()); err == nil {
 				if held := heldAmount(orig); held > 0 {
 					line += fmt.Sprintf(" The remittance also reverses %s paid on %s, so the net to the provider is %s.",
-						USD(held), orig.GetId(), USD(c.GetPayment().GetPaid().GetCents()-held))
+						USD(held), s.ref(orig), USD(c.GetPayment().GetPaid().GetCents()-held))
 				}
 			}
 		}
@@ -129,28 +130,28 @@ func (s *Service) RecordPaymentEvent(ctx context.Context, claimID, event string)
 	switch event {
 	case "clear":
 		if state != issued {
-			return nil, rejectf("%s has no issued payment to clear", claimID)
+			return nil, rejectf("%s has no issued payment to clear", s.ref(c))
 		}
 		c.Payment.State = claimsv1.PaymentState_PAYMENT_STATE_CLEARED
-		s.logf("%s payment cleared. Claim status is unchanged.", claimID)
+		s.logf("%s payment cleared. Claim status is unchanged.", s.ref(c))
 	case "return":
 		if state != issued {
-			return nil, rejectf("%s has no issued payment to return", claimID)
+			return nil, rejectf("%s has no issued payment to return", s.ref(c))
 		}
 		c.Payment.State = claimsv1.PaymentState_PAYMENT_STATE_RETURNED
-		s.logf("%s payment was returned by the bank; the provider holds nothing. Claim status is unchanged.", claimID)
+		s.logf("%s payment was returned by the bank; the provider holds nothing. Claim status is unchanged.", s.ref(c))
 	case "reissue":
 		if state != claimsv1.PaymentState_PAYMENT_STATE_RETURNED && state != claimsv1.PaymentState_PAYMENT_STATE_VOIDED {
-			return nil, rejectf("%s has no returned or voided payment to reissue", claimID)
+			return nil, rejectf("%s has no returned or voided payment to reissue", s.ref(c))
 		}
 		if !finalized(c.GetStatus()) {
-			return nil, rejectf("%s is %s; its payment is not reissued", claimID, statusName(c.GetStatus()))
+			return nil, rejectf("%s is %s; its payment is not reissued", s.ref(c), statusName(c.GetStatus()))
 		}
 		s.remittances++
 		c.Payment.State = issued
 		c.Payment.PaidDate = dates.FromTime(s.Now())
 		c.Payment.PaymentTraceNumber = fmt.Sprintf("EFT-%03d-R", s.remittances)
-		s.logf("%s payment reissued as %s.", claimID, c.GetPayment().GetPaymentTraceNumber())
+		s.logf("%s payment reissued as %s.", s.ref(c), c.GetPayment().GetPaymentTraceNumber())
 	default:
 		return nil, rejectf("unknown payment event %q", event)
 	}
@@ -165,10 +166,16 @@ func (s *Service) ProcessConcurrently(ctx context.Context, in []*claimsv1.Claim)
 	var calcs []*adjudication.Calculation
 	for _, c := range in {
 		c = cloneClaim(c)
+		if c.GetId() == "" {
+			c.Id = ids.NewV7(s.Now())
+		}
 		s.prepareNew(c)
+		if err := s.assignNumber(ctx, c); err != nil {
+			return nil, err
+		}
 		saved, err := s.Repos.Claims.Create(ctx, c)
 		if errors.Is(err, store.ErrAlreadyExists) {
-			return nil, rejectf("claim %s already exists", c.GetId())
+			return nil, rejectf("claim %s already exists", s.ref(c))
 		} else if err != nil {
 			return nil, err
 		}
@@ -176,7 +183,7 @@ func (s *Service) ProcessConcurrently(ctx context.Context, in []*claimsv1.Claim)
 		if err != nil {
 			return nil, err
 		}
-		s.logf("%s calculated against accumulator revision %d: %s.", saved.GetId(), calc.Revision, describe(calc.Claim))
+		s.logf("%s calculated against accumulator revision %d: %s.", s.ref(saved), calc.Revision, describe(calc.Claim))
 		calcs = append(calcs, calc)
 	}
 	var out []*claimsv1.Claim
@@ -184,7 +191,7 @@ func (s *Service) ProcessConcurrently(ctx context.Context, in []*claimsv1.Claim)
 		saved, err := s.commit(ctx, calc)
 		if errors.Is(err, adjudication.ErrBalancesChanged) {
 			s.logf("%s: commit rejected. Another claim posted to the family's accumulators first (revision %d is stale). Recalculating.",
-				calc.Claim.GetId(), calc.Revision)
+				s.ref(calc.Claim), calc.Revision)
 			stored, gerr := s.Repos.Claims.Get(ctx, calc.Claim.GetId())
 			if gerr != nil {
 				return nil, gerr

@@ -12,18 +12,32 @@ internal/repo/                 One store per resource type
 internal/adjudication/         Claims pipeline interfaces (eligibility → pricing → cost share)
 internal/stoploss/             Stop-loss tracking interfaces
 internal/claims/               ClaimsService operations (process, reprocess, adjust, void, holds, flags)
+internal/demos/                Demo catalog and how demos map onto the architecture diagram
+internal/journey/              Journey sandbox: the two-week workload and the claim detail view
 internal/sim/                  Sandbox: seeded data, fixed clock, event log, one Action type
 internal/scenario/             Scenario library; each scenario is also a test
 internal/seed/                 Loads seed/ fixtures (strict protojson)
 seed/                          Sample self-funded customer, plan, family, providers, fee schedules, policy
-cmd/demo/                      Web UI for the sandbox
+cmd/demo/                      Demo server: architecture page at /, each demo under its own path
 ```
 
-## Sandbox UI
+## Demos
 
 ```
 make demo        # then open http://localhost:8080
 ```
+
+The landing page is an architecture diagram. Components with a demo are solid and clickable; dashed ones have a demo planned. Clicking a component opens its demo filtered to the relevant scenarios (e.g. Accumulators opens `/claims-lifecycle/?group=Accumulators`).
+
+To add a demo: add it to `internal/demos/demos.go` with the components it covers (set `Status: Planned` until it exists), serve it under `/<id>/` in `cmd/demo/main.go`, and put its page in `cmd/demo/web/<id>/`. Components are the node ids in `cmd/demo/web/index.html`.
+
+### Journey
+
+`/journey/`: the claims portal, the examiner's view of the claims system. Work queues (pended claims by reason, review flags, payment holds) and a claim page with the decision, money breakdown, the member's accumulators and the claim's activity. Examiners override judgment pends with a note, reprocess data pends, adjust and void, clear flags and release holds.
+
+It runs its own sandbox (`internal/journey`), pre-loaded with two weeks of claims across four families so the queues start with work in them. Reset returns to that starting point.
+
+### Claims Lifecycle
 
 A single page for making things happen to the system and watching its state change: process claims, clear pends, adjust and void, run and release payment runs, simulate bank events, change eligibility and fee schedule data. It shows the family's accumulator record (with its revision), every claim's line-by-line decision and stored protojson, and a plain-language event log. State is in memory; Reset starts over.
 
@@ -64,6 +78,7 @@ payment.state:  SELECTED ─► ISSUED ─► CLEARED | RETURNED | VOIDED
 - **Money** is `common.v1.Money{cents}` (int64). Percentages are integer basis points (`2000` = 20%). There is no floating point anywhere.
 - **Dates** use `common.v1.Date`, and every `DateRange` is inclusive at both ends. An unset `end` means open-ended.
 - **Tenancy.** Customer-scoped resources carry `customer_id`. Providers and networks are shared across customers.
+- **Claim identity.** `id` is an internal UUIDv7 (`internal/ids`), assigned at intake and never shown. People see `claim_number`, `YYJJJ-S-NNNNN` (year, day received, source, daily sequence). A replacement or void keeps the original's number with the next version: `26075-E-00012-2`. The Claims Lifecycle sandbox gives originals short ids (`clm_A`) for its scenario scripts and names later versions `clm_A-2`; the sandbox resolves those names to the real ids.
 - **Audit.** Every top-level resource has `audit` (`AuditInfo`). The store stamps it, and `audit.revision` provides optimistic concurrency.
 - **Lint.** `buf lint` runs with the STANDARD rules. Packages are versioned as `coreadmin.<domain>.v1`.
 

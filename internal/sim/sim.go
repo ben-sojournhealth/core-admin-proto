@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -92,6 +94,9 @@ type Result struct {
 	Preview *ClaimView `json:"preview,omitempty"`
 	// Set for adjustments.
 	Delta *DeltaView `json:"delta,omitempty"`
+	// The claim the action produced or changed, when there is one (for a
+	// replacement or void, the new claim).
+	ClaimID string `json:"claimId,omitempty"`
 }
 
 type LogEntry struct {
@@ -104,6 +109,13 @@ type LogEntry struct {
 type Sim struct {
 	Repos  *repo.Repos
 	Claims *claims.Service
+
+	// ShortIDs gives new original claims readable ids (clm_001, ...) and
+	// names later versions clm_001-2, clm_001-3, as the claim number does.
+	// The ids of replacements and voids are always UUIDv7s; the short
+	// names resolve to them (see Resolve). With ShortIDs off, every claim
+	// gets a UUIDv7 and is named by its claim number.
+	ShortIDs bool
 
 	clock  time.Time
 	log    []*LogEntry
@@ -131,7 +143,66 @@ func New() (*Sim, error) {
 	ledger := &adjudication.StoreLedger{Records: s.Repos.FamilyAccumulators, Now: s.now}
 	engine := &adjudication.DefaultEngine{Repos: s.Repos, Ledger: ledger, Now: s.now, Version: "sandbox-1"}
 	s.Claims = &claims.Service{Repos: s.Repos, Engine: engine, Ledger: ledger, Now: s.now, Logf: s.logf}
+	s.UseShortIDs(true)
 	return s, nil
+}
+
+// UseShortIDs switches between short names (scenario scripts) and claim
+// numbers (Journey) for naming claims.
+func (s *Sim) UseShortIDs(on bool) {
+	s.ShortIDs = on
+	s.Claims.Ref = nil
+	if on {
+		s.Claims.Ref = s.shortName
+	}
+}
+
+// shortName is the original's id plus the version suffix: clm_A, clm_A-2.
+func (s *Sim) shortName(c *claimsv1.Claim) string {
+	if c.GetClaimVersion() <= 1 || c.GetClaimNumber() == "" {
+		return c.GetId()
+	}
+	if root := s.version(c.GetClaimNumber(), 1); root != nil {
+		return fmt.Sprintf("%s-%d", root.GetId(), c.GetClaimVersion())
+	}
+	return claims.DisplayNumber(c)
+}
+
+func (s *Sim) version(number string, v int32) *claimsv1.Claim {
+	found, _, _ := s.Repos.Claims.List(context.Background(), store.ListOptions[*claimsv1.Claim]{PageSize: 1, Filter: func(o *claimsv1.Claim) bool {
+		return o.GetClaimNumber() == number && max(o.GetClaimVersion(), 1) == v
+	}})
+	if len(found) == 0 {
+		return nil
+	}
+	return found[0]
+}
+
+var versioned = regexp.MustCompile(`^(.+)-(\d+)$`)
+
+// Resolve turns a claim reference into an internal id. A reference is an
+// id, a short name with a version (clm_A-2), or a claim number with or
+// without a version (26075-A-00001-2). Unknown references come back
+// unchanged, so the caller reports "no claim".
+func (s *Sim) Resolve(ref string) string {
+	ctx := context.Background()
+	if _, err := s.Repos.Claims.Get(ctx, ref); err == nil {
+		return ref
+	}
+	if c := s.version(ref, 1); c != nil {
+		return c.GetId()
+	}
+	if m := versioned.FindStringSubmatch(ref); m != nil {
+		v, _ := strconv.Atoi(m[2])
+		number := m[1]
+		if root, err := s.Repos.Claims.Get(ctx, m[1]); err == nil {
+			number = root.GetClaimNumber()
+		}
+		if c := s.version(number, int32(v)); c != nil {
+			return c.GetId()
+		}
+	}
+	return ref
 }
 
 // now is the sandbox clock: it moves forward one second per reading so
@@ -146,6 +217,15 @@ func (s *Sim) logf(format string, args ...any) {
 		s.cur.Lines = append(s.cur.Lines, fmt.Sprintf(format, args...))
 	}
 }
+
+// Now is the sandbox's current time.
+func (s *Sim) Now() time.Time { return s.clock }
+
+// Advance moves the sandbox clock forward, e.g. to spread claims over days.
+func (s *Sim) Advance(d time.Duration) { s.clock = s.clock.Add(d) }
+
+// SetClock sets the sandbox clock.
+func (s *Sim) SetClock(t time.Time) { s.clock = t }
 
 // Log returns the event log, oldest first.
 func (s *Sim) Log() []*LogEntry { return s.log }
@@ -176,6 +256,9 @@ func (s *Sim) Apply(a Action) *Result {
 
 func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result) error {
 	dry := map[bool]string{true: " (dry run)", false: ""}[a.DryRun]
+	if a.ClaimID != "" {
+		a.ClaimID = s.Resolve(a.ClaimID)
+	}
 	switch a.Type {
 	case "process":
 		c, err := s.buildClaim(ctx, a.Claim)
@@ -187,6 +270,10 @@ func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result)
 		r, err := s.Claims.ProcessClaim(ctx, &claimsv1.ProcessClaimRequest{Claim: c, DryRun: a.DryRun})
 		if err != nil {
 			return err
+		}
+		if !a.DryRun {
+			entry.Title = "Process " + s.claimLabel(r.GetClaim())
+			res.ClaimID = r.GetClaim().GetId()
 		}
 		if a.DryRun {
 			res.Preview = s.claimView(r.GetClaim())
@@ -206,7 +293,8 @@ func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result)
 		return err
 
 	case "reprocess":
-		entry.Title = "Reprocess " + a.ClaimID + dry
+		entry.Title = "Reprocess " + s.label(a.ClaimID) + dry
+		res.ClaimID = a.ClaimID
 		req := &claimsv1.ReprocessClaimRequest{ClaimId: a.ClaimID, Reason: a.Reason, DryRun: a.DryRun}
 		for _, r := range a.Resolve {
 			req.Resolutions = append(req.Resolutions, &claimsv1.PendResolution{Code: r.Code, LineNumber: r.Line, Note: a.Reason})
@@ -220,7 +308,7 @@ func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result)
 		}
 
 	case "adjust":
-		entry.Title = "Adjust " + a.ClaimID + dry
+		entry.Title = "Adjust " + s.label(a.ClaimID) + dry
 		req := &claimsv1.AdjustClaimRequest{OriginalClaimId: a.ClaimID, Reason: a.Reason, DryRun: a.DryRun}
 		if a.Claim != nil {
 			orig, err := s.Repos.Claims.Get(ctx, a.ClaimID)
@@ -237,25 +325,31 @@ func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result)
 		if err != nil {
 			return err
 		}
-		res.Delta = deltaView(r)
+		res.Delta = s.deltaView(r)
+		if !a.DryRun {
+			res.ClaimID = r.GetClaim().GetId()
+		}
 		if a.DryRun {
 			res.Preview = s.claimView(r.GetClaim())
 			if n := len(r.GetFlaggedClaimIds()); n > 0 {
-				s.logf("Would flag %d later claim(s) for review: %s.", n, strings.Join(r.GetFlaggedClaimIds(), ", "))
+				s.logf("Would flag %d later claim(s) for review: %s.", n, strings.Join(s.labels(r.GetFlaggedClaimIds()), ", "))
 			}
 		}
 
 	case "void":
-		entry.Title = "Void " + a.ClaimID
-		_, err := s.Claims.VoidClaim(ctx, &claimsv1.VoidClaimRequest{ClaimId: a.ClaimID, Reason: a.Reason})
-		return err
+		entry.Title = "Void " + s.label(a.ClaimID)
+		r, err := s.Claims.VoidClaim(ctx, &claimsv1.VoidClaimRequest{ClaimId: a.ClaimID, Reason: a.Reason})
+		if err != nil {
+			return err
+		}
+		res.ClaimID = r.GetVoidClaim().GetId()
 
 	case "select":
 		entry.Title = "Payment selection"
 		var ids []string
 		if a.ClaimID != "" {
 			ids = []string{a.ClaimID}
-			entry.Title = "Select " + a.ClaimID + " for payment"
+			entry.Title = "Select " + s.label(a.ClaimID) + " for payment"
 		}
 		_, err := s.Claims.SelectForPayment(ctx, ids)
 		return err
@@ -266,22 +360,22 @@ func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result)
 		return err
 
 	case "pull":
-		entry.Title = "Pull " + a.ClaimID + " from payment"
+		entry.Title = "Pull " + s.label(a.ClaimID) + " from payment"
 		_, err := s.Claims.PullClaimFromPayment(ctx, &claimsv1.PullClaimFromPaymentRequest{ClaimId: a.ClaimID, Reason: a.Reason})
 		return err
 
 	case "releaseHold":
-		entry.Title = "Release hold on " + a.ClaimID
+		entry.Title = "Release hold on " + s.label(a.ClaimID)
 		_, err := s.Claims.ReleasePaymentHold(ctx, &claimsv1.ReleasePaymentHoldRequest{ClaimId: a.ClaimID, Note: a.Reason})
 		return err
 
 	case "clearFlag":
-		entry.Title = "Clear flag on " + a.ClaimID
+		entry.Title = "Clear flag on " + s.label(a.ClaimID)
 		_, err := s.Claims.ClearReviewFlag(ctx, &claimsv1.ClearReviewFlagRequest{ClaimId: a.ClaimID, Note: a.Reason})
 		return err
 
 	case "payment":
-		entry.Title = fmt.Sprintf("Bank: %s %s", a.ClaimID, a.Event)
+		entry.Title = fmt.Sprintf("Bank: %s %s", s.label(a.ClaimID), a.Event)
 		_, err := s.Claims.RecordPaymentEvent(ctx, a.ClaimID, a.Event)
 		return err
 
@@ -334,7 +428,7 @@ func (s *Sim) buildClaim(ctx context.Context, spec *ClaimSpec) (*claimsv1.Claim,
 		return nil, fmt.Errorf("%w: no claim given", claims.ErrRejected)
 	}
 	sp := *spec
-	if sp.ID == "" {
+	if sp.ID == "" && s.ShortIDs {
 		for {
 			s.nextID++
 			sp.ID = fmt.Sprintf("clm_%03d", s.nextID)
@@ -455,7 +549,28 @@ func (s *Sim) fill(ctx context.Context, c *claimsv1.Claim, sp *ClaimSpec) error 
 
 func (s *Sim) claimLabel(c *claimsv1.Claim) string {
 	line := c.GetLines()[0]
-	return fmt.Sprintf("%s (%s, %s)", c.GetId(), s.memberName(c.GetMemberId()), line.GetProcedureCode())
+	name := c.GetId()
+	if c.GetClaimNumber() != "" {
+		name = s.Claims.Label(c)
+	}
+	return fmt.Sprintf("%s (%s, %s)", name, s.memberName(c.GetMemberId()), line.GetProcedureCode())
+}
+
+func (s *Sim) labels(ids []string) []string {
+	out := []string{}
+	for _, id := range ids {
+		out = append(out, s.label(id))
+	}
+	return out
+}
+
+// label names a stored claim the way this sandbox's log does.
+func (s *Sim) label(id string) string {
+	c, err := s.Repos.Claims.Get(context.Background(), id)
+	if err != nil {
+		return id
+	}
+	return s.Claims.Label(c)
 }
 
 func (s *Sim) memberName(id string) string {
