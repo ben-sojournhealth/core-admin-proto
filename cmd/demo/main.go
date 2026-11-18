@@ -1,12 +1,11 @@
-// Command demo serves the claims sandbox: a small web UI for making
-// things happen to the system (process, pend, adjust, pay, ...) and
-// watching how its state changes, plus the scenario library as guided
-// walkthroughs.
+// Command demo serves the interactive demos. The landing page is an
+// architecture diagram; components with a demo link into it.
 //
 //	go run ./cmd/demo            # then open http://localhost:8080
 //
-// All state is in memory and shared by every browser tab; Reset starts
-// over from the seed data.
+// Each demo lives under its own path (/claims-lifecycle/ and its API at
+// /claims-lifecycle/api/). All state is in memory and shared by every
+// browser tab; Reset starts over from the seed data.
 package main
 
 import (
@@ -18,6 +17,8 @@ import (
 	"net/http"
 	"sync"
 
+	"coreadmin/internal/demos"
+	"coreadmin/internal/journey"
 	"coreadmin/internal/scenario"
 	"coreadmin/internal/sim"
 )
@@ -115,6 +116,28 @@ func (s *server) handle(f func(r *http.Request) (*sim.Result, error)) http.Handl
 	}
 }
 
+// journeyServer backs the Journey workbench with its own sandbox.
+type journeyServer struct {
+	mu  sync.Mutex
+	sim *sim.Sim
+}
+
+func (j *journeyServer) handle(f func(r *http.Request) (any, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		j.mu.Lock()
+		defer j.mu.Unlock()
+		out, err := f(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(out); err != nil {
+			log.Printf("encode: %v", err)
+		}
+	}
+}
+
 func main() {
 	addr := flag.String("addr", "localhost:8080", "listen address")
 	flag.Parse()
@@ -130,23 +153,30 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(web))
-	mux.HandleFunc("GET /api/state", s.handle(func(*http.Request) (*sim.Result, error) { return nil, nil }))
-	mux.HandleFunc("POST /api/action", s.handle(func(r *http.Request) (*sim.Result, error) {
+	mux.HandleFunc("GET /api/demos", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(demos.Catalog())
+	})
+
+	// Claims Lifecycle.
+	const cl = "/claims-lifecycle"
+	mux.HandleFunc("GET "+cl+"/api/state", s.handle(func(*http.Request) (*sim.Result, error) { return nil, nil }))
+	mux.HandleFunc("POST "+cl+"/api/action", s.handle(func(r *http.Request) (*sim.Result, error) {
 		var a sim.Action
 		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 			return nil, err
 		}
 		return s.runner.Sim.Apply(a), nil
 	}))
-	mux.HandleFunc("POST /api/reset", s.handle(func(*http.Request) (*sim.Result, error) { return nil, s.runner.Reset() }))
-	mux.HandleFunc("POST /api/scenario/load", s.handle(func(r *http.Request) (*sim.Result, error) {
+	mux.HandleFunc("POST "+cl+"/api/reset", s.handle(func(*http.Request) (*sim.Result, error) { return nil, s.runner.Reset() }))
+	mux.HandleFunc("POST "+cl+"/api/scenario/load", s.handle(func(r *http.Request) (*sim.Result, error) {
 		return nil, s.runner.Load(r.URL.Query().Get("id"))
 	}))
-	mux.HandleFunc("POST /api/scenario/step", s.handle(func(*http.Request) (*sim.Result, error) {
+	mux.HandleFunc("POST "+cl+"/api/scenario/step", s.handle(func(*http.Request) (*sim.Result, error) {
 		res, _ := s.runner.Step()
 		return res, nil
 	}))
-	mux.HandleFunc("POST /api/scenario/runall", s.handle(func(*http.Request) (*sim.Result, error) {
+	mux.HandleFunc("POST "+cl+"/api/scenario/runall", s.handle(func(*http.Request) (*sim.Result, error) {
 		var last *sim.Result
 		for {
 			res, ok := s.runner.Step()
@@ -157,6 +187,33 @@ func main() {
 		}
 	}))
 
-	log.Printf("claims sandbox on http://%s", *addr)
+	// Journey: the examiner workbench.
+	js, err := journey.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+	j := &journeyServer{sim: js}
+	const jp = "/journey"
+	mux.HandleFunc("GET "+jp+"/api/state", j.handle(func(*http.Request) (any, error) { return journey.Snapshot(j.sim) }))
+	mux.HandleFunc("GET "+jp+"/api/claim", j.handle(func(r *http.Request) (any, error) {
+		return journey.GetDetail(j.sim, r.URL.Query().Get("id"))
+	}))
+	mux.HandleFunc("POST "+jp+"/api/action", j.handle(func(r *http.Request) (any, error) {
+		var a sim.Action
+		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
+			return nil, err
+		}
+		return j.sim.Apply(a), nil
+	}))
+	mux.HandleFunc("POST "+jp+"/api/reset", j.handle(func(*http.Request) (any, error) {
+		fresh, err := journey.New()
+		if err != nil {
+			return nil, err
+		}
+		j.sim = fresh
+		return journey.Snapshot(j.sim)
+	}))
+
+	log.Printf("demos on http://%s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, mux))
 }

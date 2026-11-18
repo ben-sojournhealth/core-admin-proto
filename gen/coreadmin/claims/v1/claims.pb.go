@@ -554,7 +554,7 @@ type Claim struct {
 	// For replacement/void claims: the claim being replaced.
 	OriginalClaimId string `protobuf:"bytes,5,opt,name=original_claim_id,json=originalClaimId,proto3" json:"original_claim_id,omitempty"`
 	// Provider-assigned patient control number (837 CLM01), echoed on the
-	// 835. The payer's claim number is `id`.
+	// 835. The payer's claim number is claim_number.
 	PatientControlNumber string `protobuf:"bytes,6,opt,name=patient_control_number,json=patientControlNumber,proto3" json:"patient_control_number,omitempty"`
 	// Member as submitted, and as resolved by eligibility.
 	MemberCardId      string       `protobuf:"bytes,7,opt,name=member_card_id,json=memberCardId,proto3" json:"member_card_id,omitempty"`
@@ -609,7 +609,18 @@ type Claim struct {
 	// confirmed", "not a duplicate"). These are inputs to adjudication,
 	// unlike the adjudication results.
 	PendOverrides []*PendOverride `protobuf:"bytes,32,rep,name=pend_overrides,json=pendOverrides,proto3" json:"pend_overrides,omitempty"`
-	Audit         *v1.AuditInfo   `protobuf:"bytes,31,opt,name=audit,proto3" json:"audit,omitempty"`
+	// The claim number people see (examiners, providers, the 835), assigned
+	// at intake as YYJJJ-S-NNNNN: two-digit year, Julian day received, source
+	// (E = EDI, P = paper, A = API or portal) and a daily sequence, e.g.
+	// 26075-E-00012. `id` is the internal key and is never shown.
+	//
+	// Every version of a claim shares its number: a replacement or void
+	// keeps the original's claim_number and takes the next claim_version.
+	ClaimNumber string `protobuf:"bytes,33,opt,name=claim_number,json=claimNumber,proto3" json:"claim_number,omitempty"`
+	// 1 for the original; each replacement or void is the next version.
+	// Displayed as a suffix from 2 on: 26075-E-00012-2.
+	ClaimVersion  int32         `protobuf:"varint,34,opt,name=claim_version,json=claimVersion,proto3" json:"claim_version,omitempty"`
+	Audit         *v1.AuditInfo `protobuf:"bytes,31,opt,name=audit,proto3" json:"audit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -859,6 +870,20 @@ func (x *Claim) GetPendOverrides() []*PendOverride {
 		return x.PendOverrides
 	}
 	return nil
+}
+
+func (x *Claim) GetClaimNumber() string {
+	if x != nil {
+		return x.ClaimNumber
+	}
+	return ""
+}
+
+func (x *Claim) GetClaimVersion() int32 {
+	if x != nil {
+		return x.ClaimVersion
+	}
+	return 0
 }
 
 func (x *Claim) GetAudit() *v1.AuditInfo {
@@ -2287,7 +2312,7 @@ var File_coreadmin_claims_v1_claims_proto protoreflect.FileDescriptor
 
 const file_coreadmin_claims_v1_claims_proto_rawDesc = "" +
 	"\n" +
-	" coreadmin/claims/v1/claims.proto\x12\x13coreadmin.claims.v1\x1a coreadmin/common/v1/common.proto\x1a\x1ccoreadmin/plan/v1/plan.proto\x1a$coreadmin/provider/v1/provider.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf4\x0e\n" +
+	" coreadmin/claims/v1/claims.proto\x12\x13coreadmin.claims.v1\x1a coreadmin/common/v1/common.proto\x1a\x1ccoreadmin/plan/v1/plan.proto\x1a$coreadmin/provider/v1/provider.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbc\x0f\n" +
 	"\x05Claim\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
@@ -2321,7 +2346,9 @@ const file_coreadmin_claims_v1_claims_proto_rawDesc = "" +
 	"\apayment\x18\x1c \x01(\v2!.coreadmin.claims.v1.ClaimPaymentR\apayment\x12C\n" +
 	"\fpayment_hold\x18\x1d \x01(\v2 .coreadmin.claims.v1.PaymentHoldR\vpaymentHold\x12B\n" +
 	"\freview_flags\x18\x1e \x03(\v2\x1f.coreadmin.claims.v1.ReviewFlagR\vreviewFlags\x12H\n" +
-	"\x0epend_overrides\x18  \x03(\v2!.coreadmin.claims.v1.PendOverrideR\rpendOverrides\x124\n" +
+	"\x0epend_overrides\x18  \x03(\v2!.coreadmin.claims.v1.PendOverrideR\rpendOverrides\x12!\n" +
+	"\fclaim_number\x18! \x01(\tR\vclaimNumber\x12#\n" +
+	"\rclaim_version\x18\" \x01(\x05R\fclaimVersion\x124\n" +
 	"\x05audit\x18\x1f \x01(\v2\x1e.coreadmin.common.v1.AuditInfoR\x05audit\"\x8b\x01\n" +
 	"\vProviderRef\x12\x10\n" +
 	"\x03npi\x18\x01 \x01(\tR\x03npi\x12\x10\n" +

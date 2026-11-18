@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -71,17 +72,24 @@ type AccumEntry struct {
 }
 
 type ClaimView struct {
-	ID         string `json:"id"`
-	Member     string `json:"member"`
-	Provider   string `json:"provider"`
-	DOS        string `json:"dos"`
-	Procedure  string `json:"procedure"`
-	Status     string `json:"status"`
-	Frequency  string `json:"frequency"`
-	OriginalID string `json:"originalId,omitempty"`
-	Run        int32  `json:"run"`
-	Reason     string `json:"reason,omitempty"`
-	Tier       string `json:"tier,omitempty"`
+	ID       string `json:"id"`
+	MemberID string `json:"memberId"`
+	// Number is the claim number people see, with its version suffix.
+	Number string `json:"number"`
+	// Label is how this sandbox names the claim (short name or number).
+	Label         string `json:"label"`
+	OriginalLabel string `json:"originalLabel,omitempty"`
+	Received      string `json:"received"`
+	Member        string `json:"member"`
+	Provider      string `json:"provider"`
+	DOS           string `json:"dos"`
+	Procedure     string `json:"procedure"`
+	Status        string `json:"status"`
+	Frequency     string `json:"frequency"`
+	OriginalID    string `json:"originalId,omitempty"`
+	Run           int32  `json:"run"`
+	Reason        string `json:"reason,omitempty"`
+	Tier          string `json:"tier,omitempty"`
 
 	Charge  int64 `json:"charge"`
 	Allowed int64 `json:"allowed"`
@@ -158,14 +166,14 @@ type DeltaView struct {
 
 func trimEnum(s, prefix string) string { return strings.TrimPrefix(s, prefix) }
 
-func deltaView(r *claimsv1.AdjustClaimResponse) *DeltaView {
+func (s *Sim) deltaView(r *claimsv1.AdjustClaimResponse) *DeltaView {
 	d := r.GetDelta()
 	return &DeltaView{
 		Basis:     trimEnum(d.GetBasis().String(), "DELTA_BASIS_"),
 		Original:  d.GetOriginalPaid().GetCents(),
 		Projected: d.GetProjectedPaid().GetCents(),
 		Delta:     d.GetDelta().GetCents(),
-		Flagged:   append([]string{}, r.GetFlaggedClaimIds()...),
+		Flagged:   s.labels(r.GetFlaggedClaimIds()),
 	}
 }
 
@@ -173,6 +181,9 @@ func deltaView(r *claimsv1.AdjustClaimResponse) *DeltaView {
 func (s *Sim) State() (*State, error) {
 	ctx := context.Background()
 	st := &State{Log: s.log, Claims: []*ClaimView{}}
+	if st.Log == nil {
+		st.Log = []*LogEntry{} // an empty log, not null, for the UI
+	}
 
 	members, _, err := s.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 1000})
 	if err != nil {
@@ -206,7 +217,7 @@ func (s *Sim) State() (*State, error) {
 		st.Providers = append(st.Providers, ProviderView{NPI: p.GetNpi(), Name: providerName(p), Network: network})
 	}
 
-	if st.Accumulators, err = s.accumulatorsView(ctx, members); err != nil {
+	if st.Accumulators, err = s.accumulatorsView(ctx, SubscriberID, members); err != nil {
 		return nil, err
 	}
 
@@ -224,13 +235,31 @@ func (s *Sim) State() (*State, error) {
 	return st, nil
 }
 
-func (s *Sim) accumulatorsView(ctx context.Context, members []*eligibilityv1.Member) (AccumulatorsView, error) {
+// FamilyAccumulators returns the accumulator view for the family a member
+// belongs to.
+func (s *Sim) FamilyAccumulators(memberID string) (AccumulatorsView, error) {
+	ctx := context.Background()
+	m, err := s.Repos.Members.Get(ctx, memberID)
+	if err != nil {
+		return AccumulatorsView{}, err
+	}
+	family, _, err := s.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{
+		PageSize: 100,
+		Filter:   func(o *eligibilityv1.Member) bool { return o.GetSubscriberId() == m.GetSubscriberId() },
+	})
+	if err != nil {
+		return AccumulatorsView{}, err
+	}
+	return s.accumulatorsView(ctx, m.GetSubscriberId(), family)
+}
+
+func (s *Sim) accumulatorsView(ctx context.Context, subscriberID string, members []*eligibilityv1.Member) (AccumulatorsView, error) {
 	plan, err := s.Repos.Plans.Get(ctx, PlanID)
 	if err != nil {
 		return AccumulatorsView{}, err
 	}
 	version := plan.GetVersions()[0]
-	id := adjudication.FamilyAccumulatorsID(SubscriberID, PlanID, plan.GetBenefitPeriod().GetStart())
+	id := adjudication.FamilyAccumulatorsID(subscriberID, PlanID, plan.GetBenefitPeriod().GetStart())
 	v := AccumulatorsView{ID: id, Entries: []AccumEntry{}}
 	rec, err := s.Repos.FamilyAccumulators.Get(ctx, id)
 	if err == nil {
@@ -278,7 +307,7 @@ func (s *Sim) accumulatorsView(ctx context.Context, members []*eligibilityv1.Mem
 	family := AccumRow{Owner: "Family"}
 	for _, col := range cols {
 		v.Columns = append(v.Columns, col.label)
-		family.Cells = append(family.Cells, cell(col.fam, SubscriberID))
+		family.Cells = append(family.Cells, cell(col.fam, subscriberID))
 	}
 	v.Rows = append(v.Rows, family)
 	for _, m := range members {
@@ -308,10 +337,17 @@ func outcome(c *claimsv1.Claim, adj *claimsv1.Adjudication, status string) strin
 	return status
 }
 
+// ClaimView flattens a stored claim for display.
+func (s *Sim) ClaimView(c *claimsv1.Claim) *ClaimView { return s.claimView(c) }
+
 func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 	adj := c.GetAdjudication()
 	v := &ClaimView{
 		ID:         c.GetId(),
+		MemberID:   c.GetMemberId(),
+		Number:     claims.DisplayNumber(c),
+		Label:      s.Claims.Label(c),
+		Received:   c.GetReceivedTime().AsTime().Format(time.RFC3339),
 		Member:     s.memberName(c.GetMemberId()),
 		Provider:   c.GetBillingProvider().GetName(),
 		DOS:        dates.Format(c.GetServiceDates().GetStart()),
@@ -334,6 +370,9 @@ func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 	}
 	if len(c.GetLines()) > 0 {
 		v.Procedure = c.GetLines()[0].GetProcedureCode()
+	}
+	if c.GetOriginalClaimId() != "" {
+		v.OriginalLabel = s.label(c.GetOriginalClaimId())
 	}
 	v.Raw, _ = protojson.Marshal(c)
 
@@ -408,6 +447,8 @@ func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 	switch {
 	case c.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_PENDED:
 		v.Actions = append(v.Actions, "reprocess")
+	case final && c.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID:
+		// A void claim only carries the reversal; it is not adjusted.
 	case final:
 		v.Actions = append(v.Actions, "adjust", "void")
 		if c.GetPayment() == nil && c.GetPaymentHold() == nil {

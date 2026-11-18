@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -19,6 +18,7 @@ import (
 	commonv1 "coreadmin/gen/coreadmin/common/v1"
 	"coreadmin/internal/adjudication"
 	"coreadmin/internal/dates"
+	"coreadmin/internal/ids"
 	"coreadmin/internal/repo"
 	"coreadmin/internal/store"
 )
@@ -43,6 +43,8 @@ type Service struct {
 	Now    func() time.Time
 	// Logf receives a plain-language line for each thing that happens.
 	Logf func(format string, args ...any)
+	// Ref names a claim in log lines. Defaults to the claim number.
+	Ref func(*claimsv1.Claim) string
 
 	remittances int
 }
@@ -77,7 +79,7 @@ func statusName(st claimsv1.ClaimStatus) string {
 func (s *Service) ProcessClaim(ctx context.Context, req *claimsv1.ProcessClaimRequest) (*claimsv1.ProcessClaimResponse, error) {
 	c := proto.Clone(req.GetClaim()).(*claimsv1.Claim)
 	if c.GetId() == "" {
-		return nil, rejectf("claim id is required")
+		c.Id = ids.NewV7(s.Now())
 	}
 	// A provider's corrected claim or void is an adjustment of the claim
 	// it references.
@@ -105,12 +107,15 @@ func (s *Service) ProcessClaim(ctx context.Context, req *claimsv1.ProcessClaimRe
 		if err != nil {
 			return nil, err
 		}
-		s.logf("Dry run of %s: would be %s. Nothing saved.", c.GetId(), describe(calc.Claim))
+		s.logf("Dry run of %s: would be %s. Nothing saved.", s.ref(c), describe(calc.Claim))
 		return &claimsv1.ProcessClaimResponse{Claim: calc.Claim}, nil
+	}
+	if err := s.assignNumber(ctx, c); err != nil {
+		return nil, err
 	}
 	saved, err := s.Repos.Claims.Create(ctx, c)
 	if errors.Is(err, store.ErrAlreadyExists) {
-		return nil, rejectf("claim %s already exists", c.GetId())
+		return nil, rejectf("claim %s already exists", s.ref(c))
 	} else if err != nil {
 		return nil, err
 	}
@@ -130,6 +135,7 @@ func (s *Service) prepareNew(c *claimsv1.Claim) {
 	c.Status = claimsv1.ClaimStatus_CLAIM_STATUS_RECEIVED
 	c.Adjudication, c.AdjudicationHistory = nil, nil
 	c.Payment, c.PaymentHold, c.ReviewFlags, c.PendOverrides, c.Audit = nil, nil, nil, nil, nil
+	c.ClaimNumber, c.ClaimVersion = "", 0
 	for _, l := range c.GetLines() {
 		l.Adjudication = nil
 	}
@@ -157,7 +163,7 @@ func (s *Service) adjudicate(ctx context.Context, c *claimsv1.Claim, reason stri
 		out, err := s.commit(ctx, calc)
 		if errors.Is(err, adjudication.ErrBalancesChanged) && attempt < maxAttempts {
 			s.logf("%s: the family's accumulators changed after cost sharing was calculated (revision %d is stale). Recalculating.",
-				c.GetId(), calc.Revision)
+				s.ref(c), calc.Revision)
 			continue
 		}
 		return out, err
@@ -215,9 +221,9 @@ func (s *Service) commit(ctx context.Context, calc *adjudication.Calculation) (*
 	if err != nil {
 		return nil, err
 	}
-	s.logf("%s adjudicated (run %d): %s.", saved.GetId(), adj.GetRunNumber(), describe(saved))
+	s.logf("%s adjudicated (run %d): %s.", s.ref(saved), adj.GetRunNumber(), describe(saved))
 	if final && len(adj.GetAccumulatorPostings()) > 0 {
-		s.logf("%s finalized: posted %d accumulator amounts to %s.", saved.GetId(), len(adj.GetAccumulatorPostings()), calc.Family.GetId())
+		s.logf("%s finalized: posted %d accumulator amounts to %s.", s.ref(saved), len(adj.GetAccumulatorPostings()), calc.Family.GetId())
 	}
 
 	if orig == nil {
@@ -229,7 +235,7 @@ func (s *Service) commit(ctx context.Context, calc *adjudication.Calculation) (*
 		if _, err := s.Repos.Claims.Update(ctx, orig); err != nil {
 			return nil, err
 		}
-		s.logf("%s is now ADJUSTED; its accumulator postings were reversed and replaced by %s.", orig.GetId(), saved.GetId())
+		s.logf("%s is now ADJUSTED; its accumulator postings were reversed and replaced by %s.", s.ref(orig), s.ref(saved))
 		if adjudication.PostingsDiffer(orig.GetAdjudication().GetAccumulatorPostings(), adj.GetAccumulatorPostings()) {
 			if _, err := s.flagLaterClaims(ctx, orig, saved.GetId(), true); err != nil {
 				return nil, err
@@ -237,14 +243,14 @@ func (s *Service) commit(ctx context.Context, calc *adjudication.Calculation) (*
 		}
 	} else if orig.GetPayment() == nil && orig.GetPaymentHold() == nil {
 		orig.PaymentHold = &claimsv1.PaymentHold{
-			Reason:     fmt.Sprintf("Replacement %s is pended.", saved.GetId()),
+			Reason:     fmt.Sprintf("Replacement %s is pended.", s.ref(saved)),
 			PlacedBy:   store.Actor(ctx),
 			PlacedTime: timestamppb.New(s.Now()),
 		}
 		if _, err := s.Repos.Claims.Update(ctx, orig); err != nil {
 			return nil, err
 		}
-		s.logf("%s put on payment hold until its replacement %s is resolved.", orig.GetId(), saved.GetId())
+		s.logf("%s put on payment hold until its replacement %s is resolved.", s.ref(orig), s.ref(saved))
 	}
 	return saved, nil
 }
@@ -294,14 +300,14 @@ func (s *Service) flagLaterClaims(ctx context.Context, orig *claimsv1.Claim, exc
 		}
 		o.ReviewFlags = append(o.ReviewFlags, &claimsv1.ReviewFlag{
 			Code:          FlagAccumulatorChange,
-			Message:       fmt.Sprintf("accumulator postings of earlier claim %s changed; this claim's cost sharing may no longer be right", orig.GetId()),
+			Message:       fmt.Sprintf("accumulator postings of earlier claim %s changed; this claim's cost sharing may no longer be right", s.ref(orig)),
 			SourceClaimId: orig.GetId(),
 			RaisedTime:    timestamppb.New(s.Now()),
 		})
 		if _, err := s.Repos.Claims.Update(ctx, o); err != nil {
 			return nil, err
 		}
-		s.logf("%s flagged for review: an earlier claim's accumulator postings changed.", o.GetId())
+		s.logf("%s flagged for review: an earlier claim's accumulator postings changed.", s.ref(o))
 	}
 	return ids, nil
 }
@@ -342,7 +348,7 @@ func (s *Service) ReprocessClaim(ctx context.Context, req *claimsv1.ReprocessCla
 		if err != nil {
 			return nil, err
 		}
-		s.logf("Dry run of reprocessing %s: would be %s. Nothing saved.", c.GetId(), describe(calc.Claim))
+		s.logf("Dry run of reprocessing %s: would be %s. Nothing saved.", s.ref(c), describe(calc.Claim))
 		return &claimsv1.ReprocessClaimResponse{Claim: calc.Claim}, nil
 	}
 	out, err := s.adjudicate(ctx, c, req.GetReason())
@@ -352,21 +358,19 @@ func (s *Service) ReprocessClaim(ctx context.Context, req *claimsv1.ReprocessCla
 	return &claimsv1.ReprocessClaimResponse{Claim: out}, nil
 }
 
-var replacementSuffix = regexp.MustCompile(`-R\d+$`)
-
 func (s *Service) AdjustClaim(ctx context.Context, req *claimsv1.AdjustClaimRequest) (*claimsv1.AdjustClaimResponse, error) {
 	orig, err := s.get(ctx, req.GetOriginalClaimId())
 	if err != nil {
 		return nil, err
 	}
 	if !finalized(orig.GetStatus()) {
-		return nil, rejectf("only finalized claims (APPROVED or DENIED) can be adjusted; %s is %s", orig.GetId(), statusName(orig.GetStatus()))
+		return nil, rejectf("only finalized claims (APPROVED or DENIED) can be adjusted; %s is %s", s.ref(orig), statusName(orig.GetStatus()))
 	}
 	if req.GetReason() == "" {
 		return nil, rejectf("a reason is required")
 	}
 	if orig.GetPayment().GetState() == claimsv1.PaymentState_PAYMENT_STATE_SELECTED && !req.GetDryRun() {
-		return nil, rejectf("%s is selected for a payment run that has not been released; pull it from the run first", orig.GetId())
+		return nil, rejectf("%s is selected for a payment run that has not been released; pull it from the run first", s.ref(orig))
 	}
 	pending, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1, Filter: func(o *claimsv1.Claim) bool {
 		return o.GetOriginalClaimId() == orig.GetId() && !finalized(o.GetStatus()) &&
@@ -376,7 +380,7 @@ func (s *Service) AdjustClaim(ctx context.Context, req *claimsv1.AdjustClaimRequ
 		return nil, err
 	}
 	if len(pending) > 0 && !req.GetDryRun() {
-		return nil, rejectf("%s already has a replacement in progress (%s)", orig.GetId(), pending[0].GetId())
+		return nil, rejectf("%s already has a replacement in progress (%s)", s.ref(orig), s.ref(pending[0]))
 	}
 
 	// Build the replacement: the corrected claim, or the original's content
@@ -386,22 +390,19 @@ func (s *Service) AdjustClaim(ctx context.Context, req *claimsv1.AdjustClaimRequ
 		src = orig
 	}
 	repl := proto.Clone(src).(*claimsv1.Claim)
+	// A replacement is a new claim with its own id; its link to the
+	// original is original_claim_id and the shared claim number.
 	if repl.GetId() == "" || repl.GetId() == orig.GetId() {
-		base := replacementSuffix.ReplaceAllString(orig.GetId(), "")
-		for n := 1; ; n++ {
-			repl.Id = fmt.Sprintf("%s-R%d", base, n)
-			if _, err := s.Repos.Claims.Get(ctx, repl.GetId()); errors.Is(err, store.ErrNotFound) {
-				break
-			} else if err != nil {
-				return nil, err
-			}
-		}
+		repl.Id = ids.NewV7(s.Now())
 	}
 	repl.ReceivedTime = nil
 	s.prepareNew(repl)
 	repl.Frequency = claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT
 	repl.OriginalClaimId = orig.GetId()
 	repl.CustomerId = orig.GetCustomerId()
+	if err := s.nextVersion(ctx, orig, repl); err != nil {
+		return nil, err
+	}
 
 	resp := &claimsv1.AdjustClaimResponse{}
 	if req.GetDryRun() {
@@ -421,7 +422,7 @@ func (s *Service) AdjustClaim(ctx context.Context, req *claimsv1.AdjustClaimRequ
 		if err != nil {
 			return nil, err
 		}
-		s.logf("Created replacement %s for %s (%s).", saved.GetId(), orig.GetId(), req.GetReason())
+		s.logf("Created replacement %s for %s (%s).", s.ref(saved), s.ref(orig), req.GetReason())
 		if resp.Claim, err = s.adjudicate(ctx, saved, req.GetReason()); err != nil {
 			return nil, err
 		}
@@ -447,7 +448,7 @@ func (s *Service) AdjustClaim(ctx context.Context, req *claimsv1.AdjustClaimRequ
 		verb = "Dry run of adjusting"
 	}
 	s.logf("%s %s: payee holds %s (%s), replacement pays %s, delta %s.%s",
-		verb, orig.GetId(), USD(d.GetOriginalPaid().GetCents()), basisText(d.GetBasis()),
+		verb, s.ref(orig), USD(d.GetOriginalPaid().GetCents()), basisText(d.GetBasis()),
 		USD(d.GetProjectedPaid().GetCents()), USD(d.GetDelta().GetCents()),
 		map[bool]string{true: " Nothing saved.", false: ""}[req.GetDryRun()])
 	return resp, nil
@@ -518,21 +519,24 @@ func (s *Service) VoidClaim(ctx context.Context, req *claimsv1.VoidClaimRequest)
 		return nil, err
 	}
 	if !finalized(orig.GetStatus()) {
-		return nil, rejectf("only finalized claims (APPROVED or DENIED) can be voided; %s is %s", orig.GetId(), statusName(orig.GetStatus()))
+		return nil, rejectf("only finalized claims (APPROVED or DENIED) can be voided; %s is %s", s.ref(orig), statusName(orig.GetStatus()))
 	}
 	if req.GetReason() == "" {
 		return nil, rejectf("a reason is required")
 	}
 	if orig.GetPayment().GetState() == claimsv1.PaymentState_PAYMENT_STATE_SELECTED {
-		return nil, rejectf("%s is selected for a payment run that has not been released; pull it from the run first", orig.GetId())
+		return nil, rejectf("%s is selected for a payment run that has not been released; pull it from the run first", s.ref(orig))
 	}
 
 	void := proto.Clone(orig).(*claimsv1.Claim)
-	void.Id = replacementSuffix.ReplaceAllString(orig.GetId(), "") + "-V"
+	void.Id = ids.NewV7(s.Now())
 	void.ReceivedTime = nil
 	s.prepareNew(void)
 	void.Frequency = claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID
 	void.OriginalClaimId = orig.GetId()
+	if err := s.nextVersion(ctx, orig, void); err != nil {
+		return nil, err
+	}
 	// A void is finalized on creation with nothing payable, so the next
 	// remittance reports the reversal.
 	void.Status = claimsv1.ClaimStatus_CLAIM_STATUS_APPROVED
@@ -542,9 +546,7 @@ func (s *Service) VoidClaim(ctx context.Context, req *claimsv1.VoidClaimRequest)
 		EngineVersion: s.Engine.Version,
 	}
 	saved, err := s.Repos.Claims.Create(ctx, void)
-	if errors.Is(err, store.ErrAlreadyExists) {
-		return nil, rejectf("%s has already been voided", orig.GetId())
-	} else if err != nil {
+	if err != nil {
 		return nil, err
 	}
 
@@ -558,9 +560,9 @@ func (s *Service) VoidClaim(ctx context.Context, req *claimsv1.VoidClaimRequest)
 	if _, err := s.Repos.Claims.Update(ctx, orig); err != nil {
 		return nil, err
 	}
-	s.logf("%s is now VOIDED (%s); its accumulator postings were reversed. Void claim %s created.", orig.GetId(), req.GetReason(), saved.GetId())
+	s.logf("%s is now VOIDED (%s); its accumulator postings were reversed. Void claim %s created.", s.ref(orig), req.GetReason(), s.ref(saved))
 	if held := heldAmount(orig); held > 0 {
-		s.logf("%s was paid on %s and is to be recovered on the next remittance.", USD(held), orig.GetId())
+		s.logf("%s was paid on %s and is to be recovered on the next remittance.", USD(held), s.ref(orig))
 	}
 
 	resp := &claimsv1.VoidClaimResponse{VoidClaim: saved}
@@ -578,7 +580,7 @@ func (s *Service) PullClaimFromPayment(ctx context.Context, req *claimsv1.PullCl
 		return nil, err
 	}
 	if c.GetPayment().GetState() != claimsv1.PaymentState_PAYMENT_STATE_SELECTED {
-		return nil, rejectf("%s is not in an unreleased payment run", c.GetId())
+		return nil, rejectf("%s is not in an unreleased payment run", s.ref(c))
 	}
 	if req.GetReason() == "" {
 		return nil, rejectf("a reason is required")
@@ -589,7 +591,7 @@ func (s *Service) PullClaimFromPayment(ctx context.Context, req *claimsv1.PullCl
 	if err != nil {
 		return nil, err
 	}
-	s.logf("%s pulled from the payment run and put on payment hold (%s).", c.GetId(), req.GetReason())
+	s.logf("%s pulled from the payment run and put on payment hold (%s).", s.ref(c), req.GetReason())
 	return &claimsv1.PullClaimFromPaymentResponse{Claim: saved}, nil
 }
 
@@ -599,14 +601,14 @@ func (s *Service) ReleasePaymentHold(ctx context.Context, req *claimsv1.ReleaseP
 		return nil, err
 	}
 	if c.GetPaymentHold() == nil {
-		return nil, rejectf("%s has no payment hold", c.GetId())
+		return nil, rejectf("%s has no payment hold", s.ref(c))
 	}
 	c.PaymentHold = nil
 	saved, err := s.Repos.Claims.Update(ctx, c)
 	if err != nil {
 		return nil, err
 	}
-	s.logf("Payment hold on %s released.", c.GetId())
+	s.logf("Payment hold on %s released.", s.ref(c))
 	return &claimsv1.ReleasePaymentHoldResponse{Claim: saved}, nil
 }
 
@@ -626,13 +628,13 @@ func (s *Service) ClearReviewFlag(ctx context.Context, req *claimsv1.ClearReview
 		n++
 	}
 	if n == 0 {
-		return nil, rejectf("%s has no matching open review flag", c.GetId())
+		return nil, rejectf("%s has no matching open review flag", s.ref(c))
 	}
 	saved, err := s.Repos.Claims.Update(ctx, c)
 	if err != nil {
 		return nil, err
 	}
-	s.logf("Cleared %d review flag(s) on %s without adjusting it (%s).", n, c.GetId(), req.GetNote())
+	s.logf("Cleared %d review flag(s) on %s without adjusting it (%s).", n, s.ref(c), req.GetNote())
 	return &claimsv1.ClearReviewFlagResponse{Claim: saved}, nil
 }
 

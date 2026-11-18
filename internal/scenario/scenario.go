@@ -89,7 +89,7 @@ func (st *Step) Run(s *sim.Sim) (*sim.Result, StepResult) {
 var names = map[string]string{"mem_1001": "Jordan", "mem_1002": "Sam", "mem_1003": "Riley", "mem_1004": "Avery"}
 
 func claim(s *sim.Sim, id string) (*claimsv1.Claim, error) {
-	c, err := s.Repos.Claims.Get(context.Background(), id)
+	c, err := s.Repos.Claims.Get(context.Background(), s.Resolve(id))
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, fmt.Errorf("no claim %s", id)
 	}

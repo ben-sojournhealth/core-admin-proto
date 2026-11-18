@@ -32,7 +32,7 @@ message Claim {
   // For replacement/void claims: the claim being replaced.
   string original_claim_id = 5;
   // Provider-assigned patient control number (837 CLM01), echoed on the
-  // 835. The payer's claim number is `id`.
+  // 835. The payer's claim number is claim_number.
   string patient_control_number = 6;
 
   // Member as submitted, and as resolved by eligibility.
@@ -95,6 +95,18 @@ message Claim {
   // confirmed", "not a duplicate"). These are inputs to adjudication,
   // unlike the adjudication results.
   repeated PendOverride pend_overrides = 32;
+
+  // The claim number people see (examiners, providers, the 835), assigned
+  // at intake as YYJJJ-S-NNNNN: two-digit year, Julian day received, source
+  // (E = EDI, P = paper, A = API or portal) and a daily sequence, e.g.
+  // 26075-E-00012. `id` is the internal key and is never shown.
+  //
+  // Every version of a claim shares its number: a replacement or void
+  // keeps the original's claim_number and takes the next claim_version.
+  string claim_number = 33;
+  // 1 for the original; each replacement or void is the next version.
+  // Displayed as a suffix from 2 on: 26075-E-00012-2.
+  int32 claim_version = 34;
 
   common.v1.AuditInfo audit = 31;
 }
