@@ -134,6 +134,16 @@ table.list .r { text-align: right; }
 .note { border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; background: var(--gray-soft); color: var(--muted); }
 .note.red { background: var(--red-soft); color: var(--red); }
 
+.corr { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 2px; font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 2px 10px; background: var(--brand-soft); color: var(--brand); }
+.corr a { color: inherit; }
+.corr .sub { font-weight: 400; }
+.corr.open { background: var(--amber-soft); color: var(--amber); }
+.chip.corr { margin: 0; font-size: 11px; padding: 0 7px; vertical-align: 1px; }
+.kv { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px; font-size: 13px; padding: 3px 0; }
+.kv > span:first-child { color: var(--muted); }
+.kv > span:last-child { overflow-wrap: anywhere; }
+.kv a { color: var(--brand); text-decoration: none; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
 table.lines { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.lines th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 0 8px 8px 0; }
 table.lines td { padding: 8px 8px 8px 0; border-top: 1px solid var(--line); vertical-align: top; }
@@ -203,6 +213,8 @@ const PEND = {
   PRIOR_AUTH_REQUIRED: "Prior authorization", POSSIBLE_DUPLICATE: "Possible duplicate", NO_ELIGIBILITY: "No eligibility",
   NO_BENEFIT_MATCH: "No benefit match", MEMBER_NOT_FOUND: "Member not found", NO_PRICE: "No price",
   COVERAGE_IN_GRACE: "Grace period", NO_TIER: "No network tier", NO_PLAN_VERSION: "No plan version",
+  ORIGINAL_NOT_FOUND: "Original not found", ORIGINAL_NOT_FINALIZED: "Original not final",
+  ORIGINAL_IN_PAYMENT_RUN: "Original in payment run", ORIGINAL_HAS_OPEN_REPLACEMENT: "Replacement in progress",
 };
 const PEND_HELP = {
   PRIOR_AUTH_REQUIRED: "Confirm the authorization, then override.",
@@ -210,6 +222,10 @@ const PEND_HELP = {
   NO_ELIGIBILITY: "Waiting on enrollment. Reprocess once coverage is loaded.",
   NO_BENEFIT_MATCH: "The plan has no benefit for this service. It needs a plan design change; claims can't be denied by hand yet.",
   NO_PRICE: "Waiting on a rate for this service.",
+  MEMBER_NOT_FOUND: "Find the member from the patient as sent (see Received). Linking by hand isn't built yet.",
+  ORIGINAL_NOT_FOUND: "Find the original with the provider, from the patient control number or the EOP. Linking by hand isn't built yet.",
+  ORIGINAL_NOT_FINALIZED: "The claim it corrects hasn't been decided. Resolve that claim first, then reprocess this one.",
+  ORIGINAL_IN_PAYMENT_RUN: "Reprocess after the payment run is released, or pull the original from the run.",
 };
 const pendName = (code) => PEND[code] || words(code);
 
@@ -318,7 +334,7 @@ function renderList(q, code, isSearch) {
     rows.map((c) => {
       const age = ageDays(c);
       return `<tr data-claim="${esc(c.id)}" class="${fresh.has(c.id) ? "changed" : ""}">
-        <td><span class="id num">${esc(c.number)}</span></td>
+        <td><span class="id num">${esc(c.number)}</span>${c.correction && !c.correction.original ? ` <span class="chip corr open" title="Correction; original not linked">corr · unlinked</span>` : ""}</td>
         <td>${esc(c.member)}</td>
         <td>${esc(c.procedure)} <span class="sub">· ${esc(c.dos.slice(5).replace("-", "/"))}</span></td>
         <td>${esc(c.provider)}</td>
@@ -416,7 +432,30 @@ function sideHTML(d) {
     `<li><details><summary>${esc(e.title)}</summary>${e.lines.length ? `<ul>${e.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}${e.error ? `<div class="err">${esc(e.error)}</div>` : ""}</details></li>`).join("") + `</ul>`
     : `<div class="sub">No activity.</div>`;
   const rel = d.related.length ? `<div class="section"><div class="label">Other versions</div><div class="rel">${d.related.map((r) => `<a href="${esc(claimHref(r))}">${esc(r.number)}</a>`).join("")}</div></div>` : "";
-  return `<div class="panel"><div class="section">${meters}</div>${rel}<div class="section"><div class="label">Activity</div>${tl}</div></div>`;
+  const i = c.intake;
+  const kv = (k, v) => v ? `<div class="kv"><span>${k}</span><span>${v}</span></div>` : "";
+  const intake = i ? `<div class="section"><div class="label">Received</div>
+    ${kv("File", `<a href="/claims-intake/#/job/${esc(i.jobId)}" target="_blank">${esc(i.filename)}</a> <span class="sub">set ${esc(i.set)}</span>`)}
+    ${kv("From", esc(i.clearinghouse) + (i.clearinghouseReceived ? ` <span class="sub">${esc(new Date(i.clearinghouseReceived).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" }))}</span>` : ""))}
+    ${kv("Patient control #", `<span class="mono">${esc(i.pcn)}</span>`)}
+    ${kv("Patient as sent", `${esc(i.patient)} <span class="sub">${esc(i.born)}</span><div class="sub mono">${esc(i.card)}${i.dependent ? " · patient loop" : ""}</div>`)}
+    ${kv("Quoted claim #", i.quoted ? `<span class="mono">${esc(i.quoted)}</span>` : "")}
+  </div>` : "";
+  return `<div class="panel">${meters ? `<div class="section">${meters}</div>` : ""}${rel}${intake}<div class="section"><div class="label">Activity</div>${tl}</div></div>`;
+}
+
+// The badge on a replacement or void: what it corrects, or that it isn't
+// linked yet.
+function corrHTML(c) {
+  const k = c.correction;
+  if (!k) return "";
+  const what = k.kind === "void" ? "Void" : "Correction";
+  if (!k.original) {
+    return `<div class="corr open">${what} · original not linked${k.quoted ? ` <span class="sub">provider quoted <span class="mono">${esc(k.quoted)}</span></span>` : ""}</div>`;
+  }
+  const verb = k.kind === "void" ? "Voids" : "Corrects";
+  const how = k.match === "linked" ? "linked" : k.quoted && k.quoted !== k.original ? `provider quoted ${k.quoted}` : "";
+  return `<div class="corr">${verb} <a href="${esc(claimHref({ id: k.originalId, number: k.original }))}" class="mono">${esc(k.original)}</a>${how ? ` <span class="sub">${esc(how)}</span>` : ""}</div>`;
 }
 
 function renderClaim() {
@@ -428,7 +467,8 @@ function renderClaim() {
     <a class="back" href="#/q/${esc(lastQueue)}">← ${esc(backQ ? (lastQueue.includes("/") ? pendName(lastQueue.split("/")[1]) : backQ.label) : "Back")}</a>
     <div class="claimhead">
       <div><h1 class="num">${esc(c.number)} <span class="chip ${c.frequency === "VOID" ? "" : c.status}" style="vertical-align:4px">${c.frequency === "VOID" ? "void" : words(c.status)}</span></h1>
-        <div class="who">${esc(c.member)} · ${esc(D.card)} · ${esc(c.provider)} · ${esc(c.dos)}</div></div>
+        ${corrHTML(c)}
+        <div class="who">${[c.member, D.card, c.provider, c.dos].filter(Boolean).map(esc).join(" · ")}</div></div>
       <div class="tools">${final ? `<button class="btn" data-act="adjust">Adjust…</button><button class="btn" data-act="void">Void…</button>` : ""}</div>
     </div>
     <div class="cols">

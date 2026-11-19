@@ -24,19 +24,29 @@ import "google/protobuf/timestamp.proto";
 // never re-adjudicated: corrections and voids create a new Claim that
 // references the original (claim frequency 7 / 8), and the original
 // becomes ADJUSTED or VOIDED.
+//
+// Submitted versus matched: the fields a provider (or the 837) supplies are
+// kept exactly as sent and are the only inputs adjudication reads. What
+// adjudication matches them to (customer, member, original claim) is
+// recorded on each run's Adjudication, and copied to the output-only
+// fields below for convenience. Every run matches again from the
+// submitted fields, so a rerun picks up changed member or claim data.
 message Claim {
   string id = 1;
+  // Output only: the customer of the matched member.
   string customer_id = 2;
   ClaimType type = 3;
   ClaimFrequency frequency = 4;
-  // For replacement/void claims: the claim being replaced.
+  // Output only: for a replacement or void, the original it replaces, as
+  // matched by the current adjudication. Empty while unmatched.
   string original_claim_id = 5;
   // Provider-assigned patient control number (837 CLM01), echoed on the
   // 835. The payer's claim number is claim_number.
   string patient_control_number = 6;
 
-  // Member as submitted, and as resolved by eligibility.
+  // Member id as submitted (2010BA NM109).
   string member_card_id = 7;
+  // Output only: the matched member and their subscriber.
   string member_id = 8;
   string subscriber_id = 9;
 
@@ -108,7 +118,57 @@ message Claim {
   // Displayed as a suffix from 2 on: 26075-E-00012-2.
   int32 claim_version = 34;
 
+  // For a replacement or void: the payer claim number the provider quoted
+  // (837 REF*F8), exactly as sent. It may name an older version, or match
+  // nothing; original_claim_id is the link we resolved or set by hand.
+  string payer_claim_control_number = 35;
+  // The clearinghouse's tracking number for the claim (837 REF*D9).
+  string clearinghouse_trace_number = 36;
+  // The patient as the provider identified them, kept so an examiner can
+  // find the member when no member matched.
+  SubmittedPatient submitted_patient = 37;
+  // Where in an inbound file the claim came from.
+  SourceRecord source_record = 38;
+  // For a replacement or void: the original, when it is known rather than
+  // matched from payer_claim_control_number. Set when the system creates
+  // the version (AdjustClaim, VoidClaim), when an API submitter names it,
+  // or by an examiner. An input to adjudication, like pend_overrides.
+  ClaimLink original_link = 39;
+
   common.v1.AuditInfo audit = 31;
+}
+
+message ClaimLink {
+  string claim_id = 1;
+  string linked_by = 2;
+  google.protobuf.Timestamp linked_time = 3;
+  string note = 4;
+}
+
+message SubmittedPatient {
+  // Member id from the 2010BA subscriber loop.
+  string card_id = 1;
+  common.v1.PersonName name = 2;
+  common.v1.Date birth_date = 3;
+  // F, M or U as sent.
+  string gender_code = 4;
+  // True when the patient was sent in the 2000C patient loop: a dependent
+  // without their own member id, identified by name and birth date under
+  // the subscriber's card_id.
+  bool dependent_loop = 5;
+}
+
+// SourceRecord locates a claim in the file it arrived in.
+message SourceRecord {
+  string ingestion_job_id = 1;
+  // ISA13.
+  string interchange_control_number = 2;
+  // ST02 of the 837 transaction set.
+  string transaction_set_control_number = 3;
+  // Segment positions in the file (1-based, ISA = 1) of the claim's CLM
+  // and of its last segment.
+  int32 first_segment = 4;
+  int32 last_segment = 5;
 }
 
 enum ClaimType {
@@ -289,6 +349,24 @@ message Adjudication {
   // calculated against, and its audit.revision at that time.
   string family_accumulators_id = 14;
   int64 family_accumulators_revision = 15;
+
+  // What this run matched the submitted claim to.
+  string customer_id = 16;
+  string member_id = 17;
+  string original_claim_id = 18;
+  OriginalMatch original_match = 19;
+}
+
+// How a replacement or void was matched to its original.
+enum OriginalMatch {
+  ORIGINAL_MATCH_UNSPECIFIED = 0;
+  // Not matched (or not a replacement or void).
+  ORIGINAL_MATCH_NONE = 1;
+  // From Claim.original_link.
+  ORIGINAL_MATCH_LINKED = 2;
+  // From the claim number the provider quoted (REF*F8), resolved to the
+  // claim's current version.
+  ORIGINAL_MATCH_QUOTED_NUMBER = 3;
 }
 
 // LineAdjudication explains how one line was decided, step by step. Every

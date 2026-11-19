@@ -102,9 +102,46 @@ type ClaimView struct {
 	Hold    string        `json:"hold,omitempty"`
 	Flags   []FlagView    `json:"flags"`
 	History []HistoryView `json:"history"`
+	// How the claim arrived, for claims loaded from an 837.
+	Intake *IntakeView `json:"intake,omitempty"`
+	// For a replacement or void: what it corrects, or that it isn't linked.
+	Correction *CorrectionView `json:"correction,omitempty"`
 	// Buttons the UI should offer for this claim.
 	Actions []string        `json:"actions"`
 	Raw     json.RawMessage `json:"raw,omitempty"`
+}
+
+// CorrectionView is the badge on a replacement or void.
+type CorrectionView struct {
+	// "corrected" or "void".
+	Kind string `json:"kind"`
+	// The original's number and id, when matched.
+	Original   string `json:"original,omitempty"`
+	OriginalID string `json:"originalId,omitempty"`
+	// How it was matched: "linked" or "quoted".
+	Match string `json:"match,omitempty"`
+	// The claim number the provider quoted, if any.
+	Quoted string `json:"quoted,omitempty"`
+	// True when the claim's number isn't a version of the original's,
+	// because the link was made after the claim was numbered.
+	SeparateNumber bool `json:"separateNumber,omitempty"`
+}
+
+type IntakeView struct {
+	PCN           string `json:"pcn"`
+	JobID         string `json:"jobId"`
+	Filename      string `json:"filename"`
+	Set           string `json:"set"`
+	Clearinghouse string `json:"clearinghouse"`
+	// When the clearinghouse accepted the claim.
+	ClearinghouseReceived string `json:"clearinghouseReceived,omitempty"`
+	Trace                 string `json:"trace,omitempty"`
+	// The claim number the provider quoted on a corrected claim or void.
+	Quoted    string `json:"quoted,omitempty"`
+	Patient   string `json:"patient"`
+	Born      string `json:"born"`
+	Card      string `json:"card"`
+	Dependent bool   `json:"dependent"`
 }
 
 type PendView struct {
@@ -374,6 +411,51 @@ func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 	if c.GetOriginalClaimId() != "" {
 		v.OriginalLabel = s.label(c.GetOriginalClaimId())
 	}
+	if f := c.GetFrequency(); f == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT || f == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID {
+		cv := &CorrectionView{Kind: "corrected", Quoted: c.GetPayerClaimControlNumber()}
+		if f == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID {
+			cv.Kind = "void"
+		}
+		if id := c.GetOriginalClaimId(); id != "" {
+			cv.OriginalID, cv.Original = id, s.label(id)
+			if o, err := s.Repos.Claims.Get(context.Background(), id); err == nil {
+				cv.SeparateNumber = o.GetClaimNumber() != c.GetClaimNumber()
+			}
+			cv.Match = map[claimsv1.OriginalMatch]string{
+				claimsv1.OriginalMatch_ORIGINAL_MATCH_LINKED:        "linked",
+				claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER: "quoted",
+			}[adj.GetOriginalMatch()]
+		}
+		v.Correction = cv
+	}
+	if src := c.GetSourceRecord(); src != nil {
+		pt := c.GetSubmittedPatient()
+		in := &IntakeView{
+			PCN: c.GetPatientControlNumber(), JobID: src.GetIngestionJobId(), Set: src.GetTransactionSetControlNumber(),
+			Clearinghouse: c.GetClearinghouseId(), Trace: c.GetClearinghouseTraceNumber(), Quoted: c.GetPayerClaimControlNumber(),
+			Patient: strings.TrimSpace(pt.GetName().GetFirst() + " " + pt.GetName().GetLast()),
+			Born:    dates.Format(pt.GetBirthDate()), Card: pt.GetCardId(), Dependent: pt.GetDependentLoop(),
+		}
+		if t := c.GetClearinghouseReceivedTime(); t != nil {
+			in.ClearinghouseReceived = t.AsTime().Format(time.RFC3339)
+		}
+		if j, err := s.Repos.IngestionJobs.Get(context.Background(), src.GetIngestionJobId()); err == nil {
+			in.Filename = j.GetOriginalFilename()
+		}
+		v.Intake = in
+		in.Patient = titleCase(in.Patient)
+		if v.Member == "" {
+			v.Member = in.Patient + " (as sent)"
+		}
+		// An 837 names the provider in capitals; once matched, use the
+		// provider directory's name.
+		v.Provider = titleCase(v.Provider)
+		if id := c.GetBillingProvider().GetProviderId(); id != "" {
+			if p, err := s.Repos.Providers.Get(context.Background(), id); err == nil {
+				v.Provider = providerName(p)
+			}
+		}
+	}
 	v.Raw, _ = protojson.Marshal(c)
 
 	for _, p := range adj.GetPends() {
@@ -472,4 +554,13 @@ func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 		}
 	}
 	return v
+}
+
+// titleCase turns "TAYLOR NGUYEN" into "Taylor Nguyen".
+func titleCase(name string) string {
+	words := strings.Fields(strings.ToLower(name))
+	for i, w := range words {
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ")
 }

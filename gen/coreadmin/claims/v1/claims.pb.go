@@ -316,6 +316,63 @@ func (PaymentState) EnumDescriptor() ([]byte, []int) {
 	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{4}
 }
 
+// How a replacement or void was matched to its original.
+type OriginalMatch int32
+
+const (
+	OriginalMatch_ORIGINAL_MATCH_UNSPECIFIED OriginalMatch = 0
+	// Not matched (or not a replacement or void).
+	OriginalMatch_ORIGINAL_MATCH_NONE OriginalMatch = 1
+	// From Claim.original_link.
+	OriginalMatch_ORIGINAL_MATCH_LINKED OriginalMatch = 2
+	// From the claim number the provider quoted (REF*F8), resolved to the
+	// claim's current version.
+	OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER OriginalMatch = 3
+)
+
+// Enum value maps for OriginalMatch.
+var (
+	OriginalMatch_name = map[int32]string{
+		0: "ORIGINAL_MATCH_UNSPECIFIED",
+		1: "ORIGINAL_MATCH_NONE",
+		2: "ORIGINAL_MATCH_LINKED",
+		3: "ORIGINAL_MATCH_QUOTED_NUMBER",
+	}
+	OriginalMatch_value = map[string]int32{
+		"ORIGINAL_MATCH_UNSPECIFIED":   0,
+		"ORIGINAL_MATCH_NONE":          1,
+		"ORIGINAL_MATCH_LINKED":        2,
+		"ORIGINAL_MATCH_QUOTED_NUMBER": 3,
+	}
+)
+
+func (x OriginalMatch) Enum() *OriginalMatch {
+	p := new(OriginalMatch)
+	*p = x
+	return p
+}
+
+func (x OriginalMatch) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OriginalMatch) Descriptor() protoreflect.EnumDescriptor {
+	return file_coreadmin_claims_v1_claims_proto_enumTypes[5].Descriptor()
+}
+
+func (OriginalMatch) Type() protoreflect.EnumType {
+	return &file_coreadmin_claims_v1_claims_proto_enumTypes[5]
+}
+
+func (x OriginalMatch) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OriginalMatch.Descriptor instead.
+func (OriginalMatch) EnumDescriptor() ([]byte, []int) {
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{5}
+}
+
 type LineStatus int32
 
 const (
@@ -352,11 +409,11 @@ func (x LineStatus) String() string {
 }
 
 func (LineStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_coreadmin_claims_v1_claims_proto_enumTypes[5].Descriptor()
+	return file_coreadmin_claims_v1_claims_proto_enumTypes[6].Descriptor()
 }
 
 func (LineStatus) Type() protoreflect.EnumType {
-	return &file_coreadmin_claims_v1_claims_proto_enumTypes[5]
+	return &file_coreadmin_claims_v1_claims_proto_enumTypes[6]
 }
 
 func (x LineStatus) Number() protoreflect.EnumNumber {
@@ -365,7 +422,7 @@ func (x LineStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LineStatus.Descriptor instead.
 func (LineStatus) EnumDescriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{5}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{6}
 }
 
 type PricingSource int32
@@ -401,11 +458,11 @@ func (x PricingSource) String() string {
 }
 
 func (PricingSource) Descriptor() protoreflect.EnumDescriptor {
-	return file_coreadmin_claims_v1_claims_proto_enumTypes[6].Descriptor()
+	return file_coreadmin_claims_v1_claims_proto_enumTypes[7].Descriptor()
 }
 
 func (PricingSource) Type() protoreflect.EnumType {
-	return &file_coreadmin_claims_v1_claims_proto_enumTypes[6]
+	return &file_coreadmin_claims_v1_claims_proto_enumTypes[7]
 }
 
 func (x PricingSource) Number() protoreflect.EnumNumber {
@@ -414,7 +471,7 @@ func (x PricingSource) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PricingSource.Descriptor instead.
 func (PricingSource) EnumDescriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{6}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{7}
 }
 
 type CostShareType int32
@@ -453,11 +510,11 @@ func (x CostShareType) String() string {
 }
 
 func (CostShareType) Descriptor() protoreflect.EnumDescriptor {
-	return file_coreadmin_claims_v1_claims_proto_enumTypes[7].Descriptor()
+	return file_coreadmin_claims_v1_claims_proto_enumTypes[8].Descriptor()
 }
 
 func (CostShareType) Type() protoreflect.EnumType {
-	return &file_coreadmin_claims_v1_claims_proto_enumTypes[7]
+	return &file_coreadmin_claims_v1_claims_proto_enumTypes[8]
 }
 
 func (x CostShareType) Number() protoreflect.EnumNumber {
@@ -466,7 +523,7 @@ func (x CostShareType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CostShareType.Descriptor instead.
 func (CostShareType) EnumDescriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{7}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{8}
 }
 
 type CasGroup int32
@@ -512,11 +569,11 @@ func (x CasGroup) String() string {
 }
 
 func (CasGroup) Descriptor() protoreflect.EnumDescriptor {
-	return file_coreadmin_claims_v1_claims_proto_enumTypes[8].Descriptor()
+	return file_coreadmin_claims_v1_claims_proto_enumTypes[9].Descriptor()
 }
 
 func (CasGroup) Type() protoreflect.EnumType {
-	return &file_coreadmin_claims_v1_claims_proto_enumTypes[8]
+	return &file_coreadmin_claims_v1_claims_proto_enumTypes[9]
 }
 
 func (x CasGroup) Number() protoreflect.EnumNumber {
@@ -525,7 +582,7 @@ func (x CasGroup) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CasGroup.Descriptor instead.
 func (CasGroup) EnumDescriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{8}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{9}
 }
 
 // Claim is a request for payment, modeled on the 837P/837I.
@@ -545,19 +602,29 @@ func (CasGroup) EnumDescriptor() ([]byte, []int) {
 // never re-adjudicated: corrections and voids create a new Claim that
 // references the original (claim frequency 7 / 8), and the original
 // becomes ADJUSTED or VOIDED.
+//
+// Submitted versus matched: the fields a provider (or the 837) supplies are
+// kept exactly as sent and are the only inputs adjudication reads. What
+// adjudication matches them to (customer, member, original claim) is
+// recorded on each run's Adjudication, and copied to the output-only
+// fields below for convenience. Every run matches again from the
+// submitted fields, so a rerun picks up changed member or claim data.
 type Claim struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	CustomerId string                 `protobuf:"bytes,2,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
-	Type       ClaimType              `protobuf:"varint,3,opt,name=type,proto3,enum=coreadmin.claims.v1.ClaimType" json:"type,omitempty"`
-	Frequency  ClaimFrequency         `protobuf:"varint,4,opt,name=frequency,proto3,enum=coreadmin.claims.v1.ClaimFrequency" json:"frequency,omitempty"`
-	// For replacement/void claims: the claim being replaced.
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Output only: the customer of the matched member.
+	CustomerId string         `protobuf:"bytes,2,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
+	Type       ClaimType      `protobuf:"varint,3,opt,name=type,proto3,enum=coreadmin.claims.v1.ClaimType" json:"type,omitempty"`
+	Frequency  ClaimFrequency `protobuf:"varint,4,opt,name=frequency,proto3,enum=coreadmin.claims.v1.ClaimFrequency" json:"frequency,omitempty"`
+	// Output only: for a replacement or void, the original it replaces, as
+	// matched by the current adjudication. Empty while unmatched.
 	OriginalClaimId string `protobuf:"bytes,5,opt,name=original_claim_id,json=originalClaimId,proto3" json:"original_claim_id,omitempty"`
 	// Provider-assigned patient control number (837 CLM01), echoed on the
 	// 835. The payer's claim number is claim_number.
 	PatientControlNumber string `protobuf:"bytes,6,opt,name=patient_control_number,json=patientControlNumber,proto3" json:"patient_control_number,omitempty"`
-	// Member as submitted, and as resolved by eligibility.
-	MemberCardId      string       `protobuf:"bytes,7,opt,name=member_card_id,json=memberCardId,proto3" json:"member_card_id,omitempty"`
+	// Member id as submitted (2010BA NM109).
+	MemberCardId string `protobuf:"bytes,7,opt,name=member_card_id,json=memberCardId,proto3" json:"member_card_id,omitempty"`
+	// Output only: the matched member and their subscriber.
 	MemberId          string       `protobuf:"bytes,8,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"`
 	SubscriberId      string       `protobuf:"bytes,9,opt,name=subscriber_id,json=subscriberId,proto3" json:"subscriber_id,omitempty"`
 	BillingProvider   *ProviderRef `protobuf:"bytes,10,opt,name=billing_provider,json=billingProvider,proto3" json:"billing_provider,omitempty"`
@@ -619,7 +686,23 @@ type Claim struct {
 	ClaimNumber string `protobuf:"bytes,33,opt,name=claim_number,json=claimNumber,proto3" json:"claim_number,omitempty"`
 	// 1 for the original; each replacement or void is the next version.
 	// Displayed as a suffix from 2 on: 26075-E-00012-2.
-	ClaimVersion  int32         `protobuf:"varint,34,opt,name=claim_version,json=claimVersion,proto3" json:"claim_version,omitempty"`
+	ClaimVersion int32 `protobuf:"varint,34,opt,name=claim_version,json=claimVersion,proto3" json:"claim_version,omitempty"`
+	// For a replacement or void: the payer claim number the provider quoted
+	// (837 REF*F8), exactly as sent. It may name an older version, or match
+	// nothing; original_claim_id is the link we resolved or set by hand.
+	PayerClaimControlNumber string `protobuf:"bytes,35,opt,name=payer_claim_control_number,json=payerClaimControlNumber,proto3" json:"payer_claim_control_number,omitempty"`
+	// The clearinghouse's tracking number for the claim (837 REF*D9).
+	ClearinghouseTraceNumber string `protobuf:"bytes,36,opt,name=clearinghouse_trace_number,json=clearinghouseTraceNumber,proto3" json:"clearinghouse_trace_number,omitempty"`
+	// The patient as the provider identified them, kept so an examiner can
+	// find the member when no member matched.
+	SubmittedPatient *SubmittedPatient `protobuf:"bytes,37,opt,name=submitted_patient,json=submittedPatient,proto3" json:"submitted_patient,omitempty"`
+	// Where in an inbound file the claim came from.
+	SourceRecord *SourceRecord `protobuf:"bytes,38,opt,name=source_record,json=sourceRecord,proto3" json:"source_record,omitempty"`
+	// For a replacement or void: the original, when it is known rather than
+	// matched from payer_claim_control_number. Set when the system creates
+	// the version (AdjustClaim, VoidClaim), when an API submitter names it,
+	// or by an examiner. An input to adjudication, like pend_overrides.
+	OriginalLink  *ClaimLink    `protobuf:"bytes,39,opt,name=original_link,json=originalLink,proto3" json:"original_link,omitempty"`
 	Audit         *v1.AuditInfo `protobuf:"bytes,31,opt,name=audit,proto3" json:"audit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -886,11 +969,276 @@ func (x *Claim) GetClaimVersion() int32 {
 	return 0
 }
 
+func (x *Claim) GetPayerClaimControlNumber() string {
+	if x != nil {
+		return x.PayerClaimControlNumber
+	}
+	return ""
+}
+
+func (x *Claim) GetClearinghouseTraceNumber() string {
+	if x != nil {
+		return x.ClearinghouseTraceNumber
+	}
+	return ""
+}
+
+func (x *Claim) GetSubmittedPatient() *SubmittedPatient {
+	if x != nil {
+		return x.SubmittedPatient
+	}
+	return nil
+}
+
+func (x *Claim) GetSourceRecord() *SourceRecord {
+	if x != nil {
+		return x.SourceRecord
+	}
+	return nil
+}
+
+func (x *Claim) GetOriginalLink() *ClaimLink {
+	if x != nil {
+		return x.OriginalLink
+	}
+	return nil
+}
+
 func (x *Claim) GetAudit() *v1.AuditInfo {
 	if x != nil {
 		return x.Audit
 	}
 	return nil
+}
+
+type ClaimLink struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClaimId       string                 `protobuf:"bytes,1,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
+	LinkedBy      string                 `protobuf:"bytes,2,opt,name=linked_by,json=linkedBy,proto3" json:"linked_by,omitempty"`
+	LinkedTime    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=linked_time,json=linkedTime,proto3" json:"linked_time,omitempty"`
+	Note          string                 `protobuf:"bytes,4,opt,name=note,proto3" json:"note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClaimLink) Reset() {
+	*x = ClaimLink{}
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClaimLink) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClaimLink) ProtoMessage() {}
+
+func (x *ClaimLink) ProtoReflect() protoreflect.Message {
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClaimLink.ProtoReflect.Descriptor instead.
+func (*ClaimLink) Descriptor() ([]byte, []int) {
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ClaimLink) GetClaimId() string {
+	if x != nil {
+		return x.ClaimId
+	}
+	return ""
+}
+
+func (x *ClaimLink) GetLinkedBy() string {
+	if x != nil {
+		return x.LinkedBy
+	}
+	return ""
+}
+
+func (x *ClaimLink) GetLinkedTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LinkedTime
+	}
+	return nil
+}
+
+func (x *ClaimLink) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+type SubmittedPatient struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Member id from the 2010BA subscriber loop.
+	CardId    string         `protobuf:"bytes,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
+	Name      *v1.PersonName `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	BirthDate *v1.Date       `protobuf:"bytes,3,opt,name=birth_date,json=birthDate,proto3" json:"birth_date,omitempty"`
+	// F, M or U as sent.
+	GenderCode string `protobuf:"bytes,4,opt,name=gender_code,json=genderCode,proto3" json:"gender_code,omitempty"`
+	// True when the patient was sent in the 2000C patient loop: a dependent
+	// without their own member id, identified by name and birth date under
+	// the subscriber's card_id.
+	DependentLoop bool `protobuf:"varint,5,opt,name=dependent_loop,json=dependentLoop,proto3" json:"dependent_loop,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmittedPatient) Reset() {
+	*x = SubmittedPatient{}
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmittedPatient) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmittedPatient) ProtoMessage() {}
+
+func (x *SubmittedPatient) ProtoReflect() protoreflect.Message {
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmittedPatient.ProtoReflect.Descriptor instead.
+func (*SubmittedPatient) Descriptor() ([]byte, []int) {
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SubmittedPatient) GetCardId() string {
+	if x != nil {
+		return x.CardId
+	}
+	return ""
+}
+
+func (x *SubmittedPatient) GetName() *v1.PersonName {
+	if x != nil {
+		return x.Name
+	}
+	return nil
+}
+
+func (x *SubmittedPatient) GetBirthDate() *v1.Date {
+	if x != nil {
+		return x.BirthDate
+	}
+	return nil
+}
+
+func (x *SubmittedPatient) GetGenderCode() string {
+	if x != nil {
+		return x.GenderCode
+	}
+	return ""
+}
+
+func (x *SubmittedPatient) GetDependentLoop() bool {
+	if x != nil {
+		return x.DependentLoop
+	}
+	return false
+}
+
+// SourceRecord locates a claim in the file it arrived in.
+type SourceRecord struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	IngestionJobId string                 `protobuf:"bytes,1,opt,name=ingestion_job_id,json=ingestionJobId,proto3" json:"ingestion_job_id,omitempty"`
+	// ISA13.
+	InterchangeControlNumber string `protobuf:"bytes,2,opt,name=interchange_control_number,json=interchangeControlNumber,proto3" json:"interchange_control_number,omitempty"`
+	// ST02 of the 837 transaction set.
+	TransactionSetControlNumber string `protobuf:"bytes,3,opt,name=transaction_set_control_number,json=transactionSetControlNumber,proto3" json:"transaction_set_control_number,omitempty"`
+	// Segment positions in the file (1-based, ISA = 1) of the claim's CLM
+	// and of its last segment.
+	FirstSegment  int32 `protobuf:"varint,4,opt,name=first_segment,json=firstSegment,proto3" json:"first_segment,omitempty"`
+	LastSegment   int32 `protobuf:"varint,5,opt,name=last_segment,json=lastSegment,proto3" json:"last_segment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SourceRecord) Reset() {
+	*x = SourceRecord{}
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SourceRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SourceRecord) ProtoMessage() {}
+
+func (x *SourceRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SourceRecord.ProtoReflect.Descriptor instead.
+func (*SourceRecord) Descriptor() ([]byte, []int) {
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SourceRecord) GetIngestionJobId() string {
+	if x != nil {
+		return x.IngestionJobId
+	}
+	return ""
+}
+
+func (x *SourceRecord) GetInterchangeControlNumber() string {
+	if x != nil {
+		return x.InterchangeControlNumber
+	}
+	return ""
+}
+
+func (x *SourceRecord) GetTransactionSetControlNumber() string {
+	if x != nil {
+		return x.TransactionSetControlNumber
+	}
+	return ""
+}
+
+func (x *SourceRecord) GetFirstSegment() int32 {
+	if x != nil {
+		return x.FirstSegment
+	}
+	return 0
+}
+
+func (x *SourceRecord) GetLastSegment() int32 {
+	if x != nil {
+		return x.LastSegment
+	}
+	return 0
 }
 
 // ProviderRef is a provider as identified on the claim, plus the internal
@@ -909,7 +1257,7 @@ type ProviderRef struct {
 
 func (x *ProviderRef) Reset() {
 	*x = ProviderRef{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[1]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -921,7 +1269,7 @@ func (x *ProviderRef) String() string {
 func (*ProviderRef) ProtoMessage() {}
 
 func (x *ProviderRef) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[1]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -934,7 +1282,7 @@ func (x *ProviderRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderRef.ProtoReflect.Descriptor instead.
 func (*ProviderRef) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{1}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ProviderRef) GetNpi() string {
@@ -988,7 +1336,7 @@ type InstitutionalInfo struct {
 
 func (x *InstitutionalInfo) Reset() {
 	*x = InstitutionalInfo{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[2]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1000,7 +1348,7 @@ func (x *InstitutionalInfo) String() string {
 func (*InstitutionalInfo) ProtoMessage() {}
 
 func (x *InstitutionalInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[2]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1013,7 +1361,7 @@ func (x *InstitutionalInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstitutionalInfo.ProtoReflect.Descriptor instead.
 func (*InstitutionalInfo) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{2}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *InstitutionalInfo) GetTypeOfBill() string {
@@ -1082,7 +1430,7 @@ type ClaimLine struct {
 
 func (x *ClaimLine) Reset() {
 	*x = ClaimLine{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[3]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1094,7 +1442,7 @@ func (x *ClaimLine) String() string {
 func (*ClaimLine) ProtoMessage() {}
 
 func (x *ClaimLine) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[3]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1107,7 +1455,7 @@ func (x *ClaimLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimLine.ProtoReflect.Descriptor instead.
 func (*ClaimLine) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{3}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ClaimLine) GetLineNumber() int32 {
@@ -1208,7 +1556,7 @@ type ClaimPayment struct {
 
 func (x *ClaimPayment) Reset() {
 	*x = ClaimPayment{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[4]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1220,7 +1568,7 @@ func (x *ClaimPayment) String() string {
 func (*ClaimPayment) ProtoMessage() {}
 
 func (x *ClaimPayment) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[4]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1233,7 +1581,7 @@ func (x *ClaimPayment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimPayment.ProtoReflect.Descriptor instead.
 func (*ClaimPayment) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{4}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ClaimPayment) GetPaid() *v1.Money {
@@ -1282,7 +1630,7 @@ type PaymentHold struct {
 
 func (x *PaymentHold) Reset() {
 	*x = PaymentHold{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[5]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1294,7 +1642,7 @@ func (x *PaymentHold) String() string {
 func (*PaymentHold) ProtoMessage() {}
 
 func (x *PaymentHold) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[5]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1307,7 +1655,7 @@ func (x *PaymentHold) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PaymentHold.ProtoReflect.Descriptor instead.
 func (*PaymentHold) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{5}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *PaymentHold) GetReason() string {
@@ -1349,7 +1697,7 @@ type PendOverride struct {
 
 func (x *PendOverride) Reset() {
 	*x = PendOverride{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[6]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1361,7 +1709,7 @@ func (x *PendOverride) String() string {
 func (*PendOverride) ProtoMessage() {}
 
 func (x *PendOverride) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[6]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1374,7 +1722,7 @@ func (x *PendOverride) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PendOverride.ProtoReflect.Descriptor instead.
 func (*PendOverride) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{6}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *PendOverride) GetCode() string {
@@ -1434,7 +1782,7 @@ type ReviewFlag struct {
 
 func (x *ReviewFlag) Reset() {
 	*x = ReviewFlag{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[7]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1446,7 +1794,7 @@ func (x *ReviewFlag) String() string {
 func (*ReviewFlag) ProtoMessage() {}
 
 func (x *ReviewFlag) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[7]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1459,7 +1807,7 @@ func (x *ReviewFlag) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewFlag.ProtoReflect.Descriptor instead.
 func (*ReviewFlag) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{7}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ReviewFlag) GetCode() string {
@@ -1539,13 +1887,18 @@ type Adjudication struct {
 	// calculated against, and its audit.revision at that time.
 	FamilyAccumulatorsId       string `protobuf:"bytes,14,opt,name=family_accumulators_id,json=familyAccumulatorsId,proto3" json:"family_accumulators_id,omitempty"`
 	FamilyAccumulatorsRevision int64  `protobuf:"varint,15,opt,name=family_accumulators_revision,json=familyAccumulatorsRevision,proto3" json:"family_accumulators_revision,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// What this run matched the submitted claim to.
+	CustomerId      string        `protobuf:"bytes,16,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
+	MemberId        string        `protobuf:"bytes,17,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"`
+	OriginalClaimId string        `protobuf:"bytes,18,opt,name=original_claim_id,json=originalClaimId,proto3" json:"original_claim_id,omitempty"`
+	OriginalMatch   OriginalMatch `protobuf:"varint,19,opt,name=original_match,json=originalMatch,proto3,enum=coreadmin.claims.v1.OriginalMatch" json:"original_match,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Adjudication) Reset() {
 	*x = Adjudication{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[8]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1557,7 +1910,7 @@ func (x *Adjudication) String() string {
 func (*Adjudication) ProtoMessage() {}
 
 func (x *Adjudication) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[8]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1570,7 +1923,7 @@ func (x *Adjudication) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Adjudication.ProtoReflect.Descriptor instead.
 func (*Adjudication) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{8}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Adjudication) GetAdjudicatedTime() *timestamppb.Timestamp {
@@ -1678,6 +2031,34 @@ func (x *Adjudication) GetFamilyAccumulatorsRevision() int64 {
 	return 0
 }
 
+func (x *Adjudication) GetCustomerId() string {
+	if x != nil {
+		return x.CustomerId
+	}
+	return ""
+}
+
+func (x *Adjudication) GetMemberId() string {
+	if x != nil {
+		return x.MemberId
+	}
+	return ""
+}
+
+func (x *Adjudication) GetOriginalClaimId() string {
+	if x != nil {
+		return x.OriginalClaimId
+	}
+	return ""
+}
+
+func (x *Adjudication) GetOriginalMatch() OriginalMatch {
+	if x != nil {
+		return x.OriginalMatch
+	}
+	return OriginalMatch_ORIGINAL_MATCH_UNSPECIFIED
+}
+
 // LineAdjudication explains how one line was decided, step by step. Every
 // line must balance:
 //
@@ -1707,7 +2088,7 @@ type LineAdjudication struct {
 
 func (x *LineAdjudication) Reset() {
 	*x = LineAdjudication{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[9]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1719,7 +2100,7 @@ func (x *LineAdjudication) String() string {
 func (*LineAdjudication) ProtoMessage() {}
 
 func (x *LineAdjudication) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[9]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1732,7 +2113,7 @@ func (x *LineAdjudication) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LineAdjudication.ProtoReflect.Descriptor instead.
 func (*LineAdjudication) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{9}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *LineAdjudication) GetStatus() LineStatus {
@@ -1820,7 +2201,7 @@ type Denial struct {
 
 func (x *Denial) Reset() {
 	*x = Denial{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[10]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1832,7 +2213,7 @@ func (x *Denial) String() string {
 func (*Denial) ProtoMessage() {}
 
 func (x *Denial) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[10]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1845,7 +2226,7 @@ func (x *Denial) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Denial.ProtoReflect.Descriptor instead.
 func (*Denial) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{10}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Denial) GetCode() string {
@@ -1887,7 +2268,7 @@ type Pricing struct {
 
 func (x *Pricing) Reset() {
 	*x = Pricing{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[11]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1899,7 +2280,7 @@ func (x *Pricing) String() string {
 func (*Pricing) ProtoMessage() {}
 
 func (x *Pricing) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[11]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1912,7 +2293,7 @@ func (x *Pricing) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Pricing.ProtoReflect.Descriptor instead.
 func (*Pricing) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{11}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Pricing) GetSource() PricingSource {
@@ -1977,7 +2358,7 @@ type BenefitApplied struct {
 
 func (x *BenefitApplied) Reset() {
 	*x = BenefitApplied{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[12]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1989,7 +2370,7 @@ func (x *BenefitApplied) String() string {
 func (*BenefitApplied) ProtoMessage() {}
 
 func (x *BenefitApplied) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[12]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2002,7 +2383,7 @@ func (x *BenefitApplied) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BenefitApplied.ProtoReflect.Descriptor instead.
 func (*BenefitApplied) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{12}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *BenefitApplied) GetServiceCategoryId() string {
@@ -2039,7 +2420,7 @@ type CostShareApplied struct {
 
 func (x *CostShareApplied) Reset() {
 	*x = CostShareApplied{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[13]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2051,7 +2432,7 @@ func (x *CostShareApplied) String() string {
 func (*CostShareApplied) ProtoMessage() {}
 
 func (x *CostShareApplied) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[13]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2064,7 +2445,7 @@ func (x *CostShareApplied) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CostShareApplied.ProtoReflect.Descriptor instead.
 func (*CostShareApplied) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{13}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CostShareApplied) GetType() CostShareType {
@@ -2102,7 +2483,7 @@ type CasAdjustment struct {
 
 func (x *CasAdjustment) Reset() {
 	*x = CasAdjustment{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[14]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2114,7 +2495,7 @@ func (x *CasAdjustment) String() string {
 func (*CasAdjustment) ProtoMessage() {}
 
 func (x *CasAdjustment) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[14]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2127,7 +2508,7 @@ func (x *CasAdjustment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CasAdjustment.ProtoReflect.Descriptor instead.
 func (*CasAdjustment) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{14}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CasAdjustment) GetGroup() CasGroup {
@@ -2169,7 +2550,7 @@ type Pend struct {
 
 func (x *Pend) Reset() {
 	*x = Pend{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[15]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2181,7 +2562,7 @@ func (x *Pend) String() string {
 func (*Pend) ProtoMessage() {}
 
 func (x *Pend) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[15]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2194,7 +2575,7 @@ func (x *Pend) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Pend.ProtoReflect.Descriptor instead.
 func (*Pend) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{15}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Pend) GetCode() string {
@@ -2252,7 +2633,7 @@ type AccumulatorPosting struct {
 
 func (x *AccumulatorPosting) Reset() {
 	*x = AccumulatorPosting{}
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[16]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2264,7 +2645,7 @@ func (x *AccumulatorPosting) String() string {
 func (*AccumulatorPosting) ProtoMessage() {}
 
 func (x *AccumulatorPosting) ProtoReflect() protoreflect.Message {
-	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[16]
+	mi := &file_coreadmin_claims_v1_claims_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2277,7 +2658,7 @@ func (x *AccumulatorPosting) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AccumulatorPosting.ProtoReflect.Descriptor instead.
 func (*AccumulatorPosting) Descriptor() ([]byte, []int) {
-	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{16}
+	return file_coreadmin_claims_v1_claims_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *AccumulatorPosting) GetAccumulatorId() string {
@@ -2312,7 +2693,7 @@ var File_coreadmin_claims_v1_claims_proto protoreflect.FileDescriptor
 
 const file_coreadmin_claims_v1_claims_proto_rawDesc = "" +
 	"\n" +
-	" coreadmin/claims/v1/claims.proto\x12\x13coreadmin.claims.v1\x1a coreadmin/common/v1/common.proto\x1a\x1ccoreadmin/plan/v1/plan.proto\x1a$coreadmin/provider/v1/provider.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbc\x0f\n" +
+	" coreadmin/claims/v1/claims.proto\x12\x13coreadmin.claims.v1\x1a coreadmin/common/v1/common.proto\x1a\x1ccoreadmin/plan/v1/plan.proto\x1a$coreadmin/provider/v1/provider.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x98\x12\n" +
 	"\x05Claim\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
@@ -2348,8 +2729,33 @@ const file_coreadmin_claims_v1_claims_proto_rawDesc = "" +
 	"\freview_flags\x18\x1e \x03(\v2\x1f.coreadmin.claims.v1.ReviewFlagR\vreviewFlags\x12H\n" +
 	"\x0epend_overrides\x18  \x03(\v2!.coreadmin.claims.v1.PendOverrideR\rpendOverrides\x12!\n" +
 	"\fclaim_number\x18! \x01(\tR\vclaimNumber\x12#\n" +
-	"\rclaim_version\x18\" \x01(\x05R\fclaimVersion\x124\n" +
-	"\x05audit\x18\x1f \x01(\v2\x1e.coreadmin.common.v1.AuditInfoR\x05audit\"\x8b\x01\n" +
+	"\rclaim_version\x18\" \x01(\x05R\fclaimVersion\x12;\n" +
+	"\x1apayer_claim_control_number\x18# \x01(\tR\x17payerClaimControlNumber\x12<\n" +
+	"\x1aclearinghouse_trace_number\x18$ \x01(\tR\x18clearinghouseTraceNumber\x12R\n" +
+	"\x11submitted_patient\x18% \x01(\v2%.coreadmin.claims.v1.SubmittedPatientR\x10submittedPatient\x12F\n" +
+	"\rsource_record\x18& \x01(\v2!.coreadmin.claims.v1.SourceRecordR\fsourceRecord\x12C\n" +
+	"\roriginal_link\x18' \x01(\v2\x1e.coreadmin.claims.v1.ClaimLinkR\foriginalLink\x124\n" +
+	"\x05audit\x18\x1f \x01(\v2\x1e.coreadmin.common.v1.AuditInfoR\x05audit\"\x94\x01\n" +
+	"\tClaimLink\x12\x19\n" +
+	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\x12\x1b\n" +
+	"\tlinked_by\x18\x02 \x01(\tR\blinkedBy\x12;\n" +
+	"\vlinked_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"linkedTime\x12\x12\n" +
+	"\x04note\x18\x04 \x01(\tR\x04note\"\xe2\x01\n" +
+	"\x10SubmittedPatient\x12\x17\n" +
+	"\acard_id\x18\x01 \x01(\tR\x06cardId\x123\n" +
+	"\x04name\x18\x02 \x01(\v2\x1f.coreadmin.common.v1.PersonNameR\x04name\x128\n" +
+	"\n" +
+	"birth_date\x18\x03 \x01(\v2\x19.coreadmin.common.v1.DateR\tbirthDate\x12\x1f\n" +
+	"\vgender_code\x18\x04 \x01(\tR\n" +
+	"genderCode\x12%\n" +
+	"\x0edependent_loop\x18\x05 \x01(\bR\rdependentLoop\"\x83\x02\n" +
+	"\fSourceRecord\x12(\n" +
+	"\x10ingestion_job_id\x18\x01 \x01(\tR\x0eingestionJobId\x12<\n" +
+	"\x1ainterchange_control_number\x18\x02 \x01(\tR\x18interchangeControlNumber\x12C\n" +
+	"\x1etransaction_set_control_number\x18\x03 \x01(\tR\x1btransactionSetControlNumber\x12#\n" +
+	"\rfirst_segment\x18\x04 \x01(\x05R\ffirstSegment\x12!\n" +
+	"\flast_segment\x18\x05 \x01(\x05R\vlastSegment\"\x8b\x01\n" +
 	"\vProviderRef\x12\x10\n" +
 	"\x03npi\x18\x01 \x01(\tR\x03npi\x12\x10\n" +
 	"\x03tin\x18\x02 \x01(\tR\x03tin\x12\x12\n" +
@@ -2410,7 +2816,7 @@ const file_coreadmin_claims_v1_claims_proto_rawDesc = "" +
 	"\n" +
 	"cleared_by\x18\x06 \x01(\tR\tclearedBy\x12\x1d\n" +
 	"\n" +
-	"clear_note\x18\a \x01(\tR\tclearNote\"\x9e\x06\n" +
+	"clear_note\x18\a \x01(\tR\tclearNote\"\xd3\a\n" +
 	"\fAdjudication\x12E\n" +
 	"\x10adjudicated_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x0fadjudicatedTime\x12\x1d\n" +
 	"\n" +
@@ -2429,7 +2835,12 @@ const file_coreadmin_claims_v1_claims_proto_rawDesc = "" +
 	"\x14accumulator_postings\x18\f \x03(\v2'.coreadmin.claims.v1.AccumulatorPostingR\x13accumulatorPostings\x12%\n" +
 	"\x0eengine_version\x18\r \x01(\tR\rengineVersion\x124\n" +
 	"\x16family_accumulators_id\x18\x0e \x01(\tR\x14familyAccumulatorsId\x12@\n" +
-	"\x1cfamily_accumulators_revision\x18\x0f \x01(\x03R\x1afamilyAccumulatorsRevision\"\xe4\x04\n" +
+	"\x1cfamily_accumulators_revision\x18\x0f \x01(\x03R\x1afamilyAccumulatorsRevision\x12\x1f\n" +
+	"\vcustomer_id\x18\x10 \x01(\tR\n" +
+	"customerId\x12\x1b\n" +
+	"\tmember_id\x18\x11 \x01(\tR\bmemberId\x12*\n" +
+	"\x11original_claim_id\x18\x12 \x01(\tR\x0foriginalClaimId\x12I\n" +
+	"\x0eoriginal_match\x18\x13 \x01(\x0e2\".coreadmin.claims.v1.OriginalMatchR\roriginalMatch\"\xe4\x04\n" +
 	"\x10LineAdjudication\x127\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x1f.coreadmin.claims.v1.LineStatusR\x06status\x123\n" +
 	"\x06denial\x18\x02 \x01(\v2\x1b.coreadmin.claims.v1.DenialR\x06denial\x122\n" +
@@ -2515,7 +2926,12 @@ const file_coreadmin_claims_v1_claims_proto_rawDesc = "" +
 	"\x14PAYMENT_STATE_ISSUED\x10\x02\x12\x19\n" +
 	"\x15PAYMENT_STATE_CLEARED\x10\x03\x12\x1a\n" +
 	"\x16PAYMENT_STATE_RETURNED\x10\x04\x12\x18\n" +
-	"\x14PAYMENT_STATE_VOIDED\x10\x05*r\n" +
+	"\x14PAYMENT_STATE_VOIDED\x10\x05*\x85\x01\n" +
+	"\rOriginalMatch\x12\x1e\n" +
+	"\x1aORIGINAL_MATCH_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13ORIGINAL_MATCH_NONE\x10\x01\x12\x19\n" +
+	"\x15ORIGINAL_MATCH_LINKED\x10\x02\x12 \n" +
+	"\x1cORIGINAL_MATCH_QUOTED_NUMBER\x10\x03*r\n" +
 	"\n" +
 	"LineStatus\x12\x1b\n" +
 	"\x17LINE_STATUS_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -2551,110 +2967,122 @@ func file_coreadmin_claims_v1_claims_proto_rawDescGZIP() []byte {
 	return file_coreadmin_claims_v1_claims_proto_rawDescData
 }
 
-var file_coreadmin_claims_v1_claims_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_coreadmin_claims_v1_claims_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_coreadmin_claims_v1_claims_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
+var file_coreadmin_claims_v1_claims_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_coreadmin_claims_v1_claims_proto_goTypes = []any{
 	(ClaimType)(0),                 // 0: coreadmin.claims.v1.ClaimType
 	(ClaimFrequency)(0),            // 1: coreadmin.claims.v1.ClaimFrequency
 	(ClaimStatus)(0),               // 2: coreadmin.claims.v1.ClaimStatus
 	(ClaimSource)(0),               // 3: coreadmin.claims.v1.ClaimSource
 	(PaymentState)(0),              // 4: coreadmin.claims.v1.PaymentState
-	(LineStatus)(0),                // 5: coreadmin.claims.v1.LineStatus
-	(PricingSource)(0),             // 6: coreadmin.claims.v1.PricingSource
-	(CostShareType)(0),             // 7: coreadmin.claims.v1.CostShareType
-	(CasGroup)(0),                  // 8: coreadmin.claims.v1.CasGroup
-	(*Claim)(nil),                  // 9: coreadmin.claims.v1.Claim
-	(*ProviderRef)(nil),            // 10: coreadmin.claims.v1.ProviderRef
-	(*InstitutionalInfo)(nil),      // 11: coreadmin.claims.v1.InstitutionalInfo
-	(*ClaimLine)(nil),              // 12: coreadmin.claims.v1.ClaimLine
-	(*ClaimPayment)(nil),           // 13: coreadmin.claims.v1.ClaimPayment
-	(*PaymentHold)(nil),            // 14: coreadmin.claims.v1.PaymentHold
-	(*PendOverride)(nil),           // 15: coreadmin.claims.v1.PendOverride
-	(*ReviewFlag)(nil),             // 16: coreadmin.claims.v1.ReviewFlag
-	(*Adjudication)(nil),           // 17: coreadmin.claims.v1.Adjudication
-	(*LineAdjudication)(nil),       // 18: coreadmin.claims.v1.LineAdjudication
-	(*Denial)(nil),                 // 19: coreadmin.claims.v1.Denial
-	(*Pricing)(nil),                // 20: coreadmin.claims.v1.Pricing
-	(*BenefitApplied)(nil),         // 21: coreadmin.claims.v1.BenefitApplied
-	(*CostShareApplied)(nil),       // 22: coreadmin.claims.v1.CostShareApplied
-	(*CasAdjustment)(nil),          // 23: coreadmin.claims.v1.CasAdjustment
-	(*Pend)(nil),                   // 24: coreadmin.claims.v1.Pend
-	(*AccumulatorPosting)(nil),     // 25: coreadmin.claims.v1.AccumulatorPosting
-	(*v1.DateRange)(nil),           // 26: coreadmin.common.v1.DateRange
-	(*v1.Money)(nil),               // 27: coreadmin.common.v1.Money
-	(*timestamppb.Timestamp)(nil),  // 28: google.protobuf.Timestamp
-	(*v1.Date)(nil),                // 29: coreadmin.common.v1.Date
-	(*v1.AuditInfo)(nil),           // 30: coreadmin.common.v1.AuditInfo
-	(v11.ContractMethod)(0),        // 31: coreadmin.provider.v1.ContractMethod
-	(*v12.ReimbursementBasis)(nil), // 32: coreadmin.plan.v1.ReimbursementBasis
-	(*v12.CostShare)(nil),          // 33: coreadmin.plan.v1.CostShare
+	(OriginalMatch)(0),             // 5: coreadmin.claims.v1.OriginalMatch
+	(LineStatus)(0),                // 6: coreadmin.claims.v1.LineStatus
+	(PricingSource)(0),             // 7: coreadmin.claims.v1.PricingSource
+	(CostShareType)(0),             // 8: coreadmin.claims.v1.CostShareType
+	(CasGroup)(0),                  // 9: coreadmin.claims.v1.CasGroup
+	(*Claim)(nil),                  // 10: coreadmin.claims.v1.Claim
+	(*ClaimLink)(nil),              // 11: coreadmin.claims.v1.ClaimLink
+	(*SubmittedPatient)(nil),       // 12: coreadmin.claims.v1.SubmittedPatient
+	(*SourceRecord)(nil),           // 13: coreadmin.claims.v1.SourceRecord
+	(*ProviderRef)(nil),            // 14: coreadmin.claims.v1.ProviderRef
+	(*InstitutionalInfo)(nil),      // 15: coreadmin.claims.v1.InstitutionalInfo
+	(*ClaimLine)(nil),              // 16: coreadmin.claims.v1.ClaimLine
+	(*ClaimPayment)(nil),           // 17: coreadmin.claims.v1.ClaimPayment
+	(*PaymentHold)(nil),            // 18: coreadmin.claims.v1.PaymentHold
+	(*PendOverride)(nil),           // 19: coreadmin.claims.v1.PendOverride
+	(*ReviewFlag)(nil),             // 20: coreadmin.claims.v1.ReviewFlag
+	(*Adjudication)(nil),           // 21: coreadmin.claims.v1.Adjudication
+	(*LineAdjudication)(nil),       // 22: coreadmin.claims.v1.LineAdjudication
+	(*Denial)(nil),                 // 23: coreadmin.claims.v1.Denial
+	(*Pricing)(nil),                // 24: coreadmin.claims.v1.Pricing
+	(*BenefitApplied)(nil),         // 25: coreadmin.claims.v1.BenefitApplied
+	(*CostShareApplied)(nil),       // 26: coreadmin.claims.v1.CostShareApplied
+	(*CasAdjustment)(nil),          // 27: coreadmin.claims.v1.CasAdjustment
+	(*Pend)(nil),                   // 28: coreadmin.claims.v1.Pend
+	(*AccumulatorPosting)(nil),     // 29: coreadmin.claims.v1.AccumulatorPosting
+	(*v1.DateRange)(nil),           // 30: coreadmin.common.v1.DateRange
+	(*v1.Money)(nil),               // 31: coreadmin.common.v1.Money
+	(*timestamppb.Timestamp)(nil),  // 32: google.protobuf.Timestamp
+	(*v1.Date)(nil),                // 33: coreadmin.common.v1.Date
+	(*v1.AuditInfo)(nil),           // 34: coreadmin.common.v1.AuditInfo
+	(*v1.PersonName)(nil),          // 35: coreadmin.common.v1.PersonName
+	(v11.ContractMethod)(0),        // 36: coreadmin.provider.v1.ContractMethod
+	(*v12.ReimbursementBasis)(nil), // 37: coreadmin.plan.v1.ReimbursementBasis
+	(*v12.CostShare)(nil),          // 38: coreadmin.plan.v1.CostShare
 }
 var file_coreadmin_claims_v1_claims_proto_depIdxs = []int32{
 	0,  // 0: coreadmin.claims.v1.Claim.type:type_name -> coreadmin.claims.v1.ClaimType
 	1,  // 1: coreadmin.claims.v1.Claim.frequency:type_name -> coreadmin.claims.v1.ClaimFrequency
-	10, // 2: coreadmin.claims.v1.Claim.billing_provider:type_name -> coreadmin.claims.v1.ProviderRef
-	10, // 3: coreadmin.claims.v1.Claim.rendering_provider:type_name -> coreadmin.claims.v1.ProviderRef
-	10, // 4: coreadmin.claims.v1.Claim.referring_provider:type_name -> coreadmin.claims.v1.ProviderRef
-	10, // 5: coreadmin.claims.v1.Claim.facility:type_name -> coreadmin.claims.v1.ProviderRef
-	26, // 6: coreadmin.claims.v1.Claim.service_dates:type_name -> coreadmin.common.v1.DateRange
-	27, // 7: coreadmin.claims.v1.Claim.total_charge:type_name -> coreadmin.common.v1.Money
-	12, // 8: coreadmin.claims.v1.Claim.lines:type_name -> coreadmin.claims.v1.ClaimLine
-	11, // 9: coreadmin.claims.v1.Claim.institutional:type_name -> coreadmin.claims.v1.InstitutionalInfo
+	14, // 2: coreadmin.claims.v1.Claim.billing_provider:type_name -> coreadmin.claims.v1.ProviderRef
+	14, // 3: coreadmin.claims.v1.Claim.rendering_provider:type_name -> coreadmin.claims.v1.ProviderRef
+	14, // 4: coreadmin.claims.v1.Claim.referring_provider:type_name -> coreadmin.claims.v1.ProviderRef
+	14, // 5: coreadmin.claims.v1.Claim.facility:type_name -> coreadmin.claims.v1.ProviderRef
+	30, // 6: coreadmin.claims.v1.Claim.service_dates:type_name -> coreadmin.common.v1.DateRange
+	31, // 7: coreadmin.claims.v1.Claim.total_charge:type_name -> coreadmin.common.v1.Money
+	16, // 8: coreadmin.claims.v1.Claim.lines:type_name -> coreadmin.claims.v1.ClaimLine
+	15, // 9: coreadmin.claims.v1.Claim.institutional:type_name -> coreadmin.claims.v1.InstitutionalInfo
 	2,  // 10: coreadmin.claims.v1.Claim.status:type_name -> coreadmin.claims.v1.ClaimStatus
 	3,  // 11: coreadmin.claims.v1.Claim.source:type_name -> coreadmin.claims.v1.ClaimSource
-	28, // 12: coreadmin.claims.v1.Claim.received_time:type_name -> google.protobuf.Timestamp
-	17, // 13: coreadmin.claims.v1.Claim.adjudication:type_name -> coreadmin.claims.v1.Adjudication
-	28, // 14: coreadmin.claims.v1.Claim.clearinghouse_received_time:type_name -> google.protobuf.Timestamp
-	29, // 15: coreadmin.claims.v1.Claim.timely_filing_date:type_name -> coreadmin.common.v1.Date
-	17, // 16: coreadmin.claims.v1.Claim.adjudication_history:type_name -> coreadmin.claims.v1.Adjudication
-	13, // 17: coreadmin.claims.v1.Claim.payment:type_name -> coreadmin.claims.v1.ClaimPayment
-	14, // 18: coreadmin.claims.v1.Claim.payment_hold:type_name -> coreadmin.claims.v1.PaymentHold
-	16, // 19: coreadmin.claims.v1.Claim.review_flags:type_name -> coreadmin.claims.v1.ReviewFlag
-	15, // 20: coreadmin.claims.v1.Claim.pend_overrides:type_name -> coreadmin.claims.v1.PendOverride
-	30, // 21: coreadmin.claims.v1.Claim.audit:type_name -> coreadmin.common.v1.AuditInfo
-	29, // 22: coreadmin.claims.v1.InstitutionalInfo.admission_date:type_name -> coreadmin.common.v1.Date
-	29, // 23: coreadmin.claims.v1.InstitutionalInfo.discharge_date:type_name -> coreadmin.common.v1.Date
-	26, // 24: coreadmin.claims.v1.ClaimLine.service_dates:type_name -> coreadmin.common.v1.DateRange
-	27, // 25: coreadmin.claims.v1.ClaimLine.charge:type_name -> coreadmin.common.v1.Money
-	18, // 26: coreadmin.claims.v1.ClaimLine.adjudication:type_name -> coreadmin.claims.v1.LineAdjudication
-	27, // 27: coreadmin.claims.v1.ClaimPayment.paid:type_name -> coreadmin.common.v1.Money
-	29, // 28: coreadmin.claims.v1.ClaimPayment.paid_date:type_name -> coreadmin.common.v1.Date
-	4,  // 29: coreadmin.claims.v1.ClaimPayment.state:type_name -> coreadmin.claims.v1.PaymentState
-	28, // 30: coreadmin.claims.v1.PaymentHold.placed_time:type_name -> google.protobuf.Timestamp
-	28, // 31: coreadmin.claims.v1.PendOverride.resolved_time:type_name -> google.protobuf.Timestamp
-	28, // 32: coreadmin.claims.v1.ReviewFlag.raised_time:type_name -> google.protobuf.Timestamp
-	28, // 33: coreadmin.claims.v1.ReviewFlag.cleared_time:type_name -> google.protobuf.Timestamp
-	28, // 34: coreadmin.claims.v1.Adjudication.adjudicated_time:type_name -> google.protobuf.Timestamp
-	27, // 35: coreadmin.claims.v1.Adjudication.total_allowed:type_name -> coreadmin.common.v1.Money
-	27, // 36: coreadmin.claims.v1.Adjudication.total_paid:type_name -> coreadmin.common.v1.Money
-	27, // 37: coreadmin.claims.v1.Adjudication.total_member_responsibility:type_name -> coreadmin.common.v1.Money
-	24, // 38: coreadmin.claims.v1.Adjudication.pends:type_name -> coreadmin.claims.v1.Pend
-	25, // 39: coreadmin.claims.v1.Adjudication.accumulator_postings:type_name -> coreadmin.claims.v1.AccumulatorPosting
-	5,  // 40: coreadmin.claims.v1.LineAdjudication.status:type_name -> coreadmin.claims.v1.LineStatus
-	19, // 41: coreadmin.claims.v1.LineAdjudication.denial:type_name -> coreadmin.claims.v1.Denial
-	27, // 42: coreadmin.claims.v1.LineAdjudication.charge:type_name -> coreadmin.common.v1.Money
-	20, // 43: coreadmin.claims.v1.LineAdjudication.pricing:type_name -> coreadmin.claims.v1.Pricing
-	21, // 44: coreadmin.claims.v1.LineAdjudication.benefit:type_name -> coreadmin.claims.v1.BenefitApplied
-	22, // 45: coreadmin.claims.v1.LineAdjudication.cost_shares:type_name -> coreadmin.claims.v1.CostShareApplied
-	27, // 46: coreadmin.claims.v1.LineAdjudication.member_responsibility:type_name -> coreadmin.common.v1.Money
-	27, // 47: coreadmin.claims.v1.LineAdjudication.paid:type_name -> coreadmin.common.v1.Money
-	23, // 48: coreadmin.claims.v1.LineAdjudication.cas_adjustments:type_name -> coreadmin.claims.v1.CasAdjustment
-	6,  // 49: coreadmin.claims.v1.Pricing.source:type_name -> coreadmin.claims.v1.PricingSource
-	27, // 50: coreadmin.claims.v1.Pricing.allowed:type_name -> coreadmin.common.v1.Money
-	31, // 51: coreadmin.claims.v1.Pricing.contract_method:type_name -> coreadmin.provider.v1.ContractMethod
-	32, // 52: coreadmin.claims.v1.Pricing.non_contracted_basis:type_name -> coreadmin.plan.v1.ReimbursementBasis
-	33, // 53: coreadmin.claims.v1.BenefitApplied.cost_share:type_name -> coreadmin.plan.v1.CostShare
-	7,  // 54: coreadmin.claims.v1.CostShareApplied.type:type_name -> coreadmin.claims.v1.CostShareType
-	27, // 55: coreadmin.claims.v1.CostShareApplied.amount:type_name -> coreadmin.common.v1.Money
-	8,  // 56: coreadmin.claims.v1.CasAdjustment.group:type_name -> coreadmin.claims.v1.CasGroup
-	27, // 57: coreadmin.claims.v1.CasAdjustment.amount:type_name -> coreadmin.common.v1.Money
-	28, // 58: coreadmin.claims.v1.Pend.resolved_time:type_name -> google.protobuf.Timestamp
-	27, // 59: coreadmin.claims.v1.AccumulatorPosting.amount:type_name -> coreadmin.common.v1.Money
-	60, // [60:60] is the sub-list for method output_type
-	60, // [60:60] is the sub-list for method input_type
-	60, // [60:60] is the sub-list for extension type_name
-	60, // [60:60] is the sub-list for extension extendee
-	0,  // [0:60] is the sub-list for field type_name
+	32, // 12: coreadmin.claims.v1.Claim.received_time:type_name -> google.protobuf.Timestamp
+	21, // 13: coreadmin.claims.v1.Claim.adjudication:type_name -> coreadmin.claims.v1.Adjudication
+	32, // 14: coreadmin.claims.v1.Claim.clearinghouse_received_time:type_name -> google.protobuf.Timestamp
+	33, // 15: coreadmin.claims.v1.Claim.timely_filing_date:type_name -> coreadmin.common.v1.Date
+	21, // 16: coreadmin.claims.v1.Claim.adjudication_history:type_name -> coreadmin.claims.v1.Adjudication
+	17, // 17: coreadmin.claims.v1.Claim.payment:type_name -> coreadmin.claims.v1.ClaimPayment
+	18, // 18: coreadmin.claims.v1.Claim.payment_hold:type_name -> coreadmin.claims.v1.PaymentHold
+	20, // 19: coreadmin.claims.v1.Claim.review_flags:type_name -> coreadmin.claims.v1.ReviewFlag
+	19, // 20: coreadmin.claims.v1.Claim.pend_overrides:type_name -> coreadmin.claims.v1.PendOverride
+	12, // 21: coreadmin.claims.v1.Claim.submitted_patient:type_name -> coreadmin.claims.v1.SubmittedPatient
+	13, // 22: coreadmin.claims.v1.Claim.source_record:type_name -> coreadmin.claims.v1.SourceRecord
+	11, // 23: coreadmin.claims.v1.Claim.original_link:type_name -> coreadmin.claims.v1.ClaimLink
+	34, // 24: coreadmin.claims.v1.Claim.audit:type_name -> coreadmin.common.v1.AuditInfo
+	32, // 25: coreadmin.claims.v1.ClaimLink.linked_time:type_name -> google.protobuf.Timestamp
+	35, // 26: coreadmin.claims.v1.SubmittedPatient.name:type_name -> coreadmin.common.v1.PersonName
+	33, // 27: coreadmin.claims.v1.SubmittedPatient.birth_date:type_name -> coreadmin.common.v1.Date
+	33, // 28: coreadmin.claims.v1.InstitutionalInfo.admission_date:type_name -> coreadmin.common.v1.Date
+	33, // 29: coreadmin.claims.v1.InstitutionalInfo.discharge_date:type_name -> coreadmin.common.v1.Date
+	30, // 30: coreadmin.claims.v1.ClaimLine.service_dates:type_name -> coreadmin.common.v1.DateRange
+	31, // 31: coreadmin.claims.v1.ClaimLine.charge:type_name -> coreadmin.common.v1.Money
+	22, // 32: coreadmin.claims.v1.ClaimLine.adjudication:type_name -> coreadmin.claims.v1.LineAdjudication
+	31, // 33: coreadmin.claims.v1.ClaimPayment.paid:type_name -> coreadmin.common.v1.Money
+	33, // 34: coreadmin.claims.v1.ClaimPayment.paid_date:type_name -> coreadmin.common.v1.Date
+	4,  // 35: coreadmin.claims.v1.ClaimPayment.state:type_name -> coreadmin.claims.v1.PaymentState
+	32, // 36: coreadmin.claims.v1.PaymentHold.placed_time:type_name -> google.protobuf.Timestamp
+	32, // 37: coreadmin.claims.v1.PendOverride.resolved_time:type_name -> google.protobuf.Timestamp
+	32, // 38: coreadmin.claims.v1.ReviewFlag.raised_time:type_name -> google.protobuf.Timestamp
+	32, // 39: coreadmin.claims.v1.ReviewFlag.cleared_time:type_name -> google.protobuf.Timestamp
+	32, // 40: coreadmin.claims.v1.Adjudication.adjudicated_time:type_name -> google.protobuf.Timestamp
+	31, // 41: coreadmin.claims.v1.Adjudication.total_allowed:type_name -> coreadmin.common.v1.Money
+	31, // 42: coreadmin.claims.v1.Adjudication.total_paid:type_name -> coreadmin.common.v1.Money
+	31, // 43: coreadmin.claims.v1.Adjudication.total_member_responsibility:type_name -> coreadmin.common.v1.Money
+	28, // 44: coreadmin.claims.v1.Adjudication.pends:type_name -> coreadmin.claims.v1.Pend
+	29, // 45: coreadmin.claims.v1.Adjudication.accumulator_postings:type_name -> coreadmin.claims.v1.AccumulatorPosting
+	5,  // 46: coreadmin.claims.v1.Adjudication.original_match:type_name -> coreadmin.claims.v1.OriginalMatch
+	6,  // 47: coreadmin.claims.v1.LineAdjudication.status:type_name -> coreadmin.claims.v1.LineStatus
+	23, // 48: coreadmin.claims.v1.LineAdjudication.denial:type_name -> coreadmin.claims.v1.Denial
+	31, // 49: coreadmin.claims.v1.LineAdjudication.charge:type_name -> coreadmin.common.v1.Money
+	24, // 50: coreadmin.claims.v1.LineAdjudication.pricing:type_name -> coreadmin.claims.v1.Pricing
+	25, // 51: coreadmin.claims.v1.LineAdjudication.benefit:type_name -> coreadmin.claims.v1.BenefitApplied
+	26, // 52: coreadmin.claims.v1.LineAdjudication.cost_shares:type_name -> coreadmin.claims.v1.CostShareApplied
+	31, // 53: coreadmin.claims.v1.LineAdjudication.member_responsibility:type_name -> coreadmin.common.v1.Money
+	31, // 54: coreadmin.claims.v1.LineAdjudication.paid:type_name -> coreadmin.common.v1.Money
+	27, // 55: coreadmin.claims.v1.LineAdjudication.cas_adjustments:type_name -> coreadmin.claims.v1.CasAdjustment
+	7,  // 56: coreadmin.claims.v1.Pricing.source:type_name -> coreadmin.claims.v1.PricingSource
+	31, // 57: coreadmin.claims.v1.Pricing.allowed:type_name -> coreadmin.common.v1.Money
+	36, // 58: coreadmin.claims.v1.Pricing.contract_method:type_name -> coreadmin.provider.v1.ContractMethod
+	37, // 59: coreadmin.claims.v1.Pricing.non_contracted_basis:type_name -> coreadmin.plan.v1.ReimbursementBasis
+	38, // 60: coreadmin.claims.v1.BenefitApplied.cost_share:type_name -> coreadmin.plan.v1.CostShare
+	8,  // 61: coreadmin.claims.v1.CostShareApplied.type:type_name -> coreadmin.claims.v1.CostShareType
+	31, // 62: coreadmin.claims.v1.CostShareApplied.amount:type_name -> coreadmin.common.v1.Money
+	9,  // 63: coreadmin.claims.v1.CasAdjustment.group:type_name -> coreadmin.claims.v1.CasGroup
+	31, // 64: coreadmin.claims.v1.CasAdjustment.amount:type_name -> coreadmin.common.v1.Money
+	32, // 65: coreadmin.claims.v1.Pend.resolved_time:type_name -> google.protobuf.Timestamp
+	31, // 66: coreadmin.claims.v1.AccumulatorPosting.amount:type_name -> coreadmin.common.v1.Money
+	67, // [67:67] is the sub-list for method output_type
+	67, // [67:67] is the sub-list for method input_type
+	67, // [67:67] is the sub-list for extension type_name
+	67, // [67:67] is the sub-list for extension extendee
+	0,  // [0:67] is the sub-list for field type_name
 }
 
 func init() { file_coreadmin_claims_v1_claims_proto_init() }
@@ -2667,8 +3095,8 @@ func file_coreadmin_claims_v1_claims_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_coreadmin_claims_v1_claims_proto_rawDesc), len(file_coreadmin_claims_v1_claims_proto_rawDesc)),
-			NumEnums:      9,
-			NumMessages:   17,
+			NumEnums:      10,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

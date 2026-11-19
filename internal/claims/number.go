@@ -47,10 +47,11 @@ func sourceLetter(src claimsv1.ClaimSource) string {
 	return "A"
 }
 
-// assignNumber gives an original claim the next number for its receipt
-// day and source. The sequence is found by scanning existing claims,
-// which is fine for the in-memory store; a real store would use a
-// per-day counter so concurrent intake cannot hand out the same number.
+// assignNumber gives a claim the next number for its receipt day and
+// source. Like a database sequence, a number is handed out once even if
+// the claim is never saved. The sequence is seeded by scanning existing
+// claims, which is fine for the in-memory store; a real store would keep
+// a per-day counter.
 func (s *Service) assignNumber(ctx context.Context, c *claimsv1.Claim) error {
 	t := c.GetReceivedTime().AsTime()
 	prefix := fmt.Sprintf("%02d%03d-%s-", t.Year()%100, t.YearDay(), sourceLetter(c.GetSource()))
@@ -60,12 +61,16 @@ func (s *Service) assignNumber(ctx context.Context, c *claimsv1.Claim) error {
 	if err != nil {
 		return err
 	}
-	next := 1
+	next := s.issued[prefix] + 1
 	for _, o := range same {
 		if n, err := strconv.Atoi(strings.TrimPrefix(o.GetClaimNumber(), prefix)); err == nil && n >= next {
 			next = n + 1
 		}
 	}
+	if s.issued == nil {
+		s.issued = map[string]int{}
+	}
+	s.issued[prefix] = next
 	c.ClaimNumber = fmt.Sprintf("%s%05d", prefix, next)
 	c.ClaimVersion = 1
 	return nil
