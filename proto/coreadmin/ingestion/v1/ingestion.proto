@@ -27,7 +27,37 @@ message IngestionJob {
   repeated RecordError errors = 10;
   google.protobuf.Timestamp received_time = 11;
   google.protobuf.Timestamp completed_time = 12;
+  // X12 files only.
+  X12Envelope envelope = 16;
+  repeated TransactionSetResult transaction_sets = 17;
+  // Where the acknowledgment we generated (999) is stored.
+  string acknowledgment_uri = 18;
   common.v1.AuditInfo audit = 15;
+}
+
+message X12Envelope {
+  // ISA06 / ISA08, trimmed.
+  string sender_id = 1;
+  string receiver_id = 2;
+  // ISA13. A sender never reuses one, so a repeat is a resent file.
+  string interchange_control_number = 3;
+  // GS06.
+  string group_control_number = 4;
+  // GS08, e.g. 005010X222A1 for the 837P.
+  string implementation_guide = 5;
+  // ISA15: P production, T test.
+  string usage = 6;
+}
+
+// TransactionSetResult is the 999's verdict on one transaction set (ST to
+// SE). A rejected set loads nothing; an accepted set loads every claim in
+// it, whatever adjudication then decides.
+message TransactionSetResult {
+  // ST02.
+  string control_number = 1;
+  bool accepted = 2;
+  int32 claim_count = 3;
+  repeated RecordError errors = 4;
 }
 
 enum IngestionKind {

@@ -163,6 +163,7 @@ func (s *Service) RecordPaymentEvent(ctx context.Context, claimID, event string)
 // claims for the same family all read the same balances. Each commit after
 // the first then fails the accumulator revision check and is recalculated.
 func (s *Service) ProcessConcurrently(ctx context.Context, in []*claimsv1.Claim) ([]*claimsv1.Claim, error) {
+	var inputs []*claimsv1.Claim
 	var calcs []*adjudication.Calculation
 	for _, c := range in {
 		c = cloneClaim(c)
@@ -170,33 +171,26 @@ func (s *Service) ProcessConcurrently(ctx context.Context, in []*claimsv1.Claim)
 			c.Id = ids.NewV7(s.Now())
 		}
 		s.prepareNew(c)
-		if err := s.assignNumber(ctx, c); err != nil {
-			return nil, err
-		}
-		saved, err := s.Repos.Claims.Create(ctx, c)
-		if errors.Is(err, store.ErrAlreadyExists) {
-			return nil, rejectf("claim %s already exists", s.ref(c))
-		} else if err != nil {
-			return nil, err
-		}
-		calc, err := s.Engine.Calculate(ctx, saved, "")
+		calc, err := s.Engine.Calculate(ctx, c, "")
 		if err != nil {
 			return nil, err
 		}
-		s.logf("%s calculated against accumulator revision %d: %s.", s.ref(saved), calc.Revision, describe(calc.Claim))
-		calcs = append(calcs, calc)
+		if _, err := s.number(ctx, calc.Claim); err != nil {
+			return nil, err
+		}
+		s.logf("%s calculated against accumulator revision %d: %s.", s.ref(calc.Claim), calc.Revision, describe(calc.Claim))
+		inputs, calcs = append(inputs, c), append(calcs, calc)
 	}
 	var out []*claimsv1.Claim
-	for _, calc := range calcs {
-		saved, err := s.commit(ctx, calc)
+	for i, calc := range calcs {
+		saved, err := s.commit(ctx, calc, true)
 		if errors.Is(err, adjudication.ErrBalancesChanged) {
 			s.logf("%s: commit rejected. Another claim posted to the family's accumulators first (revision %d is stale). Recalculating.",
 				s.ref(calc.Claim), calc.Revision)
-			stored, gerr := s.Repos.Claims.Get(ctx, calc.Claim.GetId())
-			if gerr != nil {
-				return nil, gerr
-			}
-			saved, err = s.adjudicate(ctx, stored, "")
+			inputs[i].ClaimNumber, inputs[i].ClaimVersion = calc.Claim.GetClaimNumber(), calc.Claim.GetClaimVersion()
+			saved, err = s.register(ctx, inputs[i], "")
+		} else if errors.Is(err, store.ErrAlreadyExists) {
+			return nil, rejectf("claim %s already exists", s.ref(calc.Claim))
 		}
 		if err != nil {
 			return nil, err

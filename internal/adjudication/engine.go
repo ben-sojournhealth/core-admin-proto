@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +35,12 @@ const (
 	PendNoPlanVersion     = "NO_PLAN_VERSION"
 	PendNoTier            = "NO_TIER"
 	PendPossibleDuplicate = "POSSIBLE_DUPLICATE"
+
+	// A replacement or void whose original cannot be used yet.
+	PendOriginalNotFound     = "ORIGINAL_NOT_FOUND"
+	PendOriginalNotFinalized = "ORIGINAL_NOT_FINALIZED"
+	PendOriginalInPaymentRun = "ORIGINAL_IN_PAYMENT_RUN"
+	PendOpenReplacement      = "ORIGINAL_HAS_OPEN_REPLACEMENT"
 
 	DenyCoverageTerminated = "COVERAGE_TERMINATED"
 	DenyProviderSanctioned = "PROVIDER_SANCTIONED"
@@ -102,9 +110,8 @@ func (e *DefaultEngine) Calculate(ctx context.Context, in *claimsv1.Claim, reaso
 		l.Adjudication = nil
 	}
 	calc := &Calculation{Claim: c}
-	if c.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT {
-		calc.ReverseClaimID = c.GetOriginalClaimId()
-	}
+	// Matches are made fresh on every run; the previous run's are output.
+	c.CustomerId, c.MemberId, c.SubscriberId, c.OriginalClaimId = "", "", "", ""
 
 	err := e.run(ctx, calc)
 	var deny *DenyError
@@ -158,12 +165,44 @@ func (e *DefaultEngine) run(ctx context.Context, calc *Calculation) error {
 		return fmt.Errorf("adjudication: claim %s has no service date", c.GetId())
 	}
 
-	// 1. Eligibility.
-	member, err := e.resolveMember(ctx, c)
-	if err != nil {
-		return err
+	// Match the member and, for a replacement or void, the original. Both
+	// are recorded whichever of them pends, so an examiner sees everything
+	// that did match.
+	var orig *claimsv1.Claim
+	var origErr error
+	correcting := c.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT || c.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID
+	if correcting {
+		orig, adj.OriginalMatch, origErr = e.MatchOriginal(ctx, c)
+		if orig != nil {
+			c.OriginalClaimId, adj.OriginalClaimId = orig.GetId(), orig.GetId()
+		}
+		if _, ok := AsPend(origErr); origErr != nil && !ok {
+			return origErr
+		}
 	}
-	c.MemberId, c.SubscriberId = member.GetId(), member.GetSubscriberId()
+	member, memberErr := e.resolveMember(ctx, c)
+	if member != nil {
+		c.MemberId, c.SubscriberId, c.CustomerId = member.GetId(), member.GetSubscriberId(), member.GetCustomerId()
+		adj.MemberId, adj.CustomerId = member.GetId(), member.GetCustomerId()
+	}
+	if correcting {
+		if origErr != nil {
+			return origErr
+		}
+		if err := e.checkOriginal(ctx, c, orig); err != nil {
+			return err
+		}
+		if c.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID {
+			// A void is not priced; the claims service finalizes it.
+			return nil
+		}
+		calc.ReverseClaimID = orig.GetId()
+	}
+
+	// 1. Eligibility.
+	if memberErr != nil {
+		return memberErr
+	}
 	span, err := resolveCoverage(member, dos)
 	if err != nil {
 		return err
@@ -283,27 +322,144 @@ func (e *DefaultEngine) run(ctx context.Context, calc *Calculation) error {
 	return nil
 }
 
-func (e *DefaultEngine) resolveMember(ctx context.Context, c *claimsv1.Claim) (*eligibilityv1.Member, error) {
-	if id := c.GetMemberId(); id != "" {
-		m, err := e.Repos.Members.Get(ctx, id)
+type projectionKey struct{}
+
+// Projection marks a dry run: the result is projected as if the original's
+// payment run had been released, since that block is temporary.
+func Projection(ctx context.Context) context.Context {
+	return context.WithValue(ctx, projectionKey{}, true)
+}
+
+// MatchOriginal finds the original a replacement or void (frequency 7 or
+// 8) refers to: the linked claim if original_link is set, otherwise the
+// claim number the provider quoted (REF*F8), with or without a version
+// suffix, resolved to that claim's latest version before this one that is
+// not a void. A voided claim resolves to itself, VOIDED, so checkOriginal
+// pends what references it. It returns a PendError when nothing matches.
+func (e *DefaultEngine) MatchOriginal(ctx context.Context, c *claimsv1.Claim) (*claimsv1.Claim, claimsv1.OriginalMatch, error) {
+	if link := c.GetOriginalLink(); link != nil {
+		orig, err := e.Repos.Claims.Get(ctx, link.GetClaimId())
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, Pend(PendMemberNotFound, "no member %s", id)
+			return nil, claimsv1.OriginalMatch_ORIGINAL_MATCH_NONE, Pend(PendOriginalNotFound, "linked original %s does not exist", link.GetClaimId())
 		}
-		return m, err
+		return orig, claimsv1.OriginalMatch_ORIGINAL_MATCH_LINKED, err
 	}
-	ms, _, err := e.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{
-		PageSize: 2,
-		Filter: func(m *eligibilityv1.Member) bool {
-			return m.GetCustomerId() == c.GetCustomerId() && m.GetCardId() == c.GetMemberCardId()
-		},
-	})
+	quoted := c.GetPayerClaimControlNumber()
+	if quoted == "" {
+		return nil, claimsv1.OriginalMatch_ORIGINAL_MATCH_NONE, Pend(PendOriginalNotFound, "the provider sent no original claim number")
+	}
+	notFound := Pend(PendOriginalNotFound, "the provider quotes claim %s, which matches no claim", quoted)
+	m := quotedNumber.FindStringSubmatch(quoted)
+	if m == nil {
+		return nil, claimsv1.OriginalMatch_ORIGINAL_MATCH_NONE, notFound
+	}
+	if v, _ := strconv.Atoi(m[2]); m[2] != "" && v < 2 {
+		return nil, claimsv1.OriginalMatch_ORIGINAL_MATCH_NONE, notFound
+	}
+	versions, _, err := e.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1000, Filter: func(o *claimsv1.Claim) bool {
+		return o.GetClaimNumber() == m[1] && o.GetId() != c.GetId() &&
+			o.GetFrequency() != claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID &&
+			// A version of the same number can only replace an earlier one.
+			(c.GetClaimNumber() != m[1] || o.GetClaimVersion() < c.GetClaimVersion())
+	}})
+	if err != nil {
+		return nil, claimsv1.OriginalMatch_ORIGINAL_MATCH_NONE, err
+	}
+	if len(versions) == 0 {
+		return nil, claimsv1.OriginalMatch_ORIGINAL_MATCH_NONE, notFound
+	}
+	latest := versions[0]
+	for _, v := range versions {
+		if v.GetClaimVersion() > latest.GetClaimVersion() {
+			latest = v
+		}
+	}
+	return latest, claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER, nil
+}
+
+var quotedNumber = regexp.MustCompile(`^\s*(\d{5}-[A-Z]-\d{5})(?:-(\d+))?\s*$`)
+
+// checkOriginal pends a replacement or void until its original can be
+// replaced: finalized, out of any unreleased payment run, and not already
+// being replaced by another claim. These are data pends: they clear on
+// reprocessing once the original settles.
+func (e *DefaultEngine) checkOriginal(ctx context.Context, c, orig *claimsv1.Claim) error {
+	name := displayNumber(orig)
+	switch orig.GetStatus() {
+	case claimsv1.ClaimStatus_CLAIM_STATUS_APPROVED, claimsv1.ClaimStatus_CLAIM_STATUS_DENIED:
+	default:
+		return Pend(PendOriginalNotFinalized, "original %s is %s", name, strings.TrimPrefix(orig.GetStatus().String(), "CLAIM_STATUS_"))
+	}
+	if orig.GetPayment().GetState() == claimsv1.PaymentState_PAYMENT_STATE_SELECTED && ctx.Value(projectionKey{}) == nil {
+		return Pend(PendOriginalInPaymentRun, "original %s is in a payment run that has not been released", name)
+	}
+	open, _, err := e.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1, Filter: func(o *claimsv1.Claim) bool {
+		return o.GetId() != c.GetId() && o.GetOriginalClaimId() == orig.GetId() &&
+			(o.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_PENDED || o.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_RECEIVED)
+	}})
+	if err != nil {
+		return err
+	}
+	if len(open) > 0 {
+		return Pend(PendOpenReplacement, "original %s already has a replacement in progress (%s)", name, displayNumber(open[0]))
+	}
+	return nil
+}
+
+func displayNumber(c *claimsv1.Claim) string {
+	if v := c.GetClaimVersion(); v > 1 {
+		return fmt.Sprintf("%s-%d", c.GetClaimNumber(), v)
+	}
+	if c.GetClaimNumber() == "" {
+		return c.GetId()
+	}
+	return c.GetClaimNumber()
+}
+
+// resolveMember matches the patient from the submitted fields only: the
+// member id on the card, or, for a dependent sent in the 2000C patient
+// loop, the member in the subscriber's household with the same first name
+// and birth date. The member's customer becomes the claim's.
+func (e *DefaultEngine) resolveMember(ctx context.Context, c *claimsv1.Claim) (*eligibilityv1.Member, error) {
+	byCard := func(card string) ([]*eligibilityv1.Member, error) {
+		ms, _, err := e.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 2, Filter: func(m *eligibilityv1.Member) bool {
+			return card != "" && m.GetCardId() == card
+		}})
+		return ms, err
+	}
+	ms, err := byCard(c.GetMemberCardId())
 	if err != nil {
 		return nil, err
 	}
-	if len(ms) == 0 {
-		return nil, Pend(PendMemberNotFound, "no member with card id %q", c.GetMemberCardId())
+	if len(ms) > 1 {
+		return nil, Pend(PendMemberNotFound, "member id %q matches members of more than one customer", c.GetMemberCardId())
 	}
-	return ms[0], nil
+	if len(ms) == 0 {
+		return nil, Pend(PendMemberNotFound, "no member with member id %q", c.GetMemberCardId())
+	}
+	m := ms[0]
+	if pt := c.GetSubmittedPatient(); pt.GetDependentLoop() {
+		household, _, err := e.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 50, Filter: func(o *eligibilityv1.Member) bool {
+			return o.GetCustomerId() == m.GetCustomerId() && o.GetSubscriberId() == m.GetSubscriberId()
+		}})
+		if err != nil {
+			return nil, err
+		}
+		var found *eligibilityv1.Member
+		for _, o := range household {
+			b, pb := o.GetBirthDate(), pt.GetBirthDate()
+			if strings.EqualFold(o.GetName().GetFirst(), pt.GetName().GetFirst()) &&
+				b.GetYear() == pb.GetYear() && b.GetMonth() == pb.GetMonth() && b.GetDay() == pb.GetDay() {
+				found = o
+			}
+		}
+		if found == nil {
+			return nil, Pend(PendMemberNotFound, "no member named %s, born %s, in the household of member id %s",
+				pt.GetName().GetFirst(), dates.Format(pt.GetBirthDate()), c.GetMemberCardId())
+		}
+		m = found
+	}
+	return m, nil
 }
 
 // resolveCoverage finds the medical coverage span in force on dos.

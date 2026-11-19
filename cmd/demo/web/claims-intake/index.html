@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claims Intake</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --nav: #eef1f4; --ink: #18202b; --muted: #687384; --line: #e2e6ec;
+  --brand: #0f766e; --brand-ink: #ffffff; --brand-soft: #e3f3f1;
+  --amber: #8a5a00; --amber-soft: #fff4d9; --amber-line: #f2d48b;
+  --red: #b42318; --red-soft: #fdecea; --green: #157347; --green-soft: #e2f4ea; --gray-soft: #edf0f3;
+  --blue: #1d4ed8; --blue-soft: #e6edff;
+  --code: #f3f5f8; --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101418; --panel: #171c22; --nav: #13181d; --ink: #e6eaef; --muted: #93a0b0; --line: #262e37;
+    --brand: #2dd4bf; --brand-ink: #062320; --brand-soft: #123532;
+    --amber: #f3c969; --amber-soft: #2e2611; --amber-line: #5c4a1c;
+    --red: #ff8f85; --red-soft: #3a1d1b; --green: #6fdc9f; --green-soft: #15301f; --gray-soft: #232a33;
+    --blue: #93b4ff; --blue-soft: #1a2440;
+    --code: #12171c; --shadow: none;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: inherit; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+
+.top { height: 54px; display: flex; align-items: center; gap: 16px; padding: 0 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 17px; text-decoration: none; }
+.brand svg { width: 22px; height: 22px; color: var(--brand); }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--muted); }
+.top .right a { text-decoration: none; }
+.top .right a:hover, .linkbtn:hover { color: var(--brand); }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--muted); font-size: 13px; }
+
+.shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: calc(100% - 54px); }
+nav { background: var(--nav); border-right: 1px solid var(--line); padding: 14px 12px; overflow-y: auto; }
+nav h4 { margin: 16px 6px 8px; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+nav h4:first-child { margin-top: 2px; }
+.card { display: block; width: 100%; text-align: left; border: 1px solid transparent; background: none; border-radius: 9px; padding: 8px 10px; }
+.card:hover { background: var(--gray-soft); }
+.card.on { background: var(--panel); border-color: var(--line); box-shadow: var(--shadow); }
+.card b { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; }
+.card small { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+.card .sent { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--muted); }
+.job { display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
+.dot.COMPLETED { background: var(--green); }
+.dot.COMPLETED_WITH_ERRORS { background: var(--amber); }
+.dot.FAILED { background: var(--red); }
+main { overflow-y: auto; padding: 20px 26px 48px; }
+@media (max-width: 860px) { .shell { grid-template-columns: 1fr; height: auto; } nav { border-right: 0; border-bottom: 1px solid var(--line); } main { padding: 16px; } }
+
+.head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.head h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; word-break: break-all; }
+.head .meta { color: var(--muted); font-size: 13px; }
+.head .tools { margin-left: auto; display: flex; gap: 8px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 12px; font-weight: 600; white-space: nowrap; }
+.btn:hover { border-color: var(--brand); color: var(--brand); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.btn.primary:hover { filter: brightness(1.07); color: var(--brand-ink); }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; background: var(--gray-soft); color: var(--muted); white-space: nowrap; }
+.chip.APPROVED, .chip.COMPLETED, .chip.ok { background: var(--green-soft); color: var(--green); }
+.chip.DENIED, .chip.FAILED, .chip.bad, .chip.REJECTED, .chip.NOT_LOADED { background: var(--red-soft); color: var(--red); }
+.chip.PENDED, .chip.COMPLETED_WITH_ERRORS { background: var(--amber-soft); color: var(--amber); }
+.chip.f7, .chip.f8 { background: var(--blue-soft); color: var(--blue); }
+
+/* flow */
+.flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-bottom: 18px; }
+.step { position: relative; padding: 14px 16px; }
+.step + .step { border-left: 1px solid var(--line); }
+.step + .step::before { content: ""; position: absolute; left: -7px; top: 50%; width: 12px; height: 12px; background: var(--panel); border-top: 1px solid var(--line); border-right: 1px solid var(--line); transform: translateY(-50%) rotate(45deg); }
+.step small { display: block; font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+.step b { display: block; font-size: 22px; font-weight: 650; margin: 2px 0 4px; }
+.step .pills { display: flex; gap: 4px; flex-wrap: wrap; }
+.step.dead b { color: var(--red); }
+@media (max-width: 760px) { .flow { grid-template-columns: 1fr; } .step + .step { border-left: 0; border-top: 1px solid var(--line); } .step + .step::before { display: none; } }
+
+.banner { border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; background: var(--red-soft); color: var(--red); font-weight: 600; }
+.banner span { display: block; font-weight: 400; color: var(--ink); margin-top: 2px; }
+
+/* sets */
+.set { margin-bottom: 14px; overflow: hidden; }
+.sethead { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid var(--line); }
+.sethead b { font-weight: 650; }
+.errs { padding: 10px 16px; background: var(--red-soft); border-bottom: 1px solid var(--line); font-size: 13px; }
+.errs div { display: flex; gap: 10px; align-items: baseline; }
+.errs code { color: var(--red); font-weight: 600; }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 9px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tbody tr { cursor: default; }
+tbody tr.hot td { background: var(--brand-soft); }
+td.r, th.r { text-align: right; }
+.sub { color: var(--muted); font-size: 12.5px; }
+.arrow { color: var(--muted); padding: 0 4px; }
+.claimno { font-weight: 650; text-decoration: none; border-bottom: 1px dashed var(--muted); }
+.claimno:hover { color: var(--brand); border-color: var(--brand); }
+.via { font-size: 12px; color: var(--muted); }
+
+details.panel { margin-bottom: 14px; }
+details.panel summary { padding: 11px 16px; cursor: pointer; font-weight: 600; list-style: none; display: flex; gap: 8px; align-items: center; }
+details.panel summary::-webkit-details-marker { display: none; }
+details.panel summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
+details.panel[open] summary::before { transform: rotate(90deg); }
+details.panel summary .muted { font-weight: 400; font-size: 13px; }
+.raw { margin: 0; padding: 10px 0; border-top: 1px solid var(--line); background: var(--code); max-height: 460px; overflow: auto; border-radius: 0 0 12px 12px; }
+.raw div { display: flex; padding: 0 14px; white-space: pre; }
+.raw i { font-style: normal; color: var(--muted); width: 38px; flex: none; text-align: right; padding-right: 12px; user-select: none; }
+.raw div.in { background: var(--brand-soft); }
+.raw div.err { background: var(--red-soft); color: var(--red); }
+.raw div.env { color: var(--muted); }
+
+/* yaml */
+.yaml { margin: 0; padding: 12px 14px; background: var(--code); font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; overflow-x: auto; }
+.yaml .k { color: var(--brand); }
+.yaml .s { color: var(--ink); }
+.yaml .n { color: var(--blue); }
+.yaml .d { color: var(--muted); }
+.mapped { border-top: 1px solid var(--line); }
+.mapped summary { padding: 9px 14px; cursor: pointer; display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.mapped summary b { font-family: ui-monospace, Menlo, monospace; font-weight: 650; }
+.mapped .yaml { border-top: 1px solid var(--line); }
+tr.yamlrow td { padding: 0; background: var(--code); }
+tr.yamlrow .yaml { max-height: 520px; overflow: auto; }
+tbody tr[data-key] { cursor: pointer; }
+tbody tr.open td { background: var(--brand-soft); }
+
+/* split composer */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 1100px) { .split { grid-template-columns: 1fr; } }
+.pane { overflow: hidden; }
+.pane h3 { margin: 0; font-size: 13px; font-weight: 650; padding: 11px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; }
+.pane h3 .muted { font-weight: 400; }
+.pane .scroll { max-height: calc(100vh - 230px); overflow: auto; }
+.pane .setline { display: flex; gap: 8px; align-items: center; padding: 9px 14px; background: var(--gray-soft); font-size: 13px; font-weight: 600; }
+.pane .errs { border-bottom: 0; }
+
+/* composer */
+.composer textarea { display: block; width: 100%; min-height: calc(100vh - 230px); border: 0; border-top: 1px solid var(--line); background: var(--code); color: var(--ink); padding: 12px 14px; resize: vertical; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; border-radius: 0 0 12px 12px; }
+.composer textarea:focus { outline: none; }
+.composer .bar { display: flex; align-items: center; gap: 10px; padding: 11px 16px; flex-wrap: wrap; }
+.composer input { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 13px ui-monospace, Menlo, monospace; width: 260px; max-width: 100%; }
+.warn { font-size: 13px; color: var(--amber); }
+
+.empty { padding: 70px 20px; text-align: center; color: var(--muted); }
+.empty b { display: block; color: var(--ink); font-size: 17px; margin-bottom: 4px; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="brand" href="#/">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h10l6 6v10H4z"/><path d="M14 4v6h6"/><path d="M8 14h8M8 17h5"/></svg>
+    Claims Intake
+  </a>
+  <div class="right">
+    <a href="/journey/" target="_blank">Open Journey ↗</a>
+    <a href="/">All demos</a>
+    <button class="linkbtn" id="reset" title="Resets the sandbox Journey and Claims Intake share">Reset</button>
+  </div>
+</div>
+<div class="shell">
+  <nav>
+    <h4>Send a file</h4>
+    <div id="samples"></div>
+    <h4>Loaded files</h4>
+    <div id="jobs"></div>
+  </nav>
+  <main id="main"></main>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const usd = (c) => (c < 0 ? "-$" : "$") + (Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const time = (iso) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" });
+const nice = (s) => s.replaceAll("_", " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
+async function get(path) { const r = await fetch(path); if (!r.ok) throw new Error(await r.text()); return r.json(); }
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 3200); }
+
+let S = { samples: [], jobs: [] };
+let drafts = {};
+
+async function load() { S = await get("api/state"); nav(); }
+
+function nav() {
+  const [, kind, id] = location.hash.split("/");
+  $("#samples").innerHTML = S.samples.map((x) => `
+    <button class="card ${kind === "file" && id === x.id ? "on" : ""}" data-sample="${esc(x.id)}">
+      <b>${esc(x.title)}${x.sent ? `<span class="sent">sent</span>` : ""}</b>
+      <small>${esc(x.summary)}</small>
+    </button>`).join("");
+  $("#jobs").innerHTML = S.jobs.length ? S.jobs.map((j) => `
+    <button class="card ${kind === "job" && id === j.id ? "on" : ""}" data-job="${esc(j.id)}">
+      <span class="job"><span class="dot ${j.status}"></span><b class="mono" style="font-size:12.5px">${esc(j.filename)}</b></span>
+      <small>${time(j.received)} · ${j.status === "FAILED" ? "nothing loaded" : `${j.loaded} loaded${j.rejected ? `, ${j.rejected} rejected` : ""}`}</small>
+    </button>`).join("") : `<small class="muted" style="padding:0 10px">None yet.</small>`;
+  document.querySelectorAll("[data-sample]").forEach((b) => b.onclick = () => location.hash = "#/file/" + b.dataset.sample);
+  document.querySelectorAll("[data-job]").forEach((b) => b.onclick = () => location.hash = "#/job/" + b.dataset.job);
+}
+
+async function route() {
+  const [, kind, id] = location.hash.split("/");
+  nav();
+  if (kind === "file") return composer(id);
+  if (kind === "job") return showJob(await get("api/job?id=" + encodeURIComponent(id)));
+  $("#main").innerHTML = `<div class="empty"><b>Pick a file to send</b>Each sample is an 837P from the clearinghouse. Claims it loads land in Journey.</div>`;
+}
+
+function composer(id) {
+  const x = S.samples.find((s) => s.id === id);
+  if (!x) return (location.hash = "#/");
+  const text = drafts[id] ?? x.text;
+  $("#main").innerHTML = `
+    <div class="head"><h1>${esc(x.title)}</h1><span class="meta">${esc(x.summary)}</span>
+      <span class="tools"><button class="btn" id="revert" ${drafts[id] == null ? "hidden" : ""}>Revert</button><button class="btn primary" id="send">Send file</button></span></div>
+    <div class="split">
+      <div class="panel pane composer">
+        <h3>837P <span class="muted">as the clearinghouse sends it · edit freely</span>
+          <input id="fname" value="${esc(x.filename)}" aria-label="File name" style="margin-left:auto;width:230px"></h3>
+        <textarea id="text" spellcheck="false">${esc(text)}</textarea>
+      </div>
+      <div class="panel pane"><h3>Claim proto <span class="muted">what ingestion hands to adjudication · nothing is loaded</span></h3>
+        <div class="scroll" id="preview"></div></div>
+    </div>`;
+  let timer;
+  const refresh = async () => {
+    try { renderPreview(await post("api/preview", { text: $("#text").value })); } catch (e) { $("#preview").innerHTML = `<div class="errs">${esc(e.message)}</div>`; }
+  };
+  $("#text").oninput = (e) => { drafts[id] = e.target.value; $("#revert").hidden = false; clearTimeout(timer); timer = setTimeout(refresh, 250); };
+  $("#revert").onclick = () => { delete drafts[id]; composer(id); };
+  $("#send").onclick = async () => {
+    try {
+      const v = await post("api/ingest", { filename: $("#fname").value, text: $("#text").value });
+      delete drafts[id];
+      await load();
+      location.hash = "#/job/" + v.id;
+    } catch (e) { toast(e.message); }
+  };
+  refresh();
+}
+
+function renderPreview(v) {
+  let html = v.error ? `<div class="banner" style="margin:12px;border-radius:10px">${esc(v.error.startsWith("interchange") ? "Duplicate file" : "Can't read this file")}<span>${esc(v.error)}</span></div>` : "";
+  for (const s of v.sets) {
+    html += `<div class="setline">Transaction set ${esc(s.control)} <span class="chip ${s.accepted ? "ok" : "bad"}">${s.accepted ? "999 accepts" : "999 rejects"}</span><span class="sub" style="font-weight:400">${s.claims.length} claim${s.claims.length === 1 ? "" : "s"}</span></div>`;
+    if (s.errors.length) html += `<div class="errs">${s.errors.map((e) => `<div><code>${esc(e.code)}</code><span>${esc(e.message)}</span><span class="sub">segment ${e.segment}</span></div>`).join("")}</div>`;
+    html += s.claims.map((r, i) => `<details class="mapped" ${i === 0 && s === v.sets[0] ? "open" : ""}>
+      <summary><b>${esc(r.pcn)}</b> ${freqChip(r)} <span>${esc(r.patient)}</span><span class="sub num" style="margin-left:auto">${r.charge ? usd(r.charge) : ""}</span></summary>
+      <div class="yaml">${yaml(r.mapped)}</div></details>`).join("");
+  }
+  if (!v.sets.length && !v.error) html = `<div class="empty" style="padding:40px">No transaction sets.</div>`;
+  $("#preview").innerHTML = html;
+}
+
+// yaml renders protojson as YAML, keeping the proto's field order.
+function yaml(v, pad = "") {
+  const scalar = (x) => {
+    if (typeof x === "number" || typeof x === "boolean") return `<span class="n">${x}</span>`;
+    const plain = /^[A-Za-z_][\w .:/@-]*$/.test(x) && !/^(true|false|null|yes|no|on|off|~)$/i.test(x) && !/: |\s$/.test(x);
+    return `<span class="s">${esc(plain ? x : JSON.stringify(x))}</span>`;
+  };
+  if (Array.isArray(v)) {
+    return v.map((item) => {
+      if (item && typeof item === "object") {
+        const inner = yaml(item, pad + "  ");
+        return `${pad}<span class="d">-</span> ${inner.slice(pad.length + 2)}`;
+      }
+      return `${pad}<span class="d">-</span> ${scalar(item)}\n`;
+    }).join("");
+  }
+  return Object.entries(v).map(([k, x]) => {
+    const key = `${pad}<span class="k">${esc(k)}</span><span class="d">:</span>`;
+    if (x && typeof x === "object") {
+      if (Array.isArray(x) && x.every((i) => i === null || typeof i !== "object")) return `${key}\n${yaml(x, pad + "  ")}`;
+      return `${key}\n${yaml(x, pad + "  ")}`;
+    }
+    return `${key} ${scalar(x)}\n`;
+  }).join("");
+}
+
+const freqChip = (r) => r.frequency === "7" ? `<span class="chip f7">Corrected</span>` : r.frequency === "8" ? `<span class="chip f8">Void</span>` : "";
+
+// Intake's side ends at handing the claim over; what adjudication made of
+// it lives in Journey.
+function result(r, accepted) {
+  if (!accepted) return `<span class="chip REJECTED">Rejected on 999</span>`;
+  if (!r.loaded) return `<span class="chip NOT_LOADED">Not loaded</span>`;
+  return `<a class="claimno" href="/journey/#/claim/${encodeURIComponent(r.id)}" target="_blank" title="See how it adjudicated">Open in Journey ↗</a>`;
+}
+
+function showJob(v) {
+  const sets = v.sets;
+  const nSets = sets.length, okSets = sets.filter((s) => s.accepted).length;
+  const nClaims = sets.reduce((n, s) => n + s.claims.length, 0);
+  const loaded = v.loaded;
+  const o = v.outcomes;
+  const pill = (k, label) => o[k] ? `<span class="chip ${k}">${o[k]} ${label}</span>` : "";
+  const failed = v.status === "FAILED";
+  const flow = `
+    <div class="panel flow">
+      <div class="step"><small>File</small><b class="mono" style="font-size:15px;margin:6px 0 7px">ISA ${esc(v.icn || "—")}</b><div class="sub">${esc(v.sender || "?")} → ${esc(v.receiver || "?")}${v.usage === "T" ? " · test" : ""}</div></div>
+      <div class="step ${failed ? "dead" : ""}"><small>999</small><b>${failed ? "—" : `${okSets}/${nSets}`}</b><div class="pills">${failed ? `<span class="chip FAILED">Not acknowledged</span>` : `${okSets ? `<span class="chip ok">${okSets} accepted</span>` : ""}${nSets - okSets ? `<span class="chip bad">${nSets - okSets} rejected</span>` : ""}`}</div></div>
+      <div class="step ${failed ? "dead" : ""}"><small>Claims loaded</small><b>${failed ? 0 : loaded}<span class="muted" style="font-size:15px;font-weight:500"> / ${nClaims}</span></b><div class="pills">${pill("REJECTED", "rejected")}${pill("NOT_LOADED", "not loaded")}</div></div>
+    </div>`;
+  const banner = failed ? `<div class="banner">${v.error && v.error.startsWith("interchange") ? "Duplicate file" : "File refused"}<span>${esc(v.error)}</span></div>` : "";
+  const setHtml = sets.map((s) => `
+    <div class="panel set">
+      <div class="sethead"><b>Transaction set ${esc(s.control)}</b>
+        <span class="chip ${s.accepted ? "ok" : "bad"}">${s.accepted ? "Accepted" : "Rejected"}</span>
+        <span class="sub">${s.claims.length} claim${s.claims.length === 1 ? "" : "s"}</span></div>
+      ${s.errors.length ? `<div class="errs">${s.errors.map((e) => `<div><code>${esc(e.code)}</code><span>${esc(e.message)}</span><span class="sub">segment ${e.segment}</span></div>`).join("")}</div>` : ""}
+      <div class="tablewrap"><table>
+        <thead><tr><th>Patient control #</th><th>Patient</th><th>Provider</th><th class="r">Charge</th><th></th><th>Loaded</th></tr></thead>
+        <tbody>${s.claims.map((r) => `
+          <tr data-key="${esc(r.key)}" title="Click to see the claim proto ingestion produced">
+            <td><span class="mono">${esc(r.pcn)}</span> ${freqChip(r)}${r.quoted ? `<div class="via">quotes ${esc(r.quoted)}</div>` : ""}</td>
+            <td>${esc(r.patient)}<div class="sub mono">${esc(r.card)}${r.dependent ? " · patient loop" : ""}</div></td>
+            <td>${esc(r.provider)}</td>
+            <td class="r num">${r.charge ? usd(r.charge) : `<span class="muted">–</span>`}</td>
+            <td class="arrow">→</td>
+            <td>${result(r, s.accepted)}</td>
+          </tr>`).join("")}</tbody>
+      </table></div>
+    </div>`).join("");
+  const raw = v.segments.map((g) => {
+    const env = /^(ISA|GS|ST|SE|GE|IEA)\*/.test(g.text);
+    return `<div class="${g.error ? "err" : env ? "env" : ""}" data-claim="${esc(g.claim || "")}"><i>${g.pos}</i>${esc(g.text)}</div>`;
+  }).join("");
+  $("#main").innerHTML = `
+    <div class="head"><h1 class="mono">${esc(v.filename)}</h1><span class="chip ${v.status}">${esc(nice(v.status))}</span><span class="meta">${time(v.received)}</span></div>
+    ${banner}${flow}${setHtml}
+    <details class="panel" id="rawp"><summary>837 file <span class="muted">${v.segments.length} segments · hover a claim to find its segments</span></summary><div class="raw mono">${raw}</div></details>
+    ${v.ack ? `<details class="panel"><summary>999 acknowledgment <span class="muted">sent back to ${esc(v.sender)}</span></summary><div class="raw mono">${v.ack.trim().split("\n").map((l, i) => `<div><i>${i + 1}</i>${esc(l)}</div>`).join("")}</div></details>` : ""}`;
+  document.querySelectorAll("tr[data-key]").forEach((tr) => {
+    tr.onmouseenter = () => {
+      tr.classList.add("hot");
+      document.querySelectorAll(`.raw div[data-claim="${CSS.escape(tr.dataset.key)}"]`).forEach((d) => d.classList.add("in"));
+    };
+    tr.onmouseleave = () => {
+      tr.classList.remove("hot");
+      document.querySelectorAll(".raw div.in").forEach((d) => d.classList.remove("in"));
+    };
+    tr.onclick = (e) => {
+      if (e.target.closest("a")) return;
+      const next = tr.nextElementSibling;
+      if (next && next.classList.contains("yamlrow")) { next.remove(); tr.classList.remove("open"); return; }
+      const row = v.sets.flatMap((s) => s.claims).find((r) => r.key === tr.dataset.key);
+      tr.classList.add("open");
+      tr.insertAdjacentHTML("afterend", `<tr class="yamlrow"><td colspan="6"><div class="yaml">${yaml(row.mapped)}</div></td></tr>`);
+    };
+  });
+}
+
+$("#reset").onclick = async () => {
+  if (!confirm("Reset the sandbox? Journey's claims go back to Monday morning and loaded files are cleared.")) return;
+  S = await post("api/reset"); drafts = {}; location.hash = "#/"; route(); toast("Sandbox reset.");
+};
+window.onhashchange = route;
+load().then(route);
+</script>
+</body>
+</html>

@@ -254,6 +254,24 @@ func (s *Sim) Apply(a Action) *Result {
 	return res
 }
 
+// Do runs something outside the Action vocabulary (e.g. loading a file)
+// as one logged event with the given title.
+func (s *Sim) Do(actor, title string, f func(ctx context.Context) error) *Result {
+	ctx := store.WithActor(context.Background(), actor)
+	entry := &LogEntry{N: len(s.log) + 1, Title: title, Lines: []string{}}
+	s.log = append(s.log, entry)
+	s.cur = entry
+	defer func() { s.cur = nil }()
+	res := &Result{Title: title}
+	if err := f(ctx); err != nil {
+		entry.Error, res.Error = err.Error(), err.Error()
+	} else {
+		res.OK = true
+	}
+	res.Lines = entry.Lines
+	return res
+}
+
 func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result) error {
 	dry := map[bool]string{true: " (dry run)", false: ""}[a.DryRun]
 	if a.ClaimID != "" {

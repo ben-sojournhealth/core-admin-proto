@@ -235,15 +235,60 @@ func GetDetail(s *sim.Sim, id string) (*Detail, error) {
 			d.Timeline = append(d.Timeline, e)
 		}
 	}
-	related, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 100, Filter: func(o *claimsv1.Claim) bool {
-		return o.GetId() != id && o.GetClaimNumber() == c.GetClaimNumber()
+	related, err := lineage(ctx, s, c)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range related {
+		if r.GetId() != id {
+			d.Related = append(d.Related, Related{ID: r.GetId(), Number: claims.DisplayNumber(r)})
+		}
+	}
+	return d, nil
+}
+
+// lineage is every claim connected to c by original links, oldest first.
+// Usually they share a claim number, but a correction linked after it was
+// numbered keeps its own, so the links, not the number, define the family.
+func lineage(ctx context.Context, s *sim.Sim, c *claimsv1.Claim) ([]*claimsv1.Claim, error) {
+	all, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 100_000, Filter: func(o *claimsv1.Claim) bool {
+		return o.GetOriginalClaimId() != "" || o.GetClaimNumber() == c.GetClaimNumber()
 	}})
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(related, func(i, j int) bool { return related[i].GetClaimVersion() < related[j].GetClaimVersion() })
-	for _, r := range related {
-		d.Related = append(d.Related, Related{ID: r.GetId(), Number: claims.DisplayNumber(r)})
+	byID := map[string]*claimsv1.Claim{c.GetId(): c}
+	children := map[string][]*claimsv1.Claim{}
+	for _, o := range all {
+		byID[o.GetId()] = o
+		if p := o.GetOriginalClaimId(); p != "" {
+			children[p] = append(children[p], o)
+		}
 	}
-	return d, nil
+	root := c
+	for seen := map[string]bool{}; root.GetOriginalClaimId() != "" && !seen[root.GetId()]; {
+		seen[root.GetId()] = true
+		p, ok := byID[root.GetOriginalClaimId()]
+		if !ok {
+			if p, err = s.Repos.Claims.Get(ctx, root.GetOriginalClaimId()); err != nil {
+				break
+			}
+		}
+		root = p
+	}
+	var out []*claimsv1.Claim
+	seen := map[string]bool{}
+	for queue := []*claimsv1.Claim{root}; len(queue) > 0; queue = queue[1:] {
+		x := queue[0]
+		if seen[x.GetId()] {
+			continue
+		}
+		seen[x.GetId()] = true
+		out = append(out, x)
+		queue = append(queue, children[x.GetId()]...)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].GetReceivedTime().AsTime().Before(out[j].GetReceivedTime().AsTime())
+	})
+	return out, nil
 }

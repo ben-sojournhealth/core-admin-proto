@@ -5,22 +5,28 @@
 //
 // Each demo lives under its own path (/claims-lifecycle/ and its API at
 // /claims-lifecycle/api/). All state is in memory and shared by every
-// browser tab; Reset starts over from the seed data.
+// browser tab; Reset starts over from the seed data. Journey and Claims
+// Intake share one sandbox.
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"flag"
 	"io/fs"
 	"log"
 	"net/http"
 	"sync"
 
+	ingestionv1 "coreadmin/gen/coreadmin/ingestion/v1"
 	"coreadmin/internal/demos"
+	"coreadmin/internal/intake"
 	"coreadmin/internal/journey"
 	"coreadmin/internal/scenario"
 	"coreadmin/internal/sim"
+	"coreadmin/internal/x12"
 )
 
 //go:embed web
@@ -116,10 +122,46 @@ func (s *server) handle(f func(r *http.Request) (*sim.Result, error)) http.Handl
 	}
 }
 
-// journeyServer backs the Journey workbench with its own sandbox.
+// journeyServer backs the Journey workbench with its own sandbox. Claims
+// Intake loads files into the same sandbox, so claims it takes in show up
+// in Journey's queues.
 type journeyServer struct {
-	mu  sync.Mutex
-	sim *sim.Sim
+	mu     sync.Mutex
+	sim    *sim.Sim
+	intake *intake.Processor
+}
+
+func newJourney() (*journeyServer, error) {
+	s, err := journey.New()
+	if err != nil {
+		return nil, err
+	}
+	return &journeyServer{sim: s, intake: &intake.Processor{
+		Repos: s.Repos, Claims: s.Claims, Now: s.Claims.Now, Logf: s.Claims.Logf,
+		Files: map[string][]byte{}, ReceiverID: intake.OurID,
+	}}, nil
+}
+
+type sampleView struct {
+	intake.Sample
+	Sent bool `json:"sent"`
+}
+
+func (j *journeyServer) intakeState(ctx context.Context) (any, error) {
+	jobs, err := j.intake.Jobs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sent, err := j.intake.Loaded(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var samples []sampleView
+	for _, x := range intake.Samples() {
+		ic, _ := x12.Parse([]byte(x.Text))
+		samples = append(samples, sampleView{Sample: x, Sent: ic != nil && sent[ic.ControlNumber()]})
+	}
+	return map[string]any{"samples": samples, "jobs": jobs}, nil
 }
 
 func (j *journeyServer) handle(f func(r *http.Request) (any, error)) http.HandlerFunc {
@@ -188,11 +230,10 @@ func main() {
 	}))
 
 	// Journey: the examiner workbench.
-	js, err := journey.New()
+	j, err := newJourney()
 	if err != nil {
 		log.Fatal(err)
 	}
-	j := &journeyServer{sim: js}
 	const jp = "/journey"
 	mux.HandleFunc("GET "+jp+"/api/state", j.handle(func(*http.Request) (any, error) { return journey.Snapshot(j.sim) }))
 	mux.HandleFunc("GET "+jp+"/api/claim", j.handle(func(r *http.Request) (any, error) {
@@ -205,13 +246,58 @@ func main() {
 		}
 		return j.sim.Apply(a), nil
 	}))
-	mux.HandleFunc("POST "+jp+"/api/reset", j.handle(func(*http.Request) (any, error) {
-		fresh, err := journey.New()
+	reset := func() error {
+		fresh, err := newJourney()
 		if err != nil {
+			return err
+		}
+		j.sim, j.intake = fresh.sim, fresh.intake
+		return nil
+	}
+	mux.HandleFunc("POST "+jp+"/api/reset", j.handle(func(*http.Request) (any, error) {
+		if err := reset(); err != nil {
 			return nil, err
 		}
-		j.sim = fresh
 		return journey.Snapshot(j.sim)
+	}))
+
+	// Claims Intake: 837 files into the Journey sandbox.
+	const ci = "/claims-intake"
+	mux.HandleFunc("GET "+ci+"/api/state", j.handle(func(r *http.Request) (any, error) { return j.intakeState(r.Context()) }))
+	mux.HandleFunc("GET "+ci+"/api/job", j.handle(func(r *http.Request) (any, error) {
+		return j.intake.View(r.Context(), r.URL.Query().Get("id"))
+	}))
+	mux.HandleFunc("POST "+ci+"/api/ingest", j.handle(func(r *http.Request) (any, error) {
+		var in struct{ Filename, Text string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			return nil, err
+		}
+		if in.Filename == "" {
+			in.Filename = "upload.837"
+		}
+		var job *ingestionv1.IngestionJob
+		res := j.sim.Do("clearinghouse", "Loaded 837 file "+in.Filename, func(ctx context.Context) error {
+			var err error
+			job, err = j.intake.Ingest(ctx, in.Filename, []byte(in.Text))
+			return err
+		})
+		if !res.OK {
+			return nil, errors.New(res.Error)
+		}
+		return j.intake.View(r.Context(), job.GetId())
+	}))
+	mux.HandleFunc("POST "+ci+"/api/preview", j.handle(func(r *http.Request) (any, error) {
+		var in struct{ Text string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			return nil, err
+		}
+		return j.intake.Preview(r.Context(), []byte(in.Text))
+	}))
+	mux.HandleFunc("POST "+ci+"/api/reset", j.handle(func(r *http.Request) (any, error) {
+		if err := reset(); err != nil {
+			return nil, err
+		}
+		return j.intakeState(r.Context())
 	}))
 
 	log.Printf("demos on http://%s", *addr)

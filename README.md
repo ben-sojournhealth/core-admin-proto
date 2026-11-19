@@ -14,6 +14,8 @@ internal/stoploss/             Stop-loss tracking interfaces
 internal/claims/               ClaimsService operations (process, reprocess, adjust, void, holds, flags)
 internal/demos/                Demo catalog and how demos map onto the architecture diagram
 internal/journey/              Journey sandbox: the two-week workload and the claim detail view
+internal/intake/               837P intake: maps files to claims, writes the 999, sample files
+internal/x12/                  X12 reader/writer (envelopes and segments, no transaction knowledge)
 internal/sim/                  Sandbox: seeded data, fixed clock, event log, one Action type
 internal/scenario/             Scenario library; each scenario is also a test
 internal/seed/                 Loads seed/ fixtures (strict protojson)
@@ -35,7 +37,19 @@ To add a demo: add it to `internal/demos/demos.go` with the components it covers
 
 `/journey/`: the claims portal, the examiner's view of the claims system. Work queues (pended claims by reason, review flags, payment holds) and a claim page with the decision, money breakdown, the member's accumulators and the claim's activity. Examiners override judgment pends with a note, reprocess data pends, adjust and void, clear flags and release holds.
 
-It runs its own sandbox (`internal/journey`), pre-loaded with two weeks of claims across four families so the queues start with work in them. Reset returns to that starting point.
+It runs its own sandbox (`internal/journey`), pre-loaded with two weeks of claims across four families so the queues start with work in them. Claims Intake loads files into the same sandbox. Reset returns to that starting point.
+
+### Claims Intake
+
+`/claims-intake/`: 837P files from the clearinghouse. Pick a sample (or edit one, or paste your own), send it, and see the 999 verdict per transaction set, each claim as intake mapped it (as YAML), the raw file with each claim's segments, and the 999 we return. The page stops where intake does: it doesn't show adjudication results. Claims load into Journey's sandbox, and each loaded claim links to Journey to see how it adjudicated.
+
+Intake runs once per file and only reads. It copies the submitted fields onto the claim exactly as sent and looks nothing up. Everything that's matched to our data happens in adjudication, which reruns on every reprocess:
+
+- **999.** Rejects only what can't be read reliably: envelope errors (SE count, control numbers), missing required segments or elements, bad codes. A rejected transaction set loads nothing; other sets in the file still load. A file whose ISA13 we've already loaded from that sender is a duplicate and loads nothing.
+- **Every readable claim is saved and visible to examiners**, even when nothing matches. The clearinghouse received date is BHT04/05 (one clearinghouse for now; no per-clearinghouse configuration).
+- **Adjudication matches on every run, from the submitted fields only.** Member: by the 837 member id, or for a dependent sent in the 2000C patient loop, by first name and birth date in that member's household. Original (frequency 7/8): by `original_link` if set, otherwise by the quoted REF*F8 resolved to the claim's current version. What a run matched is recorded on that run's `Adjudication` (and copied to the claim's output-only `member_id`, `customer_id`, `original_claim_id`), never written into the submitted fields. So a rerun after enrollment catches up, or after an examiner links an original, matches again.
+- **The claim number is assigned by the first adjudication run, before the claim is saved, and never changes.** A correction matched on that run takes the original's number and the next version (`-2`). One matched later (by a rerun or an examiner's link) keeps its own number, and Journey shows the relationship as a badge: "Corrects 26063-A-00001-2", or "Correction · original not linked" until then. Journey's "Other versions" follows the links, so one claim's history can span numbers.
+- **Unmatched pends.** No member: `MEMBER_NOT_FOUND`. No original: `ORIGINAL_NOT_FOUND`. An original that's still pended, in an unreleased payment run, or already being replaced: the claim pends until that settles, and reprocessing finishes it (including finalizing a pended void).
 
 ### Claims Lifecycle
 
@@ -45,7 +59,7 @@ The left panel is the scenario library (`internal/scenario/library.go`). Each sc
 
 What is real and what is simplified:
 
-- Real: the adjudication engine (`adjudication.DefaultEngine`), the accumulator ledger with its revision check, and the claims operations. Professional claims with one line; no coordination of benefits, benefit limits or bundling.
+- Real: the adjudication engine (`adjudication.DefaultEngine`), the accumulator ledger with its revision check, and the claims operations. Professional claims; no coordination of benefits, benefit limits or bundling.
 - Simplified: the payment system (`internal/claims/payment.go`) only writes payment state back onto claims; remittances and netting are log lines. Eligibility and fee schedule changes are direct edits standing in for file loads.
 
 | Domain | Key resources |

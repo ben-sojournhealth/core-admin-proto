@@ -83,8 +83,8 @@ func Catalog() []Demo {
 			Links:   []Link{{Component: PlanDesign}},
 		},
 		{
-			ID: "claims-intake", Title: "Claims Intake", Status: Planned,
-			Summary: "837 batches: acknowledgments, timely filing and duplicate detection.",
+			ID: "claims-intake", Title: "Claims Intake", Status: Live, Path: "/claims-intake/",
+			Summary: "837P files from the clearinghouse: the 999, corrected claims and voids, and claims that pend instead of bouncing.",
 			Links:   []Link{{Component: Clearinghouse}, {Component: Ingestion}},
 		},
 		{
