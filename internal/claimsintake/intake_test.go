@@ -1,4 +1,4 @@
-package intake_test
+package claimsintake_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	ingestionv1 "coreadmin/gen/coreadmin/ingestion/v1"
-	"coreadmin/internal/intake"
+	"coreadmin/internal/claimsintake"
 	"coreadmin/internal/repo"
 	"coreadmin/internal/x12"
 )
@@ -25,28 +25,28 @@ func (r *received) Receive(_ context.Context, c *claimsv1.Claim) (*claimsv1.Clai
 	return c, nil
 }
 
-func setup() (*intake.Processor, *received) {
+func setup() (*claimsintake.Processor, *received) {
 	r := &received{}
 	clock := time.Date(2026, 3, 16, 9, 0, 0, 0, time.UTC)
-	return &intake.Processor{
-		Repos: repo.NewInMemory(), Claims: r, Files: map[string][]byte{}, ReceiverID: intake.OurID,
+	return &claimsintake.Processor{
+		Repos: repo.NewInMemory(), Claims: r, Files: map[string][]byte{}, ReceiverID: claimsintake.OurID,
 		Now: func() time.Time { clock = clock.Add(time.Second); return clock },
 	}, r
 }
 
-func sample(t *testing.T, id string) intake.Sample {
+func sample(t *testing.T, id string) claimsintake.Sample {
 	t.Helper()
-	for _, x := range intake.Samples() {
+	for _, x := range claimsintake.Samples() {
 		if x.ID == id {
 			return x
 		}
 	}
 	t.Fatalf("no sample %s", id)
-	return intake.Sample{}
+	return claimsintake.Sample{}
 }
 
 // ingest loads a sample and returns its job and the claims handed over.
-func ingest(t *testing.T, p *intake.Processor, r *received, id string) (*ingestionv1.IngestionJob, []*claimsv1.Claim) {
+func ingest(t *testing.T, p *claimsintake.Processor, r *received, id string) (*ingestionv1.IngestionJob, []*claimsv1.Claim) {
 	t.Helper()
 	before := len(r.claims)
 	x := sample(t, id)

@@ -1,4 +1,4 @@
-// Package intake loads inbound claim files: X12 837P from the
+// Package claimsintake loads inbound claim files: X12 837P from the
 // clearinghouse. A file is checked for structure (answered with a 999),
 // each accepted transaction set is mapped to Claims, and every claim is
 // handed to claims.Service.Receive.
@@ -9,7 +9,7 @@
 // when that data changes. The 999 rejects only what cannot be read
 // reliably (envelope errors, missing required segments and elements, bad
 // codes).
-package intake
+package claimsintake
 
 import (
 	"fmt"

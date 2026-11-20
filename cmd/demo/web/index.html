@@ -46,15 +46,9 @@ svg { display: block; width: 100%; min-width: 860px; height: auto; }
 .node.app.live .s { fill: var(--accent-ink); opacity: .8; }
 .node.live:hover rect, .node.hl rect { stroke-width: 2.6; }
 .node.planned.hl rect { stroke: var(--accent); }
-.group rect { fill: none; stroke: var(--line); stroke-width: 1.2; }
-.group text { font-size: 12px; font-weight: 650; letter-spacing: .06em; fill: var(--muted); }
-.group.live { cursor: pointer; }
-.group.live:hover rect { stroke: var(--accent); }
 .edge { fill: none; stroke: var(--edge); stroke-width: 1.5; }
 .edge-label { font-size: 11px; fill: var(--muted); }
 .arrow { fill: var(--edge); }
-.store rect { fill: none; stroke: var(--line); stroke-dasharray: 3 4; }
-.store text { font-size: 12px; fill: var(--muted); }
 
 /* demo cards */
 h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 22px 2px 10px; font-weight: 650; }
@@ -74,7 +68,7 @@ a.demo:hover, .demo.hl { border-color: var(--accent); }
   <div class="legend"><span class="l-live">has a demo</span><span class="l-planned">demo planned</span><span class="l-ext">outside the system</span></div>
 </header>
 <main>
-  <div class="card diagram"><svg id="arch" viewBox="0 0 1100 560" role="img" aria-label="System architecture"></svg></div>
+  <div class="card diagram"><svg id="arch" viewBox="0 0 1100 480" role="img" aria-label="System architecture"></svg></div>
   <h2>Demos</h2>
   <div class="demos" id="demos"></div>
 </main>
@@ -86,23 +80,24 @@ const NODES = [
   { id: "enrollment",    x: 20,  y: 70,  w: 160, t: "Employers",        s: "834 enrollment", ext: true },
   { id: "clearinghouse", x: 20,  y: 230, w: 160, t: "Clearinghouses",   s: "837 claims", ext: true },
   { id: "rosters",       x: 20,  y: 390, w: 160, t: "Provider networks", s: "rosters · contracts", ext: true },
-  { id: "ingestion",     x: 230, y: 70,  w: 130, h: 392, t: "Ingestion", s: "validate · load" },
+  { id: "enrollment-intake", x: 220, y: 70,  w: 160, t: "Enrollment Intake", s: "834 full · change" },
+  { id: "claims-intake",     x: 220, y: 230, w: 160, t: "Claims Intake",     s: "837 · 999" },
+  { id: "provider-intake",   x: 220, y: 390, w: 160, t: "Provider Intake",   s: "roster loads" },
   { id: "plan-design",   x: 410, y: 20,  w: 170, t: "Plan Design",      s: "per-customer benefits" },
   { id: "eligibility",   x: 410, y: 130, w: 170, t: "Eligibility",      s: "members · coverage" },
   { id: "provider-data", x: 410, y: 390, w: 170, t: "Provider Data",    s: "networks · pricing" },
   { id: "journey",       x: 650, y: 18,  w: 190, h: 60, t: "Journey",      s: "claims portal", app: true },
-  { id: "adjudication",  x: 650, y: 148, w: 190, t: "Adjudication",     s: "price · benefits · cost share" },
-  { id: "accumulators",  x: 650, y: 258, w: 190, t: "Accumulators",     s: "deductibles · out-of-pocket" },
-  { id: "claim-ops",     x: 650, y: 368, w: 190, t: "Pends & Adjustments", s: "pend · adjust · void" },
-  { id: "payments",      x: 910, y: 148, w: 170, t: "Payments",         s: "runs · 835 · EFT" },
+  { id: "adjudication",  x: 650, y: 148, w: 190, t: "Claim Adjudication", s: "price · pend · adjust · void" },
+  { id: "remittance",    x: 910, y: 20,  w: 170, t: "Remittance & EOBs", s: "835 · EOP · EOB" },
+  { id: "payments",      x: 910, y: 148, w: 170, t: "Payments",         s: "runs · EFT · checks" },
   { id: "stop-loss",     x: 910, y: 368, w: 170, t: "Stop-Loss",        s: "specific · aggregate" },
 ];
-const CLAIMS = { x: 630, y: 110, w: 230, h: 352 };
 const EDGES = [
-  ["M180,106 H230"], ["M180,266 H230"], ["M180,426 H230"],
-  ["M360,166 H410"], ["M360,426 H410"], ["M360,266 H630"],
-  ["M580,56 H605 V136 H630"], ["M745,78 V110", "", 0, 0, "both"], ["M580,166 H630"], ["M580,426 H630"],
-  ["M860,184 H910"], ["M860,404 H910"],
+  ["M180,106 H220"], ["M180,266 H220"], ["M180,426 H220"],
+  ["M380,106 H395 V166 H410"], ["M380,426 H410"], ["M380,266 H700 V220"],
+  ["M580,56 H615 V160 H650"], ["M745,78 V148", "", 0, 0, "both"], ["M580,184 H650"], ["M580,426 H790 V220"],
+  ["M840,184 H910"], ["M840,206 H875 V404 H910"],
+  ["M840,162 H885 V56 H910", "preview", 892, 122], ["M995,148 V92", "paid", 1002, 124],
   ["M995,220 V368", "paid dates", 1002, 298],
 ];
 
@@ -123,17 +118,10 @@ function target(component) {
 function draw() {
   let svg = `<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
     <path class="arrow" d="M0,0 L10,5 L0,10 z"/></marker></defs>`;
-  const claimsLive = demos.some((d) => d.status === "live" && d.links.some((l) => ["adjudication", "accumulators", "claim-ops"].includes(l.component)));
-  const claimsDemo = demos.find((d) => d.id === "claims-lifecycle" && d.status === "live");
-  svg += `<g class="group ${claimsLive ? "live" : ""}" ${claimsDemo ? `data-href="${esc(claimsDemo.path)}"` : ""}>
-    <rect x="${CLAIMS.x}" y="${CLAIMS.y}" width="${CLAIMS.w}" height="${CLAIMS.h}" rx="14"/>
-    <text x="${CLAIMS.x + 20}" y="${CLAIMS.y + 24}">CLAIMS</text></g>`;
   for (const [d, label, lx, ly, both] of EDGES) {
     svg += `<path class="edge" d="${d}" marker-end="url(#ah)" ${both ? `marker-start="url(#ah)"` : ""}/>`;
     if (label) svg += `<text class="edge-label" x="${lx}" y="${ly}">${esc(label)}</text>`;
   }
-  svg += `<g class="store"><rect x="410" y="500" width="670" height="42" rx="10"/>
-    <text x="745" y="526" text-anchor="middle">Document store · every record is protojson</text></g>`;
   for (const n of NODES) {
     const h = n.h || 72;
     const href = n.ext ? null : target(n.id);
@@ -151,7 +139,7 @@ function draw() {
 
   document.getElementById("demos").innerHTML = demos.map((d) => d.status === "live"
     ? `<a class="card demo" href="${esc(d.path)}" data-demo="${esc(d.id)}"><b>${esc(d.title)}</b><p>${esc(d.summary)}</p>
-        <div class="meta">${d.scenarios} scenarios →</div></a>`
+        <div class="meta">${d.scenarios ? `${d.scenarios} scenarios →` : "Open →"}</div></a>`
     : `<div class="card demo planned" data-demo="${esc(d.id)}"><b>${esc(d.title)}</b><p>${esc(d.summary)}</p><div class="meta">Planned</div></div>`).join("");
 }
 

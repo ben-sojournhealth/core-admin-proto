@@ -3,6 +3,8 @@
 package repo
 
 import (
+	"context"
+
 	"coreadmin/internal/store"
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
@@ -11,10 +13,14 @@ import (
 	ingestionv1 "coreadmin/gen/coreadmin/ingestion/v1"
 	planv1 "coreadmin/gen/coreadmin/plan/v1"
 	providerv1 "coreadmin/gen/coreadmin/provider/v1"
+	remittancev1 "coreadmin/gen/coreadmin/remittance/v1"
 	stoplossv1 "coreadmin/gen/coreadmin/stoploss/v1"
 )
 
 type Repos struct {
+	// DB runs transactions across all of the stores below.
+	DB store.Transactor
+
 	Customers store.Store[*customerv1.Customer]
 	Groups    store.Store[*customerv1.Group]
 
@@ -37,25 +43,38 @@ type Repos struct {
 	StopLossFilings    store.Store[*stoplossv1.StopLossFiling]
 
 	IngestionJobs store.Store[*ingestionv1.IngestionJob]
+
+	// 835s as sent.
+	Remittances store.Store[*remittancev1.Remittance]
 }
 
-// NewInMemory returns Repos backed entirely by store.Memory.
+// InTx runs f in one transaction across every store: all of its writes
+// commit together or none do. See store.Transactor.
+func (r *Repos) InTx(ctx context.Context, f func(ctx context.Context) error) error {
+	return r.DB.InTx(ctx, f)
+}
+
+// NewInMemory returns Repos backed entirely by store.Memory, in one
+// database.
 func NewInMemory() *Repos {
+	db := store.NewMemoryDB()
 	return &Repos{
-		Customers:          store.NewMemory[*customerv1.Customer](),
-		Groups:             store.NewMemory[*customerv1.Group](),
-		Plans:              store.NewMemory[*planv1.Plan](),
-		Members:            store.NewMemory[*eligibilityv1.Member](),
-		FamilyAccumulators: store.NewMemory[*eligibilityv1.FamilyAccumulators](),
-		Providers:          store.NewMemory[*providerv1.Provider](),
-		Networks:           store.NewMemory[*providerv1.Network](),
-		Contracts:          store.NewMemory[*providerv1.Contract](),
-		FeeSchedules:       store.NewMemory[*providerv1.FeeSchedule](),
-		Claims:             store.NewMemory[*claimsv1.Claim](),
-		StopLossPolicies:   store.NewMemory[*stoplossv1.StopLossPolicy](),
-		SpecificExposures:  store.NewMemory[*stoplossv1.SpecificExposure](),
-		AggregateExposures: store.NewMemory[*stoplossv1.AggregateExposure](),
-		StopLossFilings:    store.NewMemory[*stoplossv1.StopLossFiling](),
-		IngestionJobs:      store.NewMemory[*ingestionv1.IngestionJob](),
+		DB:                 db,
+		Customers:          store.NewMemoryIn[*customerv1.Customer](db),
+		Groups:             store.NewMemoryIn[*customerv1.Group](db),
+		Plans:              store.NewMemoryIn[*planv1.Plan](db),
+		Members:            store.NewMemoryIn[*eligibilityv1.Member](db),
+		FamilyAccumulators: store.NewMemoryIn[*eligibilityv1.FamilyAccumulators](db),
+		Providers:          store.NewMemoryIn[*providerv1.Provider](db),
+		Networks:           store.NewMemoryIn[*providerv1.Network](db),
+		Contracts:          store.NewMemoryIn[*providerv1.Contract](db),
+		FeeSchedules:       store.NewMemoryIn[*providerv1.FeeSchedule](db),
+		Claims:             store.NewMemoryIn[*claimsv1.Claim](db),
+		StopLossPolicies:   store.NewMemoryIn[*stoplossv1.StopLossPolicy](db),
+		SpecificExposures:  store.NewMemoryIn[*stoplossv1.SpecificExposure](db),
+		AggregateExposures: store.NewMemoryIn[*stoplossv1.AggregateExposure](db),
+		StopLossFilings:    store.NewMemoryIn[*stoplossv1.StopLossFiling](db),
+		IngestionJobs:      store.NewMemoryIn[*ingestionv1.IngestionJob](db),
+		Remittances:        store.NewMemoryIn[*remittancev1.Remittance](db),
 	}
 }

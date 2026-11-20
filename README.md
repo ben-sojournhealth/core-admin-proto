@@ -7,15 +7,17 @@ A prototype core administration system for a health plan payer and TPA. It cover
 ```
 proto/coreadmin/<domain>/v1/   Data models (<domain>.proto) and APIs (<domain>_service.proto)
 gen/                           Generated Go + Connect code (committed; `make gen`)
-internal/store/                Store[T] interface + in-memory protojson implementation
+internal/store/                Store[T] and Transactor interfaces + in-memory protojson implementation
 internal/repo/                 One store per resource type
 internal/adjudication/         Claims pipeline interfaces (eligibility → pricing → cost share)
 internal/stoploss/             Stop-loss tracking interfaces
 internal/claims/               ClaimsService operations (process, reprocess, adjust, void, holds, flags)
 internal/demos/                Demo catalog and how demos map onto the architecture diagram
 internal/journey/              Journey sandbox: the two-week workload and the claim detail view
-internal/intake/               837P intake: maps files to claims, writes the 999, sample files
+internal/claimsintake/         837P claims intake: maps files to claims, writes the 999, sample files
 internal/x12/                  X12 reader/writer (envelopes and segments, no transaction knowledge)
+internal/remittance/           835s from adjudicated claims: build, balance, reverse, render; previews
+internal/remittancedemo/       Remittance demo: samples that adjudicate claims and build their 835
 internal/sim/                  Sandbox: seeded data, fixed clock, event log, one Action type
 internal/scenario/             Scenario library; each scenario is also a test
 internal/seed/                 Loads seed/ fixtures (strict protojson)
@@ -38,6 +40,10 @@ To add a demo: add it to `internal/demos/demos.go` with the components it covers
 `/journey/`: the claims portal, the examiner's view of the claims system. Work queues (pended claims by reason, review flags, payment holds) and a claim page with the decision, money breakdown, the member's accumulators and the claim's activity. Examiners override judgment pends with a note, reprocess data pends, adjust and void, clear flags and release holds.
 
 It runs its own sandbox (`internal/journey`), pre-loaded with two weeks of claims across four families so the queues start with work in them. Claims Intake loads files into the same sandbox. Reset returns to that starting point.
+
+### Remittance
+
+`/remittance/`: from adjudication result to 835. Each sample adjudicates its claims on a fresh sandbox and builds the remittance: a copay, a preventive visit, everything to the deductible, two lines, a denial and a partial denial, a batch of claims on one payment, a corrected claim and a void reversing what an earlier 835 reported, and a void with nothing to net against. The adjudication results sit beside the 835; hovering a service line lights up its segments. Payments go by ACH or check. Nothing is kept between runs.
 
 ### Claims Intake
 
@@ -94,6 +100,8 @@ payment.state:  SELECTED ─► ISSUED ─► CLEARED | RETURNED | VOIDED
 - **Tenancy.** Customer-scoped resources carry `customer_id`. Providers and networks are shared across customers.
 - **Claim identity.** `id` is an internal UUIDv7 (`internal/ids`), assigned at intake and never shown. People see `claim_number`, `YYJJJ-S-NNNNN` (year, day received, source, daily sequence). A replacement or void keeps the original's number with the next version: `26075-E-00012-2`. The Claims Lifecycle sandbox gives originals short ids (`clm_A`) for its scenario scripts and names later versions `clm_A-2`; the sandbox resolves those names to the real ids.
 - **Audit.** Every top-level resource has `audit` (`AuditInfo`). The store stamps it, and `audit.revision` provides optimistic concurrency.
+- **Transactions.** `Repos.InTx` runs work across every store as one transaction: reads see its own writes, and everything commits together or not at all. Each claim operation is one transaction, so receiving, reprocessing, adjusting or voiding a claim saves the claim, its accumulator postings, the original's retirement and any review flags together. Payment run selection and release are one transaction per run. A commit fails with `ErrConflict` if a record it wrote was changed by someone else first; adjudication then recalculates from the start. Activity log lines from a transaction appear only once it commits. `Store.Lock` claims a record for the rest of a transaction without changing it (Postgres's `SELECT … FOR UPDATE`). Adjudication locks a replacement's or void's original before checking it, so two corrections of the same claim in flight at once can't both become its open replacement: the second to commit conflicts, recalculates and sees the first. The in-memory database (`store.MemoryDB`) buffers writes and checks revisions and locks at commit; the Postgres store will do the same with a real transaction.
+- **Remittance.** An 835 (`remittance.v1.Remittance`) covers one payment to one payee from one customer's plan, since a self-funded plan pays from the employer's own account. It is built from each line's adjudication, whose CAS adjustments already balance, and checked against the 835 balancing rules before it exists. It is stored as sent: when a claim is replaced or voided, the reversal (CLP02 22) repeats what the provider was told with the signs flipped, rather than recomputing it, and the payment is the net. A preview is the same build with a placeholder check, for looking at before a claim is finalized; it is never stored. CARCs and remark codes are decided in adjudication, from one table of denial reporting; a CARC that needs a remark code (96 needs N130) without one pends the line (`REMARK_CODE_REQUIRED`) until a rerun gets it right, and the 835 check refuses it too. Not built yet: recoveries that exceed the payment (PLB), and wiring into payment runs.
 - **Lint.** `buf lint` runs with the STANDARD rules. Packages are versioned as `coreadmin.<domain>.v1`.
 
 ## Usage

@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remittance</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --nav: #eef1f4; --ink: #18202b; --muted: #687384; --line: #e2e6ec;
+  --brand: #0f766e; --brand-ink: #ffffff; --brand-soft: #e3f3f1;
+  --amber: #8a5a00; --amber-soft: #fff4d9; --amber-line: #f2d48b;
+  --red: #b42318; --red-soft: #fdecea; --green: #157347; --green-soft: #e2f4ea; --gray-soft: #edf0f3;
+  --blue: #1d4ed8; --blue-soft: #e6edff;
+  --code: #f3f5f8; --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101418; --panel: #171c22; --nav: #13181d; --ink: #e6eaef; --muted: #93a0b0; --line: #262e37;
+    --brand: #2dd4bf; --brand-ink: #062320; --brand-soft: #123532;
+    --amber: #f3c969; --amber-soft: #2e2611; --amber-line: #5c4a1c;
+    --red: #ff8f85; --red-soft: #3a1d1b; --green: #6fdc9f; --green-soft: #15301f; --gray-soft: #232a33;
+    --blue: #93b4ff; --blue-soft: #1a2440;
+    --code: #12171c; --shadow: none;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: inherit; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+
+.top { height: 54px; display: flex; align-items: center; gap: 16px; padding: 0 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 17px; text-decoration: none; }
+.brand svg { width: 22px; height: 22px; color: var(--brand); }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--muted); }
+.top .right a { text-decoration: none; }
+.top .right a:hover, .linkbtn:hover { color: var(--brand); }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--muted); font-size: 13px; }
+
+.shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: calc(100% - 54px); }
+nav { background: var(--nav); border-right: 1px solid var(--line); padding: 14px 12px; overflow-y: auto; }
+nav h4 { margin: 16px 6px 8px; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+nav h4:first-child { margin-top: 2px; }
+.card { display: block; width: 100%; text-align: left; border: 1px solid transparent; background: none; border-radius: 9px; padding: 8px 10px; }
+.card:hover { background: var(--gray-soft); }
+.card.on { background: var(--panel); border-color: var(--line); box-shadow: var(--shadow); }
+.card b { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; }
+.card small { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+.card .sent { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--muted); }
+.job { display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
+.dot.COMPLETED { background: var(--green); }
+.dot.COMPLETED_WITH_ERRORS { background: var(--amber); }
+.dot.FAILED { background: var(--red); }
+main { overflow-y: auto; padding: 20px 26px 48px; }
+@media (max-width: 860px) { .shell { grid-template-columns: 1fr; height: auto; } nav { border-right: 0; border-bottom: 1px solid var(--line); } main { padding: 16px; } }
+
+.head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.head h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; word-break: break-all; }
+.head .meta { color: var(--muted); font-size: 13px; }
+.head .tools { margin-left: auto; display: flex; gap: 8px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 12px; font-weight: 600; white-space: nowrap; }
+.btn:hover { border-color: var(--brand); color: var(--brand); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.btn.primary:hover { filter: brightness(1.07); color: var(--brand-ink); }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; background: var(--gray-soft); color: var(--muted); white-space: nowrap; }
+.chip.APPROVED, .chip.COMPLETED, .chip.ok { background: var(--green-soft); color: var(--green); }
+.chip.DENIED, .chip.FAILED, .chip.bad, .chip.REJECTED, .chip.NOT_LOADED { background: var(--red-soft); color: var(--red); }
+.chip.PENDED, .chip.COMPLETED_WITH_ERRORS { background: var(--amber-soft); color: var(--amber); }
+.chip.f7, .chip.f8 { background: var(--blue-soft); color: var(--blue); }
+
+
+/* flow */
+.flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 16px; }
+.step { position: relative; padding: 14px 16px; }
+.step + .step { border-left: 1px solid var(--line); }
+.step + .step::before { content: ""; position: absolute; left: -7px; top: 50%; width: 12px; height: 12px; background: var(--panel); border-top: 1px solid var(--line); border-right: 1px solid var(--line); transform: translateY(-50%) rotate(45deg); }
+.step small { display: block; font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+.step b { display: block; font-size: 22px; font-weight: 650; margin: 2px 0 4px; }
+.step .sub { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.step.dead b { color: var(--red); }
+@media (max-width: 760px) { .flow { grid-template-columns: 1fr; } .step + .step { border-left: 0; border-top: 1px solid var(--line); } .step + .step::before { display: none; } }
+.banner { border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; background: var(--amber-soft); color: var(--amber); font-weight: 600; }
+.banner span { display: block; font-weight: 400; color: var(--ink); margin-top: 2px; }
+.sub { color: var(--muted); font-size: 12.5px; }
+.chip.REVERSAL, .chip.f7, .chip.f8 { background: var(--blue-soft); color: var(--blue); }
+.chip.ADJUSTED, .chip.VOIDED { background: var(--gray-soft); color: var(--muted); }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 4px 11px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--brand); color: var(--brand-ink); }
+
+/* split */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 1150px) { .split { grid-template-columns: 1fr; } }
+.pane { overflow: hidden; }
+.pane h3 { margin: 0; font-size: 13px; font-weight: 650; padding: 11px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; }
+.pane h3 .muted { font-weight: 400; }
+
+/* claims */
+.claim { border-bottom: 1px solid var(--line); }
+.claim:last-child { border-bottom: 0; }
+.claim.earlier { background: var(--code); }
+.chead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 11px 16px 4px; }
+.chead b { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.cmeta { padding: 0 16px 8px; color: var(--muted); font-size: 12.5px; }
+.claim.hot { box-shadow: inset 3px 0 0 var(--brand); }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 11.5px; font-weight: 600; color: var(--muted); padding: 6px 8px; border-top: 1px solid var(--line); white-space: nowrap; }
+td { padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top; white-space: nowrap; }
+td.r, th.r { text-align: right; }
+th:first-child, td:first-child { padding-left: 16px; }
+tr.line.hot td { background: var(--brand-soft); }
+td.castd { white-space: normal; min-width: 140px; padding-right: 14px; }
+.cas { display: flex; flex-direction: column; gap: 2px; }
+.cas span { font-size: 12px; }
+.cas code { font-weight: 650; }
+.cas .CO { color: var(--muted); }
+.cas .PR { color: var(--amber); }
+.denial { white-space: normal; color: var(--red); font-size: 12px; padding-top: 0; border-top: 0; }
+.voidnote { padding: 0 16px 12px; font-size: 12.5px; color: var(--muted); }
+
+/* 835 */
+.x12 { margin: 0; padding: 8px 0; background: var(--code); font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto; }
+.x12 div { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 14px; padding: 0 14px; }
+.x12 div span { white-space: pre-wrap; word-break: break-all; }
+.x12 div i { font: 11.5px system-ui, sans-serif; color: var(--muted); font-style: normal; align-self: start; padding-top: 2px; white-space: nowrap; }
+.x12 div.env span { color: var(--muted); }
+.x12 div.rev span { color: var(--blue); }
+.x12 div[data-claim] { cursor: default; }
+.x12 div.hot { background: var(--brand-soft); }
+.x12 div.claimstart { margin-top: 6px; }
+
+details.panel { margin-top: 14px; }
+details.panel summary { padding: 11px 16px; cursor: pointer; font-weight: 600; list-style: none; display: flex; gap: 8px; align-items: center; }
+details.panel summary::-webkit-details-marker { display: none; }
+details.panel summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
+details.panel[open] summary::before { transform: rotate(90deg); }
+details.panel summary .muted { font-weight: 400; font-size: 13px; }
+.raw { margin: 0; padding: 12px 14px; border-top: 1px solid var(--line); background: var(--code); white-space: pre; overflow: auto; max-height: 420px; font: 12.5px/1.55 ui-monospace, Menlo, monospace; }
+.yaml { margin: 0; padding: 12px 14px; border-top: 1px solid var(--line); background: var(--code); font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; overflow: auto; max-height: 520px; }
+.yaml .k { color: var(--brand); }
+.yaml .n { color: var(--blue); }
+.yaml .d { color: var(--muted); }
+.empty { padding: 70px 20px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="brand" href="#/">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+    Remittance
+  </a>
+  <div class="right">
+    <span class="seg" id="method"><button data-m="ACH">ACH</button><button data-m="CHECK">Check</button></span>
+    <a href="/">All demos</a>
+  </div>
+</div>
+<div class="shell">
+  <nav id="samples"></nav>
+  <main id="main"><div class="empty">Pick a sample.</div></main>
+</div>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const usd = (c) => (c < 0 ? "-$" : "$") + (Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+async function get(path) { const r = await fetch(path); if (!r.ok) throw new Error(await r.text()); return r.json(); }
+
+let samples = [];
+let method = "ACH";
+try { method = localStorage.getItem("remit-method") || "ACH"; } catch {}
+
+function nav(id) {
+  let group = "";
+  $("#samples").innerHTML = samples.map((x) => {
+    const h = x.group !== group ? `<h4>${esc(group = x.group)}</h4>` : "";
+    return h + `<button class="card ${x.id === id ? "on" : ""}" data-sample="${esc(x.id)}"><b>${esc(x.title)}</b><small>${esc(x.summary)}</small></button>`;
+  }).join("");
+  document.querySelectorAll("[data-sample]").forEach((b) => b.onclick = () => location.hash = "#/" + b.dataset.sample);
+  document.querySelectorAll("#method button").forEach((b) => b.classList.toggle("on", b.dataset.m === method));
+}
+
+function yaml(v, pad = "") {
+  const scalar = (x) => typeof x === "number" || typeof x === "boolean" ? `<span class="n">${x}</span>`
+    : esc(/^[A-Za-z_][\w .:/@-]*$/.test(x) && !/: |\s$/.test(x) ? x : JSON.stringify(x));
+  if (Array.isArray(v)) return v.map((it) => it && typeof it === "object"
+    ? `${pad}<span class="d">-</span> ${yaml(it, pad + "  ").slice(pad.length + 2)}` : `${pad}<span class="d">-</span> ${scalar(it)}\n`).join("");
+  return Object.entries(v).map(([k, x]) => {
+    const key = `${pad}<span class="k">${esc(k)}</span><span class="d">:</span>`;
+    return x && typeof x === "object" ? `${key}\n${yaml(x, pad + "  ")}` : `${key} ${scalar(x)}\n`;
+  }).join("");
+}
+
+const kindChip = (c) => c.kind === "corrected" ? `<span class="chip f7">Corrected</span>` : c.kind === "void" ? `<span class="chip f8">Void</span>` : "";
+
+function claimHTML(c) {
+  const head = `<div class="chead"><b>${esc(c.number)}</b>${kindChip(c)}<span class="chip ${c.status}">${esc(c.status.toLowerCase())}</span>
+      ${c.reversed ? `<span class="chip REVERSAL">reported earlier · reversed here</span>` : ""}</div>
+    <div class="cmeta">${esc(c.patient || "Unknown patient")} · ${esc(c.pcn)}${c.replaces ? ` · replaces ${esc(c.replaces)}` : ""}</div>`;
+  if (c.kind === "void") return `<div class="claim" data-claim="${esc(c.key)}">${head}<div class="voidnote">A void has no lines of its own: on the 835 it is the reversal of ${esc(c.replaces)}.</div></div>`;
+  const rows = c.lines.map((l) => `
+    <tr class="line" data-line="${esc(l.key)}" data-claim="${esc(c.key)}">
+      <td class="mono">${esc(l.procedure)}</td>
+      <td class="r num">${usd(l.charge)}</td>
+      <td class="r num">${l.denial ? "–" : usd(l.allowed)}</td>
+      <td class="num">${l.costShares.map((s) => `${esc(s.label)} ${usd(s.amount)}`).join("<br>") || `<span class="muted">–</span>`}</td>
+      <td class="r num"><b>${usd(l.paid)}</b></td>
+      <td class="castd"><div class="cas">${l.cas.map((a) => `<span class="${a.code.slice(0, 2)}"><code>${esc(a.code)}</code> ${usd(a.amount)} <span class="muted">${esc(a.text)}</span></span>`).join("")}${l.remarks.map((r) => `<span><code>${esc(r.code)}</code> <span class="muted">${esc(r.text)}</span></span>`).join("")}</div></td>
+    </tr>${l.denial ? `<tr class="line" data-line="${esc(l.key)}" data-claim="${esc(c.key)}"><td></td><td colspan="5" class="denial">${esc(l.denial)}</td></tr>` : ""}`).join("");
+  return `<div class="claim ${c.reversed ? "earlier" : ""}" data-claim="${esc(c.key)}">${head}
+    <div class="tablewrap"><table>
+      <thead><tr><th>Service</th><th class="r">Charge</th><th class="r">Allowed</th><th>Member owes</th><th class="r">Paid</th><th>CAS</th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div>`;
+}
+
+function show(v) {
+  const p = v.payment;
+  const inPaid = v.claims.filter((c) => !c.reversed && c.kind !== "void").reduce((n, c) => n + c.paid, 0);
+  const rev = v.segments.filter((s) => s.text.startsWith("CLP*") && s.text.split("*")[2] === "22").length;
+  const clps = v.segments.filter((s) => s.text.startsWith("CLP*")).length;
+  const flow = `<div class="panel flow">
+    <div class="step"><small>Adjudicated</small><b>${v.claims.filter((c) => !c.reversed).length} claim${v.claims.filter((c) => !c.reversed).length === 1 ? "" : "s"}</b><div class="sub">paying ${usd(inPaid)}</div></div>
+    <div class="step ${v.error ? "dead" : ""}"><small>835</small><b>${v.error ? "—" : `${clps} CLP${clps === 1 ? "" : "s"}`}</b><div class="sub">${rev ? `<span class="chip REVERSAL">${rev} reversal${rev === 1 ? "" : "s"}</span>` : ""}${v.error ? "not built" : "balanced"}</div></div>
+    <div class="step ${v.error ? "dead" : ""}"><small>Payment</small><b class="num">${p ? usd(p.amount) : "—"}</b><div class="sub">${p ? (p.method === "NONE" ? "notice only, nothing paid" : `${p.method === "ACH" ? "ACH" : "check"} ${esc(p.trace)} · ${esc(p.date)}`) : ""}</div></div>
+  </div>`;
+  const banner = v.error ? `<div class="banner">No 835<span>${esc(v.error)}</span></div>` : "";
+  let lastClaim = null;
+  const x12 = v.segments.map((s) => {
+    const id = s.text.split("*")[0];
+    const env = ["ISA", "GS", "ST", "SE", "GE", "IEA"].includes(id);
+    const start = id === "CLP";
+    return `<div class="${env ? "env" : ""} ${s.reversal ? "rev" : ""} ${start ? "claimstart" : ""}" ${s.claim ? `data-claim="${esc(s.claim)}"` : ""} ${s.line ? `data-line="${esc(s.line)}"` : ""}><span>${esc(s.text)}</span><i>${esc(s.note)}</i></div>`;
+  }).join("");
+  $("#main").innerHTML = `
+    <div class="head"><h1>${esc(v.sample.title)}</h1><span class="meta">${esc(v.sample.summary)}</span></div>
+    ${flow}${banner}
+    <div class="split">
+      <div class="panel pane"><h3>Adjudication results <span class="muted">going in</span></h3>${v.claims.map(claimHTML).join("")}</div>
+      <div class="panel pane"><h3>835 <span class="muted">005010X221A1${p ? ` · ${esc(p.payer)} → ${esc(p.payee)}` : ""}</span></h3>
+        ${v.error ? `<div class="empty">Nothing to send.</div>` : `<div class="x12">${x12}</div>`}</div>
+    </div>
+    ${v.record ? `<details class="panel"><summary>Remittance record <span class="muted">stored as sent; later reversals come from it</span></summary><div class="yaml">${yaml(v.record)}</div></details>` : ""}
+    ${v.earlier.map((e, i) => `<details class="panel"><summary>Earlier 835 <span class="muted">what the provider was told first</span></summary><div class="raw">${esc(e)}</div></details>`).join("")}`;
+  wire();
+}
+
+// Hovering a line lights up its segments, and the reverse.
+function wire() {
+  const all = () => document.querySelectorAll(".hot");
+  const light = (claim, line) => {
+    all().forEach((e) => e.classList.remove("hot"));
+    if (line) document.querySelectorAll(`[data-line="${CSS.escape(line)}"]`).forEach((e) => e.classList.add("hot"));
+    else if (claim) document.querySelectorAll(`.x12 [data-claim="${CSS.escape(claim)}"]`).forEach((e) => e.classList.add("hot"));
+    if (claim) document.querySelectorAll(`.claim[data-claim="${CSS.escape(claim)}"]`).forEach((e) => e.classList.add("hot"));
+  };
+  document.querySelectorAll("[data-claim]").forEach((el) => {
+    el.addEventListener("mouseenter", (ev) => { ev.stopPropagation(); light(el.dataset.claim, el.dataset.line); });
+    el.addEventListener("mouseleave", () => all().forEach((e) => e.classList.remove("hot")));
+  });
+}
+
+async function route() {
+  const id = location.hash.slice(2) || (samples[0] && samples[0].id);
+  nav(id);
+  if (!id) return;
+  try { show(await get(`api/run?sample=${encodeURIComponent(id)}&method=${method}`)); }
+  catch (e) { $("#main").innerHTML = `<div class="banner">Couldn't run this sample<span>${esc(e.message)}</span></div>`; }
+}
+
+document.querySelectorAll("#method button").forEach((b) => b.onclick = () => {
+  method = b.dataset.m;
+  try { localStorage.setItem("remit-method", method); } catch {}
+  route();
+});
+window.addEventListener("hashchange", route);
+(async () => { samples = await get("api/samples"); route(); })();
+</script>
+</body>
+</html>
