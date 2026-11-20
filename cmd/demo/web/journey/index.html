@@ -214,7 +214,7 @@ const PEND = {
   NO_BENEFIT_MATCH: "No benefit match", MEMBER_NOT_FOUND: "Member not found", NO_PRICE: "No price",
   COVERAGE_IN_GRACE: "Grace period", NO_TIER: "No network tier", NO_PLAN_VERSION: "No plan version",
   ORIGINAL_NOT_FOUND: "Original not found", ORIGINAL_NOT_FINALIZED: "Original not final",
-  ORIGINAL_IN_PAYMENT_RUN: "Original in payment run", ORIGINAL_HAS_OPEN_REPLACEMENT: "Replacement in progress",
+  ORIGINAL_IN_PAYMENT_RUN: "Original in payment run", ORIGINAL_HAS_OPEN_REPLACEMENT: "Replacement in progress", REMARK_CODE_REQUIRED: "Remark code missing",
 };
 const PEND_HELP = {
   PRIOR_AUTH_REQUIRED: "Confirm the authorization, then override.",
@@ -226,6 +226,7 @@ const PEND_HELP = {
   ORIGINAL_NOT_FOUND: "Find the original with the provider, from the patient control number or the EOP. Linking by hand isn't built yet.",
   ORIGINAL_NOT_FINALIZED: "The claim it corrects hasn't been decided. Resolve that claim first, then reprocess this one.",
   ORIGINAL_IN_PAYMENT_RUN: "Reprocess after the payment run is released, or pull the original from the run.",
+  REMARK_CODE_REQUIRED: "A denial reason needs a remark code on the 835 and doesn't have one. Fix the reporting rules, then reprocess.",
 };
 const pendName = (code) => PEND[code] || words(code);
 

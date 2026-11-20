@@ -1,0 +1,135 @@
+syntax = "proto3";
+
+package coreadmin.remittance.v1;
+
+import "coreadmin/claims/v1/claims.proto";
+import "coreadmin/common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// Remittance is one 835: what one payment (or one notice, when nothing is
+// paid) tells one payee about their claims, from one customer's plan. A
+// self-funded plan pays from the employer's own account, so a payment
+// never spans customers.
+//
+// It is built from the claims' adjudications and stored as sent. It is the
+// record of what the provider was told: when a claim is later replaced or
+// voided, the reversal repeats the reported entry with the signs flipped,
+// rather than being recomputed from the claim.
+message Remittance {
+  string id = 1;
+  string customer_id = 2;
+  // N1*PR: the plan paying the claims.
+  Party payer = 3;
+  // N1*PE: who is paid, the billing provider.
+  Party payee = 4;
+  RemittancePayment payment = 5;
+  // In report order. A replacement's reversal of the version it replaces
+  // comes right before it.
+  repeated RemittanceClaim claims = 6;
+  google.protobuf.Timestamp created_time = 7;
+  // Built to look at before anything is finalized or paid. Never stored
+  // or sent; the payment is a placeholder.
+  bool preview = 8;
+  common.v1.AuditInfo audit = 15;
+}
+
+message Party {
+  string name = 1;
+  // Payee: the billing NPI (N104 with XX).
+  string npi = 2;
+  // Payer: the plan sponsor's EIN, which identifies the payer in TRN03.
+  // Payee: the billing TIN (REF*TJ).
+  string tin = 3;
+  common.v1.Address address = 4;
+  // Payer only: who providers call about this remittance (PER*BL).
+  string contact_name = 5;
+  string contact_phone = 6;
+}
+
+message RemittancePayment {
+  PaymentMethod method = 1;
+  // BPR02. Equals the sum of the claims' paid amounts.
+  common.v1.Money amount = 2;
+  // BPR16: the check date or EFT effective date.
+  common.v1.Date date = 3;
+  // TRN02: check number or EFT trace number, which the provider uses to
+  // match the remittance to the money.
+  string trace_number = 4;
+  // ACH only: the accounts the money moves between (BPR07-09, BPR13-15).
+  BankAccount from_account = 5;
+  BankAccount to_account = 6;
+}
+
+enum PaymentMethod {
+  PAYMENT_METHOD_UNSPECIFIED = 0;
+  PAYMENT_METHOD_ACH = 1;
+  PAYMENT_METHOD_CHECK = 2;
+  // Nothing paid: every claim denied, or paid amounts net to zero.
+  PAYMENT_METHOD_NONE = 3;
+}
+
+message BankAccount {
+  string routing_number = 1;
+  string account_number = 2;
+}
+
+// RemittanceClaim is one CLP loop: a claim as reported, or the reversal of
+// one reported earlier.
+message RemittanceClaim {
+  string claim_id = 1;
+  // CLP07: the payer claim number, with its version (26075-E-00012-2).
+  string claim_number = 2;
+  // CLP01: the provider's own claim id, echoed back.
+  string patient_control_number = 3;
+  RemittanceClaimStatus status = 4;
+  // CLP03, CLP04, CLP05. Negative on a reversal.
+  common.v1.Money charge = 5;
+  common.v1.Money paid = 6;
+  common.v1.Money patient_responsibility = 7;
+  // CLP08: place of service for a professional claim.
+  string facility_code = 8;
+  // CLP09: the claim frequency code (1, 7 or 8) as submitted.
+  string frequency_code = 9;
+  // NM1*QC.
+  common.v1.PersonName patient_name = 10;
+  string patient_member_id = 11;
+  // NM1*82, when someone other than the payee rendered the service.
+  claims.v1.ProviderRef rendering_provider = 12;
+  // DTM*050.
+  common.v1.Date received_date = 13;
+  repeated RemittanceLine lines = 14;
+  // For a reversal: the remittance the reversed entry was reported on.
+  string reverses_remittance_id = 15;
+}
+
+// CLP02.
+enum RemittanceClaimStatus {
+  REMITTANCE_CLAIM_STATUS_UNSPECIFIED = 0;
+  // 1: processed as primary. Includes claims that pay nothing because
+  // everything went to the member's deductible.
+  REMITTANCE_CLAIM_STATUS_PROCESSED = 1;
+  // 4: denied.
+  REMITTANCE_CLAIM_STATUS_DENIED = 4;
+  // 22: reversal of a previously reported claim.
+  REMITTANCE_CLAIM_STATUS_REVERSAL = 22;
+}
+
+// RemittanceLine is one SVC loop.
+message RemittanceLine {
+  int32 line_number = 1;
+  string procedure_code = 2;
+  repeated string modifiers = 3;
+  // Institutional lines: SVC04.
+  string revenue_code = 4;
+  // SVC02, SVC03. Negative on a reversal.
+  common.v1.Money charge = 5;
+  common.v1.Money paid = 6;
+  int64 units_milli = 7;
+  common.v1.DateRange service_dates = 8;
+  // CAS: charge - paid = sum of adjustments.
+  repeated claims.v1.CasAdjustment adjustments = 9;
+  // AMT*B6.
+  common.v1.Money allowed = 10;
+  // LQ*HE.
+  repeated string remark_codes = 11;
+}

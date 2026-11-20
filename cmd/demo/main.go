@@ -21,9 +21,10 @@ import (
 	"sync"
 
 	ingestionv1 "coreadmin/gen/coreadmin/ingestion/v1"
+	"coreadmin/internal/claimsintake"
 	"coreadmin/internal/demos"
-	"coreadmin/internal/intake"
 	"coreadmin/internal/journey"
+	"coreadmin/internal/remittancedemo"
 	"coreadmin/internal/scenario"
 	"coreadmin/internal/sim"
 	"coreadmin/internal/x12"
@@ -128,7 +129,7 @@ func (s *server) handle(f func(r *http.Request) (*sim.Result, error)) http.Handl
 type journeyServer struct {
 	mu     sync.Mutex
 	sim    *sim.Sim
-	intake *intake.Processor
+	intake *claimsintake.Processor
 }
 
 func newJourney() (*journeyServer, error) {
@@ -136,14 +137,14 @@ func newJourney() (*journeyServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &journeyServer{sim: s, intake: &intake.Processor{
+	return &journeyServer{sim: s, intake: &claimsintake.Processor{
 		Repos: s.Repos, Claims: s.Claims, Now: s.Claims.Now, Logf: s.Claims.Logf,
-		Files: map[string][]byte{}, ReceiverID: intake.OurID,
+		Files: map[string][]byte{}, ReceiverID: claimsintake.OurID,
 	}}, nil
 }
 
 type sampleView struct {
-	intake.Sample
+	claimsintake.Sample
 	Sent bool `json:"sent"`
 }
 
@@ -157,7 +158,7 @@ func (j *journeyServer) intakeState(ctx context.Context) (any, error) {
 		return nil, err
 	}
 	var samples []sampleView
-	for _, x := range intake.Samples() {
+	for _, x := range claimsintake.Samples() {
 		ic, _ := x12.Parse([]byte(x.Text))
 		samples = append(samples, sampleView{Sample: x, Sent: ic != nil && sent[ic.ControlNumber()]})
 	}
@@ -177,6 +178,17 @@ func (j *journeyServer) handle(f func(r *http.Request) (any, error)) http.Handle
 		if err := json.NewEncoder(w).Encode(out); err != nil {
 			log.Printf("encode: %v", err)
 		}
+	}
+}
+
+func writeJSON(w http.ResponseWriter, v any, err error) {
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("encode: %v", err)
 	}
 }
 
@@ -299,6 +311,17 @@ func main() {
 		}
 		return j.intakeState(r.Context())
 	}))
+
+	// Remittance: adjudication results in, an 835 out. Each run uses a
+	// fresh sandbox, so there is no state and no reset.
+	const rp = "/remittance"
+	mux.HandleFunc("GET "+rp+"/api/samples", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, remittancedemo.Samples(), nil)
+	})
+	mux.HandleFunc("GET "+rp+"/api/run", func(w http.ResponseWriter, r *http.Request) {
+		v, err := remittancedemo.Run(r.Context(), r.URL.Query().Get("sample"), r.URL.Query().Get("method"))
+		writeJSON(w, v, err)
+	})
 
 	log.Printf("demos on http://%s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, mux))

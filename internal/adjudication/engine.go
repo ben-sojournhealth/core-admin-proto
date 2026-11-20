@@ -41,6 +41,9 @@ const (
 	PendOriginalNotFinalized = "ORIGINAL_NOT_FINALIZED"
 	PendOriginalInPaymentRun = "ORIGINAL_IN_PAYMENT_RUN"
 	PendOpenReplacement      = "ORIGINAL_HAS_OPEN_REPLACEMENT"
+	// A line's CARC lacks a remark code it requires (see remarkRules).
+	// Caused by our rules, not the claim: no examiner override clears it.
+	PendRemarkCodeRequired = "REMARK_CODE_REQUIRED"
 
 	DenyCoverageTerminated = "COVERAGE_TERMINATED"
 	DenyProviderSanctioned = "PROVIDER_SANCTIONED"
@@ -57,13 +60,35 @@ var overridable = map[string]bool{
 // Overridable reports whether an examiner override clears this pend code.
 func Overridable(code string) bool { return overridable[code] }
 
-// DenyError denies a whole claim.
+// DenyError denies a whole claim. How it is reported comes from denials.
 type DenyError struct {
-	Code         string
-	Message      string
+	Code    string
+	Message string
+}
+
+// denialReport is how a denial reaches the provider on the 835.
+type denialReport struct {
+	// Claim adjustment reason code.
+	CARC string
+	// PR: the member may be billed for the denied charge. Otherwise CO:
+	// the provider writes it off.
 	MemberLiable bool
-	// CARC to report on the 835.
-	ReasonCode string
+	// Remittance advice remark codes (RARCs): required by some CARCs, and
+	// they say more than the CARC alone.
+	Remarks []string
+}
+
+// denials maps each denial code to its 835 reporting. Every Deny*
+// constant has an entry.
+var denials = map[string]denialReport{
+	// 96: non-covered charge(s); requires a remark code. N130: consult
+	// plan benefit documents for restrictions on this service.
+	DenyNotCovered: {CARC: "96", MemberLiable: true, Remarks: []string{"N130"}},
+	// 27: expenses incurred after coverage terminated.
+	DenyCoverageTerminated: {CARC: "27", MemberLiable: true},
+	// B7: provider not certified or eligible to be paid for this service
+	// on this date.
+	DenyProviderSanctioned: {CARC: "B7"},
 }
 
 func (e *DenyError) Error() string { return fmt.Sprintf("deny %s: %s", e.Code, e.Message) }
@@ -125,11 +150,12 @@ func (e *DefaultEngine) Calculate(ctx context.Context, in *claimsv1.Claim, reaso
 		}
 	} else if errors.As(err, &deny) {
 		for _, l := range c.GetLines() {
-			l.Adjudication = deniedLine(l, deny.Code, deny.Message, deny.MemberLiable, deny.ReasonCode)
+			l.Adjudication = deniedLine(l, deny.Code, deny.Message)
 		}
 	} else if err != nil {
 		return nil, err
 	}
+	checkRemarks(c)
 
 	// Totals and status.
 	var allowed, paid, member int64
@@ -175,6 +201,13 @@ func (e *DefaultEngine) run(ctx context.Context, calc *Calculation) error {
 		orig, adj.OriginalMatch, origErr = e.MatchOriginal(ctx, c)
 		if orig != nil {
 			c.OriginalClaimId, adj.OriginalClaimId = orig.GetId(), orig.GetId()
+			// Lock the original before deciding anything from it, then
+			// read it again: of two corrections of the same claim in
+			// flight at once, only one may find it free.
+			var err error
+			if orig, err = e.lockOriginal(ctx, orig.GetId()); err != nil {
+				return err
+			}
 		}
 		if _, ok := AsPend(origErr); origErr != nil && !ok {
 			return origErr
@@ -277,7 +310,7 @@ func (e *DefaultEngine) run(ctx context.Context, calc *Calculation) error {
 		cat, ben := matchBenefit(version, c, line)
 		if cat == nil {
 			if version.GetDefaultBehavior() == planv1.DefaultBenefitBehavior_DEFAULT_BENEFIT_BEHAVIOR_DENY {
-				line.Adjudication = deniedLine(line, DenyNotCovered, "no benefit covers this service", true, "96")
+				line.Adjudication = deniedLine(line, DenyNotCovered, "no benefit covers this service")
 			} else {
 				pendLine(PendNoBenefitMatch, "no service category on plan %s matches procedure %s", plan.GetId(), line.GetProcedureCode())
 			}
@@ -291,7 +324,7 @@ func (e *DefaultEngine) run(ctx context.Context, calc *Calculation) error {
 		}
 		if cs == nil || !cs.GetCovered() {
 			line.Adjudication = deniedLine(line, DenyNotCovered,
-				fmt.Sprintf("%s is not covered in tier %s", cat.GetName(), tier.GetId()), true, "96")
+				fmt.Sprintf("%s is not covered in tier %s", cat.GetName(), tier.GetId()))
 			continue
 		}
 		la.Benefit = &claimsv1.BenefitApplied{ServiceCategoryId: cat.GetId(), NetworkTierId: tier.GetId(), CostShare: cs}
@@ -383,6 +416,17 @@ var quotedNumber = regexp.MustCompile(`^\s*(\d{5}-[A-Z]-\d{5})(?:-(\d+))?\s*$`)
 // replaced: finalized, out of any unreleased payment run, and not already
 // being replaced by another claim. These are data pends: they clear on
 // reprocessing once the original settles.
+// lockOriginal locks a claim for the rest of the transaction and returns
+// its current version. Every replacement or void runs it, pended or not,
+// so the check for a replacement already in progress can't be passed by
+// two at once. A dry run has no transaction, and nothing to protect.
+func (e *DefaultEngine) lockOriginal(ctx context.Context, id string) (*claimsv1.Claim, error) {
+	if err := e.Repos.Claims.Lock(ctx, id); err != nil {
+		return nil, err
+	}
+	return e.Repos.Claims.Get(ctx, id)
+}
+
 func (e *DefaultEngine) checkOriginal(ctx context.Context, c, orig *claimsv1.Claim) error {
 	name := displayNumber(orig)
 	switch orig.GetStatus() {
@@ -485,9 +529,8 @@ func resolveCoverage(m *eligibilityv1.Member, dos *commonv1.Date) (*eligibilityv
 	}
 	if hadEarlier {
 		return nil, &DenyError{
-			Code:         DenyCoverageTerminated,
-			Message:      fmt.Sprintf("coverage ended before the date of service %s", dates.Format(dos)),
-			MemberLiable: true, ReasonCode: "27",
+			Code:    DenyCoverageTerminated,
+			Message: fmt.Sprintf("coverage ended before the date of service %s", dates.Format(dos)),
 		}
 	}
 	return nil, Pend(PendNoEligibility, "member %s has no medical coverage on %s", m.GetId(), dates.Format(dos))
@@ -541,7 +584,7 @@ func (e *DefaultEngine) resolveProvider(ctx context.Context, ref *claimsv1.Provi
 	}
 	p := ps[0]
 	if p.GetStatus() == providerv1.ProviderStatus_PROVIDER_STATUS_SANCTIONED {
-		return nil, nil, &DenyError{Code: DenyProviderSanctioned, Message: "provider is excluded from payment", ReasonCode: "B7"}
+		return nil, nil, &DenyError{Code: DenyProviderSanctioned, Message: "provider is excluded from payment"}
 	}
 	var parts []*providerv1.NetworkParticipation
 	for _, np := range p.GetParticipations() {
@@ -857,19 +900,24 @@ func DeriveCAS(la *claimsv1.LineAdjudication) []*claimsv1.CasAdjustment {
 	return out
 }
 
-func deniedLine(l *claimsv1.ClaimLine, code, message string, memberLiable bool, reasonCode string) *claimsv1.LineAdjudication {
+func deniedLine(l *claimsv1.ClaimLine, code, message string) *claimsv1.LineAdjudication {
+	r, ok := denials[code]
+	if !ok {
+		panic(fmt.Sprintf("adjudication: denial %s has no 835 reporting in denials", code))
+	}
 	group := claimsv1.CasGroup_CAS_GROUP_CONTRACTUAL
-	if memberLiable {
+	if r.MemberLiable {
 		group = claimsv1.CasGroup_CAS_GROUP_PATIENT_RESPONSIBILITY
 	}
 	return &claimsv1.LineAdjudication{
 		Status: claimsv1.LineStatus_LINE_STATUS_DENIED,
-		Denial: &claimsv1.Denial{Code: code, Message: message, MemberLiable: memberLiable},
+		Denial: &claimsv1.Denial{Code: code, Message: message, MemberLiable: r.MemberLiable},
 		Charge: l.GetCharge(),
 		Paid:   money(0),
 		CasAdjustments: []*claimsv1.CasAdjustment{
-			{Group: group, ReasonCode: reasonCode, Amount: l.GetCharge()},
+			{Group: group, ReasonCode: r.CARC, Amount: l.GetCharge()},
 		},
+		RemarkCodes: slices.Clone(r.Remarks),
 	}
 }
 

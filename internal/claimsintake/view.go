@@ -1,4 +1,4 @@
-package intake
+package claimsintake
 
 import (
 	"context"
