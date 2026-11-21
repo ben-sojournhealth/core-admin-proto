@@ -16,6 +16,7 @@ package remittance
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -213,7 +214,8 @@ func (b *Builder) entry(ctx context.Context, c *claimsv1.Claim) (*remittancev1.R
 // reverse: the claim was never reported, or its report was already
 // reversed.
 func (b *Builder) reversal(ctx context.Context, claimID string) (*remittancev1.RemittanceClaim, error) {
-	sent, _, err := b.Repos.Remittances.List(ctx, store.ListOptions[*remittancev1.Remittance]{PageSize: 10_000, Filter: func(r *remittancev1.Remittance) bool {
+	doc, _ := json.Marshal(map[string]any{"claims": []map[string]string{{"claimId": claimID}}})
+	sent, _, err := b.Repos.Remittances.List(ctx, store.ListOptions[*remittancev1.Remittance]{PageSize: 10_000, Where: []store.Cond{store.Contains(string(doc))}, Filter: func(r *remittancev1.Remittance) bool {
 		return slices.ContainsFunc(r.GetClaims(), func(e *remittancev1.RemittanceClaim) bool { return e.GetClaimId() == claimID })
 	}})
 	if err != nil {

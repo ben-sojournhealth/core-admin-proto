@@ -32,6 +32,11 @@ message IngestionJob {
   repeated TransactionSetResult transaction_sets = 17;
   // Where the acknowledgment we generated (999) is stored.
   string acknowledgment_uri = 18;
+  // For a claims file: the claim numbers reserved for it, one per claim
+  // loop (CLM) in file order, rejected transaction sets included. The
+  // claim at position i is numbered first + i, so a number in the block
+  // with no claim means that claim loop didn't load.
+  ClaimNumberBlock claim_numbers = 19;
   common.v1.AuditInfo audit = 15;
 }
 
@@ -115,4 +120,13 @@ message RecordError {
   // Identifier of the affected record if it could be parsed (card id,
   // NPI, claim number).
   string record_key = 4;
+}
+
+// ClaimNumberBlock is a range of claim numbers reserved together:
+// prefix + five-digit sequence, from first to last inclusive.
+message ClaimNumberBlock {
+  // YYJJJ-S-: two-digit year, day of year received, source letter.
+  string prefix = 1;
+  int32 first = 2;
+  int32 last = 3;
 }

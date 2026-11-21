@@ -20,6 +20,12 @@ func (s *Service) Receive(ctx context.Context, in *claimsv1.Claim) (*claimsv1.Cl
 	if c.GetId() == "" {
 		c.Id = ids.NewV7(s.Now())
 	}
+	// The number intake reserved for it is the submitter's to keep;
+	// everything else system-owned is reset.
+	number := c.GetClaimNumber()
 	s.prepareNew(c)
+	if number != "" {
+		c.ClaimNumber, c.ClaimVersion = number, 1
+	}
 	return s.register(ctx, c, "")
 }

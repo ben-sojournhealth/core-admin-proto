@@ -280,10 +280,7 @@ func (s *Sim) FamilyAccumulators(memberID string) (AccumulatorsView, error) {
 	if err != nil {
 		return AccumulatorsView{}, err
 	}
-	family, _, err := s.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{
-		PageSize: 100,
-		Filter:   func(o *eligibilityv1.Member) bool { return o.GetSubscriberId() == m.GetSubscriberId() },
-	})
+	family, _, err := s.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 100, Where: []store.Cond{store.Eq(m.GetSubscriberId(), "subscriberId")}})
 	if err != nil {
 		return AccumulatorsView{}, err
 	}

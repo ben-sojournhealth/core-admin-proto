@@ -14,6 +14,7 @@ import (
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	"coreadmin/internal/adjudication"
 	"coreadmin/internal/claims"
+	"coreadmin/internal/repo"
 	"coreadmin/internal/sim"
 	"coreadmin/internal/store"
 )
@@ -300,20 +301,26 @@ func logged(text string) Check {
 
 // Runner plays scenarios against a sandbox, one step at a time.
 type Runner struct {
+	// Fresh gives each scenario an empty database.
+	Fresh   func() (*repo.Repos, error)
 	Sim     *sim.Sim
 	Active  *Scenario
 	Next    int
 	Results []StepResult
 }
 
-func NewRunner() (*Runner, error) {
-	r := &Runner{}
+func NewRunner(fresh func() (*repo.Repos, error)) (*Runner, error) {
+	r := &Runner{Fresh: fresh}
 	return r, r.Reset()
 }
 
 // Reset starts a fresh sandbox with no active scenario.
 func (r *Runner) Reset() error {
-	s, err := sim.New()
+	repos, err := r.Fresh()
+	if err != nil {
+		return err
+	}
+	s, err := sim.NewIn(repos)
 	if err != nil {
 		return err
 	}

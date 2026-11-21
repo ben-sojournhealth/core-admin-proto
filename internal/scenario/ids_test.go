@@ -1,6 +1,8 @@
 package scenario_test
 
 import (
+	"coreadmin/internal/repo"
+	"coreadmin/internal/repo/repotest"
 	"regexp"
 	"testing"
 
@@ -10,7 +12,7 @@ import (
 // Replacement and void claims get UUIDv7 ids; the short name clm_A-2
 // resolves to them.
 func TestReplacementIDs(t *testing.T) {
-	r, err := scenario.NewRunner()
+	r, err := scenario.NewRunner(func() (*repo.Repos, error) { return repotest.New(t), nil })
 	if err != nil {
 		t.Fatal(err)
 	}

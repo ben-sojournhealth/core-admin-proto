@@ -2,9 +2,9 @@ package seed_test
 
 import (
 	"context"
+	"coreadmin/internal/repo/repotest"
 	"testing"
 
-	"coreadmin/internal/repo"
 	"coreadmin/internal/seed"
 	"coreadmin/internal/store"
 	seeddata "coreadmin/seed"
@@ -14,7 +14,7 @@ import (
 // and checks that references between them resolve.
 func TestSeedLoadsAndLinks(t *testing.T) {
 	ctx := context.Background()
-	r := repo.NewInMemory()
+	r := repotest.New(t)
 	n, err := seed.Load(ctx, r, seeddata.FS)
 	if err != nil {
 		t.Fatal(err)

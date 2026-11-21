@@ -23,22 +23,11 @@ import (
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	commonv1 "coreadmin/gen/coreadmin/common/v1"
 	"coreadmin/internal/x12"
+	"coreadmin/internal/x12ack"
 )
 
 // Guide837P is the implementation guide this package reads.
 const Guide837P = "005010X222A1"
-
-// SegmentError is a 999 IK3 (segment) or IK4 (element) error.
-type SegmentError struct {
-	Segment x12.Segment
-	// IK3 segment syntax error code, e.g. "8" segment has data element
-	// errors, "3" required segment missing.
-	SegmentCode string
-	// Element position and IK4 code, when the error is in one element.
-	Element     int
-	ElementCode string
-	Message     string
-}
 
 // ParsedClaim is one CLM loop mapped to a Claim.
 type ParsedClaim struct {
@@ -63,10 +52,10 @@ type subscriber struct {
 // Map837P maps one transaction set. It returns the claims and the errors
 // that make the set unreadable; with any errors the set is rejected and
 // the claims are discarded.
-func Map837P(d x12.Delims, set *x12.Set) ([]ParsedClaim, []SegmentError) {
+func Map837P(d x12.Delims, set *x12.Set) ([]ParsedClaim, []x12ack.Error) {
 	var (
 		out  []ParsedClaim
-		errs []SegmentError
+		errs []x12ack.Error
 		cur  *ParsedClaim
 		line *claimsv1.ClaimLine
 		// Loop state.
@@ -81,10 +70,10 @@ func Map837P(d x12.Delims, set *x12.Set) ([]ParsedClaim, []SegmentError) {
 	)
 	billing = &claimsv1.ProviderRef{}
 	bad := func(s x12.Segment, el int, code, format string, args ...any) {
-		errs = append(errs, SegmentError{Segment: s, SegmentCode: "8", Element: el, ElementCode: code, Message: fmt.Sprintf(format, args...)})
+		errs = append(errs, x12ack.Bad(s, el, code, format, args...))
 	}
 	missing := func(s x12.Segment, id, format string, args ...any) {
-		errs = append(errs, SegmentError{Segment: x12.Segment{Pos: s.Pos, El: []string{id}}, SegmentCode: "3", Message: fmt.Sprintf(format, args...)})
+		errs = append(errs, x12ack.Missing(s.Pos, id, format, args...))
 	}
 	finish := func() {
 		if cur == nil {

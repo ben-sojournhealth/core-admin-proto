@@ -2,7 +2,9 @@ package claimsintake_test
 
 import (
 	"context"
+	"coreadmin/internal/repo/repotest"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +14,6 @@ import (
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	ingestionv1 "coreadmin/gen/coreadmin/ingestion/v1"
 	"coreadmin/internal/claimsintake"
-	"coreadmin/internal/repo"
 	"coreadmin/internal/x12"
 )
 
@@ -25,11 +26,11 @@ func (r *received) Receive(_ context.Context, c *claimsv1.Claim) (*claimsv1.Clai
 	return c, nil
 }
 
-func setup() (*claimsintake.Processor, *received) {
+func setup(t *testing.T) (*claimsintake.Processor, *received) {
 	r := &received{}
 	clock := time.Date(2026, 3, 16, 9, 0, 0, 0, time.UTC)
 	return &claimsintake.Processor{
-		Repos: repo.NewInMemory(), Claims: r, Files: map[string][]byte{}, ReceiverID: claimsintake.OurID,
+		Repos: repotest.New(t), Claims: r, Files: map[string][]byte{}, ReceiverID: claimsintake.OurID,
 		Now: func() time.Time { clock = clock.Add(time.Second); return clock },
 	}, r
 }
@@ -58,7 +59,7 @@ func ingest(t *testing.T, p *claimsintake.Processor, r *received, id string) (*i
 }
 
 func TestMapsClaimsVerbatim(t *testing.T) {
-	p, r := setup()
+	p, r := setup(t)
 	job, got := ingest(t, p, r, "clean")
 	if job.GetStatus() != ingestionv1.IngestionStatus_INGESTION_STATUS_COMPLETED || len(got) != 3 {
 		t.Fatalf("job %s, %d claims", job.GetStatus(), len(got))
@@ -96,17 +97,24 @@ func TestMapsClaimsVerbatim(t *testing.T) {
 			t.Errorf("%s: got %v, want %v", name, c[0], c[1])
 		}
 	}
-	// Intake matches nothing: those fields are adjudication's.
-	for _, c := range got {
-		if c.GetMemberId() != "" || c.GetCustomerId() != "" || c.GetClaimNumber() != "" || c.GetOriginalClaimId() != "" {
-			t.Errorf("%s: intake set matched fields: member %q customer %q number %q original %q", c.GetPatientControlNumber(),
-				c.GetMemberId(), c.GetCustomerId(), c.GetClaimNumber(), c.GetOriginalClaimId())
+	// Intake matches nothing: those fields are adjudication's. It does
+	// number each claim loop, by its position in the file.
+	for i, c := range got {
+		if c.GetMemberId() != "" || c.GetCustomerId() != "" || c.GetOriginalClaimId() != "" {
+			t.Errorf("%s: intake set matched fields: member %q customer %q original %q", c.GetPatientControlNumber(),
+				c.GetMemberId(), c.GetCustomerId(), c.GetOriginalClaimId())
 		}
+		if want := fmt.Sprintf("26075-E-%05d", i+1); c.GetClaimNumber() != want || c.GetClaimVersion() != 1 {
+			t.Errorf("%s: number %s-%d, want %s", c.GetPatientControlNumber(), c.GetClaimNumber(), c.GetClaimVersion(), want)
+		}
+	}
+	if b := job.GetClaimNumbers(); b.GetPrefix() != "26075-E-" || b.GetFirst() != 1 || b.GetLast() != 3 {
+		t.Errorf("block %v", b)
 	}
 }
 
 func TestMapsPatientLoop(t *testing.T) {
-	p, r := setup()
+	p, r := setup(t)
 	_, got := ingest(t, p, r, "dependent")
 	c := got[0]
 	pt := c.GetSubmittedPatient()
@@ -119,7 +127,7 @@ func TestMapsPatientLoop(t *testing.T) {
 }
 
 func TestMapsCorrectionsAndVoids(t *testing.T) {
-	p, r := setup()
+	p, r := setup(t)
 	for _, tc := range []struct {
 		sample string
 		freq   claimsv1.ClaimFrequency
@@ -144,11 +152,15 @@ func TestMapsCorrectionsAndVoids(t *testing.T) {
 }
 
 func TestRejectedSetLoadsNothing(t *testing.T) {
-	p, r := setup()
+	p, r := setup(t)
 	job, got := ingest(t, p, r, "bad-set")
 	if job.GetStatus() != ingestionv1.IngestionStatus_INGESTION_STATUS_COMPLETED_WITH_ERRORS || len(got) != 1 ||
 		got[0].GetPatientControlNumber() != "PAT-40790" {
 		t.Fatalf("job %s, handed over %d", job.GetStatus(), len(got))
+	}
+	// Both claim loops got numbers; the rejected set's is the gap.
+	if b := job.GetClaimNumbers(); b.GetFirst() != 1 || b.GetLast() != 2 || got[0].GetClaimNumber() != "26075-E-00001" {
+		t.Errorf("block %v, loaded claim %s", b, got[0].GetClaimNumber())
 	}
 	sets := job.GetTransactionSets()
 	if !sets[0].GetAccepted() || sets[1].GetAccepted() || sets[1].GetErrors()[0].GetCode() != "IK4-1" {
@@ -172,7 +184,7 @@ func TestRejectedSetLoadsNothing(t *testing.T) {
 }
 
 func TestDuplicateFileLoadsNothing(t *testing.T) {
-	p, r := setup()
+	p, r := setup(t)
 	ingest(t, p, r, "clean")
 	job, got := ingest(t, p, r, "clean")
 	if job.GetStatus() != ingestionv1.IngestionStatus_INGESTION_STATUS_FAILED || len(got) != 0 ||
@@ -184,7 +196,7 @@ func TestDuplicateFileLoadsNothing(t *testing.T) {
 // Preview maps without side effects, and shows the same claims a load
 // would hand over.
 func TestPreviewLoadsNothing(t *testing.T) {
-	p, r := setup()
+	p, r := setup(t)
 	x := sample(t, "clean")
 	v, err := p.Preview(context.Background(), []byte(x.Text))
 	if err != nil {

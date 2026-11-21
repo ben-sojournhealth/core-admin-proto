@@ -71,9 +71,14 @@ func Catalog() []Demo {
 			Links:   []Link{{Component: Journey}},
 		},
 		{
-			ID: "eligibility-ingestion", Title: "Eligibility Ingestion", Status: Planned,
-			Summary: "834 full and change files: adds, terms, retro changes and the approval gate.",
-			Links:   []Link{{Component: Enrollment}, {Component: EnrollmentIntake}, {Component: Eligibility}},
+			ID: "enrollment-intake", Title: "Enrollment Intake", Status: Live, Path: "/enrollment-intake/",
+			Summary: "834 files from employers: the 999 for each transaction set, and each member loop exactly as mapped from the file.",
+			Links:   []Link{{Component: Enrollment}, {Component: EnrollmentIntake}},
+		},
+		{
+			ID: "eligibility", Title: "Eligibility", Status: Live, Path: "/eligibility/",
+			Summary: "Members derived from every 834 input: each version as it was believed, flip-flops, full files with an approval gate, regeneration.",
+			Links:   []Link{{Component: Eligibility}},
 		},
 		{
 			ID: "provider-data", Title: "Provider Data", Status: Planned,

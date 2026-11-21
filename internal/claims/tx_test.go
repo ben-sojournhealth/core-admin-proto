@@ -3,7 +3,10 @@ package claims_test
 import (
 	"context"
 	"errors"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
@@ -62,9 +65,10 @@ func TestReplacementIsAllOrNothing(t *testing.T) {
 	}
 
 	// With the failure gone, the same claim goes through, and nothing
-	// from the failed attempt is left over to conflict with it.
+	// from the failed attempt is left over to conflict with it. The failed
+	// attempt spent 26075-E-00001: a gap that means a claim didn't load.
 	out := receive(t, s, in)
-	if got := describe(out); got != "26063-A-00001-3 APPROVED" {
+	if got := describe(out); got != "26075-E-00002 APPROVED" || out.GetOriginalClaimId() != find(t, s, "26063-A-00001-2").GetId() {
 		t.Errorf("retry: %s", got)
 	}
 	if o := find(t, s, "26063-A-00001-2"); o.GetStatus() != claimsv1.ClaimStatus_CLAIM_STATUS_ADJUSTED {
@@ -103,14 +107,14 @@ func TestVoidIsAllOrNothing(t *testing.T) {
 	}
 }
 
-// interleave lets another claim commit at the worst moment: right after
-// the first correction has checked its original for a replacement in
+// interleave starts another claim at the worst moment: right after the
+// first correction has checked its original for a replacement in
 // progress, and before it commits.
 type interleave struct {
 	store.Store[*claimsv1.Claim]
 	origID string
 	then   func()
-	fired  bool
+	fired  atomic.Bool
 }
 
 func (w *interleave) List(ctx context.Context, opts store.ListOptions[*claimsv1.Claim]) ([]*claimsv1.Claim, string, error) {
@@ -118,8 +122,7 @@ func (w *interleave) List(ctx context.Context, opts store.ListOptions[*claimsv1.
 	// The check for a replacement in progress is the query that would
 	// return a pended replacement of the original.
 	probe := &claimsv1.Claim{Id: "probe", OriginalClaimId: w.origID, Status: claimsv1.ClaimStatus_CLAIM_STATUS_PENDED}
-	if !w.fired && opts.Filter != nil && opts.Filter(probe) {
-		w.fired = true
+	if opts.Filter != nil && opts.Filter(probe) && w.fired.CompareAndSwap(false, true) {
 		w.then()
 	}
 	return out, next, err
@@ -128,7 +131,11 @@ func (w *interleave) List(ctx context.Context, opts store.ListOptions[*claimsv1.
 // Two corrections of the same claim arriving together must not both
 // become its open replacement. Both pend here (unknown member), and the
 // original is already on payment hold, so neither writes the original:
-// only the lock makes the second one see the first.
+// only the lock keeps them apart.
+//
+// The second starts while the first holds the lock on the original. It
+// waits for the first to commit, then reads what the first wrote, and
+// pends behind it.
 func TestRacingCorrectionsOneOpenReplacement(t *testing.T) {
 	s := sandbox(t)
 	ctx := context.Background()
@@ -142,27 +149,39 @@ func TestRacingCorrectionsOneOpenReplacement(t *testing.T) {
 	a := correcting(submitted("PAT-40711", "ZZZ999", "99214", 250, 2), replacement, "26063-A-00001")
 	b := correcting(submitted("PAT-40711", "ZZZ999", "99215", 300, 2), replacement, "26063-A-00001")
 
-	var second *claimsv1.Claim
+	done := make(chan *claimsv1.Claim)
 	w := &interleave{Store: s.Repos.Claims, origID: orig.GetId()}
-	w.then = func() { second = receive(t, s, b) }
+	w.then = func() {
+		go func() {
+			c, err := s.Claims.Receive(store.WithActor(context.Background(), "clearinghouse"), b)
+			if err != nil {
+				t.Error(err)
+			}
+			done <- c
+		}()
+		// Let it reach the lock the first correction holds.
+		time.Sleep(200 * time.Millisecond)
+	}
 	s.Repos.Claims = w
 	first := receive(t, s, a)
+	second := <-done
 	s.Repos.Claims = w.Store
-	if !w.fired {
+	if !w.fired.Load() || second == nil {
 		t.Fatal("the second claim never ran")
 	}
 
-	// The second committed first and is the replacement in progress. The
-	// first was recalculated: the number it quotes now leads to the
-	// second, still pended, so it waits behind it.
-	if got := describe(second); got != "26063-A-00001-3 PENDED MEMBER_NOT_FOUND" {
-		t.Errorf("second: %s", got)
-	}
-	if got := describe(first); got != "26063-A-00001-4 PENDED ORIGINAL_NOT_FINALIZED" || first.GetOriginalClaimId() != second.GetId() {
+	// The first committed while the second waited, so the first is the
+	// replacement in progress; the second, reading after it, pends.
+	if got := describe(first); !strings.HasSuffix(got, "PENDED MEMBER_NOT_FOUND") || first.GetOriginalClaimId() != orig.GetId() {
 		t.Errorf("first: %s, correcting %s", got, first.GetOriginalClaimId())
 	}
+	pends := describe(second)
+	if !strings.Contains(pends, "ORIGINAL_HAS_OPEN_REPLACEMENT") && !strings.Contains(pends, "ORIGINAL_NOT_FINALIZED") {
+		t.Errorf("second: %s", pends)
+	}
 	open, _, _ := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{Filter: func(c *claimsv1.Claim) bool {
-		return c.GetOriginalClaimId() == orig.GetId()
+		return c.GetOriginalClaimId() == orig.GetId() && c.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_PENDED &&
+			!strings.Contains(describe(c), "ORIGINAL_")
 	}})
 	if len(open) != 1 {
 		t.Errorf("%d replacements of %s in progress, want 1", len(open), claims.DisplayNumber(orig))

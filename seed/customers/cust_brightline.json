@@ -1,0 +1,9 @@
+{
+  "id": "cust_brightline",
+  "name": "Brightline Logistics",
+  "fundingType": "FUNDING_TYPE_SELF_FUNDED",
+  "ein": "862345678",
+  "status": "CUSTOMER_STATUS_ACTIVE",
+  "address": {"lines": ["900 Commerce Pkwy"], "city": "Columbus", "state": "OH", "postalCode": "43215", "countryCode": "US"},
+  "effective": {"start": {"year": 2026, "month": 1, "day": 1}}
+}

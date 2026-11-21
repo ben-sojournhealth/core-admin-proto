@@ -123,10 +123,10 @@ type Sim struct {
 	nextID int
 }
 
-// New returns a freshly seeded sandbox.
-func New() (*Sim, error) {
+// NewIn returns a freshly seeded sandbox in repos, which must be empty.
+func NewIn(repos *repo.Repos) (*Sim, error) {
 	ctx := context.Background()
-	s := &Sim{Repos: repo.NewInMemory(), clock: time.Date(2026, 3, 16, 9, 0, 0, 0, time.UTC)}
+	s := &Sim{Repos: repos, clock: time.Date(2026, 3, 16, 9, 0, 0, 0, time.UTC)}
 	if _, err := seed.Load(ctx, s.Repos, seeddata.FS); err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (s *Sim) shortName(c *claimsv1.Claim) string {
 }
 
 func (s *Sim) version(number string, v int32) *claimsv1.Claim {
-	found, _, _ := s.Repos.Claims.List(context.Background(), store.ListOptions[*claimsv1.Claim]{PageSize: 1, Filter: func(o *claimsv1.Claim) bool {
+	found, _, _ := s.Repos.Claims.List(context.Background(), store.ListOptions[*claimsv1.Claim]{PageSize: 1, Where: []store.Cond{store.Eq(number, "claimNumber")}, Filter: func(o *claimsv1.Claim) bool {
 		return o.GetClaimNumber() == number && max(o.GetClaimVersion(), 1) == v
 	}})
 	if len(found) == 0 {
@@ -421,9 +421,7 @@ func (s *Sim) member(ctx context.Context, id string) (*eligibilityv1.Member, err
 }
 
 func (s *Sim) provider(ctx context.Context, npi string) (*providerv1.Provider, error) {
-	ps, _, err := s.Repos.Providers.List(ctx, store.ListOptions[*providerv1.Provider]{
-		PageSize: 1, Filter: func(p *providerv1.Provider) bool { return p.GetNpi() == npi },
-	})
+	ps, _, err := s.Repos.Providers.List(ctx, store.ListOptions[*providerv1.Provider]{PageSize: 1, Where: []store.Cond{store.Eq(npi, "npi")}})
 	if err != nil {
 		return nil, err
 	}

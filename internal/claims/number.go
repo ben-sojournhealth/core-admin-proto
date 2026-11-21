@@ -3,8 +3,7 @@ package claims
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
+	"time"
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	"coreadmin/internal/store"
@@ -47,39 +46,35 @@ func sourceLetter(src claimsv1.ClaimSource) string {
 	return "A"
 }
 
-// assignNumber gives a claim the next number for its receipt day and
-// source. Like a database sequence, a number is handed out once even if
-// the claim is never saved. The sequence is seeded by scanning existing
-// claims, which is fine for the in-memory store; a real store would keep
-// a per-day counter.
+// NumberPrefix is the YYJJJ-S- of claim numbers for a receipt time and
+// source.
+func NumberPrefix(received time.Time, src claimsv1.ClaimSource) string {
+	return fmt.Sprintf("%02d%03d-%s-", received.Year()%100, received.YearDay(), sourceLetter(src))
+}
+
+// FormatNumber is a claim number: the prefix and a five-digit sequence.
+func FormatNumber(prefix string, n int) string { return fmt.Sprintf("%s%05d", prefix, n) }
+
+// assignNumber reserves a block of one for a claim that arrived alone
+// (API, portal, paper, or a claim handed over without a number).
 func (s *Service) assignNumber(ctx context.Context, c *claimsv1.Claim) error {
-	t := c.GetReceivedTime().AsTime()
-	prefix := fmt.Sprintf("%02d%03d-%s-", t.Year()%100, t.YearDay(), sourceLetter(c.GetSource()))
-	same, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 100_000, Filter: func(o *claimsv1.Claim) bool {
-		return strings.HasPrefix(o.GetClaimNumber(), prefix)
-	}})
+	prefix := NumberPrefix(c.GetReceivedTime().AsTime(), c.GetSource())
+	ref := c.GetPatientControlNumber()
+	if ref == "" {
+		ref = c.GetId()
+	}
+	n, err := s.Repos.ClaimNumbers.Reserve(ctx, prefix, 1, "claim "+ref)
 	if err != nil {
 		return err
 	}
-	next := s.issued[prefix] + 1
-	for _, o := range same {
-		if n, err := strconv.Atoi(strings.TrimPrefix(o.GetClaimNumber(), prefix)); err == nil && n >= next {
-			next = n + 1
-		}
-	}
-	if s.issued == nil {
-		s.issued = map[string]int{}
-	}
-	s.issued[prefix] = next
-	c.ClaimNumber = fmt.Sprintf("%s%05d", prefix, next)
-	c.ClaimVersion = 1
+	c.ClaimNumber, c.ClaimVersion = FormatNumber(prefix, n), 1
 	return nil
 }
 
 // nextVersion numbers a replacement or void of orig: same claim number,
 // one past the highest version of that number so far.
 func (s *Service) nextVersion(ctx context.Context, orig, c *claimsv1.Claim) error {
-	versions, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1000, Filter: func(o *claimsv1.Claim) bool {
+	versions, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1000, Where: []store.Cond{store.Eq(orig.GetClaimNumber(), "claimNumber")}, Filter: func(o *claimsv1.Claim) bool {
 		return o.GetClaimNumber() == orig.GetClaimNumber()
 	}})
 	if err != nil {

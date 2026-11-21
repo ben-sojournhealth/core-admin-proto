@@ -2,6 +2,7 @@ package claims_test
 
 import (
 	"context"
+	"coreadmin/internal/repo/repotest"
 	"strings"
 	"testing"
 
@@ -20,7 +21,7 @@ import (
 
 func sandbox(t *testing.T) *sim.Sim {
 	t.Helper()
-	s, err := journey.New()
+	s, err := journey.NewIn(repotest.New(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +85,8 @@ func TestReceiveMatchesAndNumbers(t *testing.T) {
 	riley.SubmittedPatient = &claimsv1.SubmittedPatient{CardId: "ACM100101", DependentLoop: true,
 		Name: &commonv1.PersonName{First: "RILEY", Last: "RIVERA"}, BirthDate: &commonv1.Date{Year: 2015, Month: 6, Day: 21}}
 
+	// A provider's correction or void is a new submission, so it gets a
+	// new number; it links to its original by what adjudication matched.
 	tests := []struct {
 		name  string
 		claim *claimsv1.Claim
@@ -96,13 +99,13 @@ func TestReceiveMatchesAndNumbers(t *testing.T) {
 		{"dependent in patient loop", riley, "26075-E-00002 APPROVED", "", 0},
 		{"unknown member", submitted("NGU-30017", "ACM999901", "99213", 180, 13), "26075-E-00003 PENDED MEMBER_NOT_FOUND", "", 0},
 		{"correction quoting an old version", correcting(submitted("RIV-87990", "ACM100101", "99214", 250, 3), replacement, "26063-A-00001"),
-			"26063-A-00001-3 APPROVED", "26063-A-00001-2", claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER},
+			"26075-E-00004 APPROVED", "26063-A-00001-2", claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER},
 		{"correction quoting nothing we issued", correcting(submitted("PAT-39002", "ACM200102", "99213", 180, 9), replacement, "26040-E-00417"),
-			"26075-E-00004 PENDED ORIGINAL_NOT_FOUND", "", claimsv1.OriginalMatch_ORIGINAL_MATCH_NONE},
+			"26075-E-00005 PENDED ORIGINAL_NOT_FOUND", "", claimsv1.OriginalMatch_ORIGINAL_MATCH_NONE},
 		{"correction of a pended claim", correcting(submitted("RIV-88102", "ACM100102", "70551", 900, 6), replacement, "26068-A-00001"),
-			"26068-A-00001-2 PENDED ORIGINAL_NOT_FINALIZED", "26068-A-00001", claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER},
+			"26075-E-00006 PENDED ORIGINAL_NOT_FINALIZED", "26068-A-00001", claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER},
 		{"void of a paid claim", correcting(submitted("PAT-40388", "ACM200101", "99214", 250, 4), void, "26064-A-00001"),
-			"26064-A-00001-2 APPROVED", "26064-A-00001", claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER},
+			"26075-E-00007 APPROVED", "26064-A-00001", claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER},
 	}
 	for _, tc := range tests {
 		got := receive(t, s, tc.claim)
@@ -204,7 +207,7 @@ func TestPendedVoidCompletes(t *testing.T) {
 		}
 	}
 	v := receive(t, s, correcting(submitted("RIV-88300", "ACM100103", "99214", 250, 12), void, "26072-A-00002"))
-	if describe(v) != "26072-A-00002-2 PENDED ORIGINAL_IN_PAYMENT_RUN" {
+	if describe(v) != "26075-E-00001 PENDED ORIGINAL_IN_PAYMENT_RUN" {
 		t.Fatalf("got %s", describe(v))
 	}
 	for _, a := range []sim.Action{{Type: "release"}, {Type: "reprocess", ClaimID: v.GetId(), Reason: "payment run released"}} {
@@ -212,7 +215,7 @@ func TestPendedVoidCompletes(t *testing.T) {
 			t.Fatal(res.Error)
 		}
 	}
-	if v = find(t, s, "26072-A-00002-2"); describe(v) != "26072-A-00002-2 APPROVED" || v.GetAdjudication().GetRunNumber() != 2 {
+	if v = find(t, s, "26075-E-00001"); describe(v) != "26075-E-00001 APPROVED" || v.GetAdjudication().GetRunNumber() != 2 {
 		t.Errorf("void is %s, run %d", describe(v), v.GetAdjudication().GetRunNumber())
 	}
 	if o := find(t, s, "26072-A-00002"); o.GetStatus() != claimsv1.ClaimStatus_CLAIM_STATUS_VOIDED {

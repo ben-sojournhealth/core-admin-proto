@@ -1,6 +1,7 @@
 package journey_test
 
 import (
+	"coreadmin/internal/repo/repotest"
 	"regexp"
 	"testing"
 
@@ -9,7 +10,7 @@ import (
 
 // The workload must play cleanly and leave the queues the demo relies on.
 func TestWorkload(t *testing.T) {
-	s, err := journey.New()
+	s, err := journey.NewIn(repotest.New(t))
 	if err != nil {
 		t.Fatal(err)
 	}

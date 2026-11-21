@@ -280,10 +280,15 @@ type IngestionJob struct {
 	Envelope        *X12Envelope            `protobuf:"bytes,16,opt,name=envelope,proto3" json:"envelope,omitempty"`
 	TransactionSets []*TransactionSetResult `protobuf:"bytes,17,rep,name=transaction_sets,json=transactionSets,proto3" json:"transaction_sets,omitempty"`
 	// Where the acknowledgment we generated (999) is stored.
-	AcknowledgmentUri string        `protobuf:"bytes,18,opt,name=acknowledgment_uri,json=acknowledgmentUri,proto3" json:"acknowledgment_uri,omitempty"`
-	Audit             *v1.AuditInfo `protobuf:"bytes,15,opt,name=audit,proto3" json:"audit,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	AcknowledgmentUri string `protobuf:"bytes,18,opt,name=acknowledgment_uri,json=acknowledgmentUri,proto3" json:"acknowledgment_uri,omitempty"`
+	// For a claims file: the claim numbers reserved for it, one per claim
+	// loop (CLM) in file order, rejected transaction sets included. The
+	// claim at position i is numbered first + i, so a number in the block
+	// with no claim means that claim loop didn't load.
+	ClaimNumbers  *ClaimNumberBlock `protobuf:"bytes,19,opt,name=claim_numbers,json=claimNumbers,proto3" json:"claim_numbers,omitempty"`
+	Audit         *v1.AuditInfo     `protobuf:"bytes,15,opt,name=audit,proto3" json:"audit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IngestionJob) Reset() {
@@ -419,6 +424,13 @@ func (x *IngestionJob) GetAcknowledgmentUri() string {
 		return x.AcknowledgmentUri
 	}
 	return ""
+}
+
+func (x *IngestionJob) GetClaimNumbers() *ClaimNumberBlock {
+	if x != nil {
+		return x.ClaimNumbers
+	}
+	return nil
 }
 
 func (x *IngestionJob) GetAudit() *v1.AuditInfo {
@@ -744,11 +756,74 @@ func (x *RecordError) GetRecordKey() string {
 	return ""
 }
 
+// ClaimNumberBlock is a range of claim numbers reserved together:
+// prefix + five-digit sequence, from first to last inclusive.
+type ClaimNumberBlock struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// YYJJJ-S-: two-digit year, day of year received, source letter.
+	Prefix        string `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`
+	First         int32  `protobuf:"varint,2,opt,name=first,proto3" json:"first,omitempty"`
+	Last          int32  `protobuf:"varint,3,opt,name=last,proto3" json:"last,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClaimNumberBlock) Reset() {
+	*x = ClaimNumberBlock{}
+	mi := &file_coreadmin_ingestion_v1_ingestion_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClaimNumberBlock) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClaimNumberBlock) ProtoMessage() {}
+
+func (x *ClaimNumberBlock) ProtoReflect() protoreflect.Message {
+	mi := &file_coreadmin_ingestion_v1_ingestion_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClaimNumberBlock.ProtoReflect.Descriptor instead.
+func (*ClaimNumberBlock) Descriptor() ([]byte, []int) {
+	return file_coreadmin_ingestion_v1_ingestion_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ClaimNumberBlock) GetPrefix() string {
+	if x != nil {
+		return x.Prefix
+	}
+	return ""
+}
+
+func (x *ClaimNumberBlock) GetFirst() int32 {
+	if x != nil {
+		return x.First
+	}
+	return 0
+}
+
+func (x *ClaimNumberBlock) GetLast() int32 {
+	if x != nil {
+		return x.Last
+	}
+	return 0
+}
+
 var File_coreadmin_ingestion_v1_ingestion_proto protoreflect.FileDescriptor
 
 const file_coreadmin_ingestion_v1_ingestion_proto_rawDesc = "" +
 	"\n" +
-	"&coreadmin/ingestion/v1/ingestion.proto\x12\x16coreadmin.ingestion.v1\x1a coreadmin/common/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xff\x06\n" +
+	"&coreadmin/ingestion/v1/ingestion.proto\x12\x16coreadmin.ingestion.v1\x1a coreadmin/common/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xce\a\n" +
 	"\fIngestionJob\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
@@ -767,7 +842,8 @@ const file_coreadmin_ingestion_v1_ingestion_proto_rawDesc = "" +
 	"\x0ecompleted_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\rcompletedTime\x12?\n" +
 	"\benvelope\x18\x10 \x01(\v2#.coreadmin.ingestion.v1.X12EnvelopeR\benvelope\x12W\n" +
 	"\x10transaction_sets\x18\x11 \x03(\v2,.coreadmin.ingestion.v1.TransactionSetResultR\x0ftransactionSets\x12-\n" +
-	"\x12acknowledgment_uri\x18\x12 \x01(\tR\x11acknowledgmentUri\x124\n" +
+	"\x12acknowledgment_uri\x18\x12 \x01(\tR\x11acknowledgmentUri\x12M\n" +
+	"\rclaim_numbers\x18\x13 \x01(\v2(.coreadmin.ingestion.v1.ClaimNumberBlockR\fclaimNumbers\x124\n" +
 	"\x05audit\x18\x0f \x01(\v2\x1e.coreadmin.common.v1.AuditInfoR\x05audit\"\x84\x02\n" +
 	"\vX12Envelope\x12\x1b\n" +
 	"\tsender_id\x18\x01 \x01(\tR\bsenderId\x12\x1f\n" +
@@ -795,7 +871,11 @@ const file_coreadmin_ingestion_v1_ingestion_proto_rawDesc = "" +
 	"\x04code\x18\x02 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12\x1d\n" +
 	"\n" +
-	"record_key\x18\x04 \x01(\tR\trecordKey*\xcf\x01\n" +
+	"record_key\x18\x04 \x01(\tR\trecordKey\"T\n" +
+	"\x10ClaimNumberBlock\x12\x16\n" +
+	"\x06prefix\x18\x01 \x01(\tR\x06prefix\x12\x14\n" +
+	"\x05first\x18\x02 \x01(\x05R\x05first\x12\x12\n" +
+	"\x04last\x18\x03 \x01(\x05R\x04last*\xcf\x01\n" +
 	"\rIngestionKind\x12\x1e\n" +
 	"\x1aINGESTION_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19INGESTION_KIND_ENROLLMENT\x10\x01\x12\"\n" +
@@ -837,7 +917,7 @@ func file_coreadmin_ingestion_v1_ingestion_proto_rawDescGZIP() []byte {
 }
 
 var file_coreadmin_ingestion_v1_ingestion_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_coreadmin_ingestion_v1_ingestion_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_coreadmin_ingestion_v1_ingestion_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_coreadmin_ingestion_v1_ingestion_proto_goTypes = []any{
 	(IngestionKind)(0),            // 0: coreadmin.ingestion.v1.IngestionKind
 	(IngestionFormat)(0),          // 1: coreadmin.ingestion.v1.IngestionFormat
@@ -848,8 +928,9 @@ var file_coreadmin_ingestion_v1_ingestion_proto_goTypes = []any{
 	(*TransactionSetResult)(nil),  // 6: coreadmin.ingestion.v1.TransactionSetResult
 	(*IngestionCounts)(nil),       // 7: coreadmin.ingestion.v1.IngestionCounts
 	(*RecordError)(nil),           // 8: coreadmin.ingestion.v1.RecordError
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
-	(*v1.AuditInfo)(nil),          // 10: coreadmin.common.v1.AuditInfo
+	(*ClaimNumberBlock)(nil),      // 9: coreadmin.ingestion.v1.ClaimNumberBlock
+	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(*v1.AuditInfo)(nil),          // 11: coreadmin.common.v1.AuditInfo
 }
 var file_coreadmin_ingestion_v1_ingestion_proto_depIdxs = []int32{
 	0,  // 0: coreadmin.ingestion.v1.IngestionJob.kind:type_name -> coreadmin.ingestion.v1.IngestionKind
@@ -858,17 +939,18 @@ var file_coreadmin_ingestion_v1_ingestion_proto_depIdxs = []int32{
 	3,  // 3: coreadmin.ingestion.v1.IngestionJob.status:type_name -> coreadmin.ingestion.v1.IngestionStatus
 	7,  // 4: coreadmin.ingestion.v1.IngestionJob.counts:type_name -> coreadmin.ingestion.v1.IngestionCounts
 	8,  // 5: coreadmin.ingestion.v1.IngestionJob.errors:type_name -> coreadmin.ingestion.v1.RecordError
-	9,  // 6: coreadmin.ingestion.v1.IngestionJob.received_time:type_name -> google.protobuf.Timestamp
-	9,  // 7: coreadmin.ingestion.v1.IngestionJob.completed_time:type_name -> google.protobuf.Timestamp
+	10, // 6: coreadmin.ingestion.v1.IngestionJob.received_time:type_name -> google.protobuf.Timestamp
+	10, // 7: coreadmin.ingestion.v1.IngestionJob.completed_time:type_name -> google.protobuf.Timestamp
 	5,  // 8: coreadmin.ingestion.v1.IngestionJob.envelope:type_name -> coreadmin.ingestion.v1.X12Envelope
 	6,  // 9: coreadmin.ingestion.v1.IngestionJob.transaction_sets:type_name -> coreadmin.ingestion.v1.TransactionSetResult
-	10, // 10: coreadmin.ingestion.v1.IngestionJob.audit:type_name -> coreadmin.common.v1.AuditInfo
-	8,  // 11: coreadmin.ingestion.v1.TransactionSetResult.errors:type_name -> coreadmin.ingestion.v1.RecordError
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	9,  // 10: coreadmin.ingestion.v1.IngestionJob.claim_numbers:type_name -> coreadmin.ingestion.v1.ClaimNumberBlock
+	11, // 11: coreadmin.ingestion.v1.IngestionJob.audit:type_name -> coreadmin.common.v1.AuditInfo
+	8,  // 12: coreadmin.ingestion.v1.TransactionSetResult.errors:type_name -> coreadmin.ingestion.v1.RecordError
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_coreadmin_ingestion_v1_ingestion_proto_init() }
@@ -882,7 +964,7 @@ func file_coreadmin_ingestion_v1_ingestion_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_coreadmin_ingestion_v1_ingestion_proto_rawDesc), len(file_coreadmin_ingestion_v1_ingestion_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

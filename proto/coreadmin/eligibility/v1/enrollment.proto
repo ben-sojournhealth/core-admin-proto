@@ -1,0 +1,297 @@
+syntax = "proto3";
+
+package coreadmin.eligibility.v1;
+
+import "coreadmin/common/v1/common.proto";
+
+// EnrollmentTransaction is one member loop (2000, INS) of an 834, exactly
+// as the sender sent it. Intake captures it once and looks nothing up:
+// which customer, member and plan it means is decided when it is applied
+// to eligibility, which can happen again when that data changes.
+//
+// Codes from long or open-ended lists (relationship 18, coverage level
+// FAM) are kept as sent. The few small, fixed code sets eligibility acts
+// on (purpose, action, maintenance type, benefit status) are enums; a
+// code intake doesn't recognize maps to UNKNOWN and is kept, as sent, in
+// unrecognized_codes. Dates and references keep their qualifiers, so every
+// DTP and REF in the loop is captured. Segments intake does not map are
+// kept raw in unmapped_segments, so nothing in the file is silently
+// dropped.
+//
+// Field comments say what each field means and where in the 834 it comes
+// from; the demos show them as tooltips.
+message EnrollmentTransaction {
+  // Our id for this member loop, assigned when intake hands it to
+  // eligibility.
+  string id = 1;
+  // Where the loop came from: the file, its sender, the transaction set,
+  // and its place in the file.
+  EnrollmentSource source = 2;
+  // The file-level details every member loop in the transaction set
+  // shares: why it was sent, full or change file, the employer, and the
+  // payer.
+  EnrollmentHeader header = 3;
+
+  // Whether this member is the subscriber (the employee) rather than a
+  // dependent. From INS01: Y subscriber, N dependent.
+  bool subscriber = 4;
+  // How the member is related to the subscriber, as sent. From INS02: 18
+  // self, 01 spouse, 19 child, 53 domestic partner, among others.
+  string relationship_code = 5;
+  // What the sender wants done with this member: add, change, terminate,
+  // reinstate, or (in a full file) just confirm. From INS03.
+  MaintenanceType maintenance_type = 6;
+  // Why, as sent. From INS04, e.g. 02 birth, 07 termination of benefits,
+  // 08 termination of employment, 28 initial enrollment.
+  string maintenance_reason_code = 7;
+  // The member's benefit status: active, on COBRA, surviving insured or
+  // TEFRA. From INS05.
+  BenefitStatus benefit_status = 8;
+  // The member's Medicare plan, when the sender says they have one. From
+  // INS06-1, e.g. A Part A, B Part B, C both.
+  string medicare_plan_code = 9;
+  // For a member on COBRA, the event that made them eligible for it. From
+  // INS07, e.g. 1 termination of employment, 2 reduction of hours.
+  string cobra_qualifying_event_code = 10;
+  // The subscriber's employment status, as sent. From INS08, e.g. FT
+  // full-time, PT part-time, TE terminated.
+  string employment_status_code = 11;
+  // A dependent's student status, as sent. From INS09: F full-time, P
+  // part-time, N not a student.
+  string student_status_code = 12;
+  // Whether a dependent is handicapped, which can extend coverage past the
+  // usual age limit. From INS10: Y or N.
+  string handicap_indicator = 13;
+  // The member's date of death, when the sender reports one. From INS12.
+  common.v1.Date death_date = 14;
+
+  // Every REF segment of the member loop, each with its qualifier.
+  // REF*0F is the subscriber number, shared by the subscriber and every
+  // dependent; REF*1L the group or policy number; REF*17 and REF*23 the
+  // sponsor's own ids for the member.
+  repeated QualifiedRef refs = 15;
+  // Every DTP segment of the member loop, each with its qualifier: 356
+  // eligibility begin, 357 eligibility end, 303 maintenance effective, 336
+  // employment begin, 340 and 341 COBRA begin and end, among others.
+  repeated QualifiedDate dates = 16;
+
+  // The member's name as sent. From the 2100A NM1*IL segment.
+  common.v1.PersonName name = 17;
+  // What kind of id member_id is. From NM108: 34 Social Security number,
+  // ZZ an id the sender and we agreed on.
+  string member_id_qualifier = 18;
+  // The sender's id for the member, often their Social Security number.
+  // From NM109.
+  string member_id = 19;
+  // The member's phone numbers and email, each with its qualifier (TE
+  // phone, EM email, ...). From PER.
+  repeated QualifiedRef contacts = 20;
+  // The member's home address. From the N3 and N4 segments after NM1*IL.
+  common.v1.Address address = 21;
+  // The member's date of birth. From DMG02.
+  common.v1.Date birth_date = 22;
+  // The member's gender as sent: F, M or U. From DMG03.
+  string gender_code = 23;
+
+  // The coverages the member is enrolling in, changing or leaving, one
+  // per HD loop (2300): medical, dental, vision.
+  repeated HealthCoverage coverages = 24;
+
+  // Segments of the loop intake does not map, kept exactly as sent so
+  // nothing in the file is lost: e.g. LUI language, NM1*31 mailing
+  // address, COB coordination of benefits (2320), LS/LX reporting
+  // categories.
+  repeated string unmapped_segments = 25;
+  // Codes in this loop sent with a value intake doesn't recognize. The
+  // field reads UNKNOWN and the code is kept here, as sent.
+  repeated UnrecognizedCode unrecognized_codes = 26;
+
+  // When the record was stored, and by whom.
+  common.v1.AuditInfo audit = 31;
+}
+
+// UnrecognizedCode is a code intake could not map, kept as sent.
+message UnrecognizedCode {
+  // The element the code was in: INS03, INS05, HD01, BGN01 or BGN08.
+  string element = 1;
+  // The code exactly as sent.
+  string value = 2;
+}
+
+// Why the sender sent the transaction set. From BGN01.
+enum EnrollmentPurpose {
+  // Not sent.
+  ENROLLMENT_PURPOSE_UNSPECIFIED = 0;
+  // Sent, but not a code intake recognizes.
+  ENROLLMENT_PURPOSE_UNKNOWN = 1;
+  // 00: an original, sent for the first time.
+  ENROLLMENT_PURPOSE_ORIGINAL = 2;
+  // 15: sent again, e.g. after a rejection or a lost file. Guard against
+  // applying it twice.
+  ENROLLMENT_PURPOSE_RESUBMISSION = 3;
+  // 22: for information only; not to be applied.
+  ENROLLMENT_PURPOSE_INFORMATION_COPY = 4;
+}
+
+// What kind of file this is. From BGN08.
+enum EnrollmentAction {
+  // Not sent.
+  ENROLLMENT_ACTION_UNSPECIFIED = 0;
+  // Sent, but not a code intake recognizes.
+  ENROLLMENT_ACTION_UNKNOWN = 1;
+  // 2: a change file. It lists only what changed.
+  ENROLLMENT_ACTION_CHANGE = 2;
+  // 4: verify.
+  ENROLLMENT_ACTION_VERIFY = 3;
+  // RX: replace, a full file. It lists everyone who should be enrolled;
+  // anyone missing from it is proposed for termination.
+  ENROLLMENT_ACTION_REPLACE = 4;
+}
+
+// What the sender wants done with a member or a coverage. From INS03 and
+// HD01.
+enum MaintenanceType {
+  // Not sent.
+  MAINTENANCE_TYPE_UNSPECIFIED = 0;
+  // Sent, but not a code intake recognizes; it isn't applied.
+  MAINTENANCE_TYPE_UNKNOWN = 1;
+  // 001: a change, e.g. a new address or a different coverage level.
+  MAINTENANCE_TYPE_CHANGE = 2;
+  // 021: an addition: enroll the member or the coverage.
+  MAINTENANCE_TYPE_ADDITION = 3;
+  // 024: a cancellation or termination: end the coverage.
+  MAINTENANCE_TYPE_TERMINATION = 4;
+  // 025: a reinstatement: restore coverage that was ended.
+  MAINTENANCE_TYPE_REINSTATEMENT = 5;
+  // 030: audit or compare: "this person is enrolled", as every member of a
+  // full file is sent.
+  MAINTENANCE_TYPE_AUDIT = 6;
+}
+
+// The member's benefit status. From INS05.
+enum BenefitStatus {
+  // Not sent.
+  BENEFIT_STATUS_UNSPECIFIED = 0;
+  // Sent, but not a code intake recognizes.
+  BENEFIT_STATUS_UNKNOWN = 1;
+  // A: active, covered as an employee or dependent.
+  BENEFIT_STATUS_ACTIVE = 2;
+  // C: on COBRA continuation, after a qualifying event.
+  BENEFIT_STATUS_COBRA = 3;
+  // S: a surviving insured, e.g. a spouse after the employee's death.
+  BENEFIT_STATUS_SURVIVING_INSURED = 4;
+  // T: TEFRA, a working-aged Medicare beneficiary.
+  BENEFIT_STATUS_TEFRA = 5;
+}
+
+// EnrollmentSource is where a member loop came from.
+message EnrollmentSource {
+  // Our id for the loading of the file (its ingestion job).
+  string ingestion_job_id = 1;
+  // Who sent the file: the employer's HR system or a COBRA
+  // administrator. From ISA06.
+  string sender_id = 2;
+  // The sender's unique number for the file; a file whose sender and
+  // number were already loaded is refused as a duplicate. From ISA13.
+  string interchange_control_number = 3;
+  // The number of the 834 transaction set inside the file. From ST02.
+  string transaction_set_control_number = 4;
+  // Where the loop starts in the file: the position of its INS segment,
+  // counting the ISA as 1.
+  int32 first_segment = 5;
+  // Where the loop ends in the file: the position of its last segment.
+  int32 last_segment = 6;
+}
+
+// EnrollmentHeader is the file-level context every member loop shares.
+message EnrollmentHeader {
+  // Why the sender sent the transaction set: original, resent, or for
+  // information only. From BGN01.
+  EnrollmentPurpose purpose = 1;
+  // The sender's own reference for the transaction set. From BGN02.
+  string reference = 2;
+  // The date the sender created the transaction set. From BGN03.
+  common.v1.Date date = 3;
+  // Whether this is a change file (only what changed) or a full file
+  // (everyone enrolled). From BGN08.
+  EnrollmentAction action = 4;
+  // The plan sponsor: the employer whose plan this is. Its tax id is how
+  // eligibility finds the customer. From N1*P5.
+  EnrollmentParty sponsor = 5;
+  // The insurer or administrator receiving the file: us. From N1*IN.
+  EnrollmentParty payer = 6;
+  // Anyone else named on the file, such as a TPA (N1*TV) or broker
+  // (N1*BO).
+  repeated EnrollmentParty others = 7;
+  // Every REF segment of the header, each with its qualifier, e.g. REF*38
+  // master policy number.
+  repeated QualifiedRef refs = 8;
+  // Every DTP segment of the header, each with its qualifier, e.g. 007
+  // the date the file takes effect.
+  repeated QualifiedDate dates = 9;
+  // Header segments intake does not map, kept exactly as sent (e.g. QTY
+  // control totals).
+  repeated string unmapped_segments = 10;
+  // Header codes sent with a value intake doesn't recognize, kept as sent.
+  repeated UnrecognizedCode unrecognized_codes = 11;
+}
+
+// EnrollmentParty is a company named on the file (an N1 segment).
+message EnrollmentParty {
+  // Its role on the file. From N101: P5 plan sponsor, IN insurer or
+  // payer, TV third-party administrator, BO broker.
+  string entity_code = 1;
+  // Its name as sent. From N102.
+  string name = 2;
+  // What kind of id it has. From N103: FI federal tax id, 94 a code the
+  // sender assigned.
+  string id_qualifier = 3;
+  // Its id as sent, e.g. the employer's tax id. From N104.
+  string id = 4;
+}
+
+// HealthCoverage is one coverage a member is enrolling in, changing or
+// leaving: an HD loop (2300).
+message HealthCoverage {
+  // What to do with this coverage: add, change, terminate, reinstate or
+  // confirm. From HD01. An unrecognized code reads UNKNOWN and is kept in
+  // the member loop's unrecognized_codes.
+  MaintenanceType maintenance_type = 1;
+  // Which kind of coverage. From HD03: HLT medical, DEN dental, VIS
+  // vision, PDG prescription drug.
+  string insurance_line_code = 2;
+  // The sender's name or code for the plan. From HD04.
+  string plan_coverage_description = 3;
+  // Who the coverage covers. From HD05: EMP employee only, ESP employee
+  // and spouse, ECH employee and children, FAM family.
+  string coverage_level_code = 4;
+  // Every DTP segment of the coverage, each with its qualifier: 348
+  // coverage begins, 349 coverage ends, 303 maintenance effective, 543
+  // last premium paid.
+  repeated QualifiedDate dates = 5;
+  // Every REF segment of the coverage, each with its qualifier, e.g.
+  // REF*1L group number, REF*CE class of contract.
+  repeated QualifiedRef refs = 6;
+}
+
+// QualifiedRef is a value with the qualifier that says what it is, as an
+// X12 REF (or PER) segment sends it.
+message QualifiedRef {
+  // What the value is, e.g. 0F subscriber number, 1L group number, TE
+  // phone.
+  string qualifier = 1;
+  // The value as sent.
+  string value = 2;
+}
+
+// QualifiedDate is a DTP: a date with the qualifier that says what it is.
+// A single date (D8), or a range (RD8) with end set.
+message QualifiedDate {
+  // What the date is, e.g. 356 eligibility begin, 357 eligibility end,
+  // 348 coverage begins.
+  string qualifier = 1;
+  // The date, or the start of the range.
+  common.v1.Date date = 2;
+  // The end of the range, for an RD8 date.
+  common.v1.Date end = 3;
+}

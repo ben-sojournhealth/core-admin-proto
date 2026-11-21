@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package coreadmin.eligibility.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "coreadmin/eligibility/v1/eligibility.proto";
+import "google/protobuf/timestamp.proto";
+
+// EligibilityInput is one thing that can change eligibility, recorded in
+// order. Inputs are never edited or deleted. Members and their coverage
+// are derived from them by replaying them in sequence, so eligibility can
+// be regenerated from the inputs at any time.
+message EligibilityInput {
+  // in_00000001: the sequence, zero-padded, so ids sort in order.
+  string id = 1;
+  // Order of application, from 1. Later inputs win where they disagree.
+  int64 sequence = 2;
+  google.protobuf.Timestamp recorded_time = 3;
+  string recorded_by = 4;
+  oneof input {
+    // An 834 member loop, by EnrollmentTransaction id.
+    string enrollment_transaction_id = 10;
+    // Approval of the terminations a full file proposed.
+    FullFileApproval full_file_approval = 11;
+  }
+  common.v1.AuditInfo audit = 31;
+}
+
+// FullFileApproval approves the terminations a full file proposed for the
+// members it left out.
+message FullFileApproval {
+  // The full file's transaction set: its ingestion job and ST02.
+  string ingestion_job_id = 1;
+  string transaction_set_control_number = 2;
+  string note = 3;
+}
+
+// MemberVersion is one version of a member as eligibility derived it,
+// saved whenever the derived member changes. A member's versions are its
+// audit trail: the latest one recorded at or before a time is what we
+// believed then, including the coverage dates we believed.
+message MemberVersion {
+  // {member_id}:{version, zero-padded}.
+  string id = 1;
+  string member_id = 2;
+  // 1, 2, ...
+  int32 version = 3;
+  google.protobuf.Timestamp recorded_time = 4;
+  // The input whose application produced this version. Empty for a
+  // regeneration under changed rules.
+  string input_id = 5;
+  int64 input_sequence = 6;
+  // The derivation rules that produced it.
+  string rules_version = 7;
+  // Why, when it wasn't an input: "regenerated".
+  string reason = 8;
+  Member member = 9;
+  common.v1.AuditInfo audit = 31;
+}

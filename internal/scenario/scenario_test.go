@@ -1,6 +1,8 @@
 package scenario_test
 
 import (
+	"coreadmin/internal/repo"
+	"coreadmin/internal/repo/repotest"
 	"testing"
 
 	"coreadmin/internal/scenario"
@@ -17,7 +19,7 @@ func TestScenarios(t *testing.T) {
 		}
 		seen[sc.ID] = true
 		t.Run(sc.ID, func(t *testing.T) {
-			r, err := scenario.NewRunner()
+			r, err := scenario.NewRunner(func() (*repo.Repos, error) { return repotest.New(t), nil })
 			if err != nil {
 				t.Fatal(err)
 			}

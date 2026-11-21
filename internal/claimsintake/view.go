@@ -12,6 +12,7 @@ import (
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	ingestionv1 "coreadmin/gen/coreadmin/ingestion/v1"
+	"coreadmin/internal/claims"
 	"coreadmin/internal/store"
 	"coreadmin/internal/x12"
 )
@@ -31,6 +32,8 @@ type JobSummary struct {
 // segments and the 999.
 type JobView struct {
 	JobSummary
+	// The claim numbers reserved for the file: "26075-E-00010 – 00012".
+	Numbers  string    `json:"numbers,omitempty"`
 	Error    string    `json:"error,omitempty"`
 	Sender   string    `json:"sender"`
 	Receiver string    `json:"receiver"`
@@ -77,6 +80,8 @@ type ClaimRow struct {
 	// The Claim as ingestion produced it (protojson, proto field names),
 	// before adjudication matched or decided anything.
 	Mapped json.RawMessage `json:"mapped"`
+	// The number reserved for this claim loop; empty in a preview.
+	Number string `json:"number,omitempty"`
 }
 
 type SegView struct {
@@ -137,9 +142,7 @@ func (p *Processor) View(ctx context.Context, id string) (*JobView, error) {
 	if len(j.GetErrors()) > 0 {
 		v.Error = j.GetErrors()[0].GetMessage()
 	}
-	loaded, _, err := p.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 10_000, Filter: func(c *claimsv1.Claim) bool {
-		return c.GetSourceRecord().GetIngestionJobId() == id
-	}})
+	loaded, _, err := p.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 10_000, Where: []store.Cond{store.Eq(id, "sourceRecord", "ingestionJobId")}})
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +156,13 @@ func (p *Processor) View(ctx context.Context, id string) (*JobView, error) {
 		rawLines(v, raw)
 		return v, nil
 	}
-	p.describe(ctx, v, ic, j.GetId(), byKey)
+	if b := j.GetClaimNumbers(); b != nil {
+		v.Numbers = claims.FormatNumber(b.GetPrefix(), int(b.GetFirst()))
+		if b.GetLast() > b.GetFirst() {
+			v.Numbers += fmt.Sprintf(" – %05d", b.GetLast())
+		}
+	}
+	p.describe(ctx, v, ic, j.GetId(), byKey, j.GetClaimNumbers())
 	return v, nil
 }
 
@@ -174,7 +183,7 @@ func (p *Processor) Preview(ctx context.Context, raw []byte) (*JobView, error) {
 		v.Error = fmt.Sprintf("interchange %s from %s was already loaded from %s; sending it would be refused as a duplicate",
 			ic.ControlNumber(), ic.Sender(), prior.GetOriginalFilename())
 	}
-	p.describe(ctx, v, ic, "", nil)
+	p.describe(ctx, v, ic, "", nil, nil)
 	return v, nil
 }
 
@@ -188,14 +197,15 @@ func rawLines(v *JobView, raw []byte) {
 
 // describe fills in the sets, claims and segments of a file. byKey holds
 // the claims loaded from it (nil for a preview).
-func (p *Processor) describe(ctx context.Context, v *JobView, ic *x12.Interchange, jobID string, byKey map[string]*claimsv1.Claim) {
+func (p *Processor) describe(ctx context.Context, v *JobView, ic *x12.Interchange, jobID string, byKey map[string]*claimsv1.Claim, block *ingestionv1.ClaimNumberBlock) {
+	position := 0
 	owner := map[int]string{}
 	bad := map[int]bool{}
 	for _, ch := range MapFile(ic, jobID) {
 		ctl := ch.Set.ST.E(2)
 		sv := SetView{Control: ctl, Accepted: len(ch.Errs) == 0, Errors: []ErrorView{}, Claims: []ClaimRow{}}
 		for _, e := range ch.Errs {
-			sv.Errors = append(sv.Errors, ErrorView{Segment: int64(e.Segment.Pos), Code: errCode(e), Message: e.Message})
+			sv.Errors = append(sv.Errors, ErrorView{Segment: int64(e.Segment.Pos), Code: e.Code(), Message: e.Message})
 			bad[e.Segment.Pos] = true
 		}
 		for _, pc := range ch.Claims {
@@ -204,6 +214,10 @@ func (p *Processor) describe(ctx context.Context, v *JobView, ic *x12.Interchang
 				owner[pos] = key
 			}
 			row := row(key, pc, byKey[key])
+			if block != nil {
+				row.Number = claims.FormatNumber(block.GetPrefix(), int(block.GetFirst())+position)
+			}
+			position++
 			switch {
 			case byKey == nil || row.Loaded:
 			case sv.Accepted:

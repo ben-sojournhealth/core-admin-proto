@@ -2,6 +2,7 @@ package adjudication_test
 
 import (
 	"context"
+	"coreadmin/internal/repo/repotest"
 	"testing"
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
@@ -35,7 +36,7 @@ func TestCheckRemarks(t *testing.T) {
 // finalizing, and finalizes once a rerun gets the codes right.
 func TestMissingRemarkCodePends(t *testing.T) {
 	ctx := context.Background()
-	s, err := sim.New()
+	s, err := sim.NewIn(repotest.New(t))
 	if err != nil {
 		t.Fatal(err)
 	}

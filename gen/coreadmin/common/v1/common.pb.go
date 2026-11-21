@@ -126,10 +126,13 @@ func (x *Money) GetCents() int64 {
 // Date is a calendar date with no time zone (date of service, effective
 // date, DOB). Mirrors google.type.Date.
 type Date struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Year          int32                  `protobuf:"varint,1,opt,name=year,proto3" json:"year,omitempty"`
-	Month         int32                  `protobuf:"varint,2,opt,name=month,proto3" json:"month,omitempty"`
-	Day           int32                  `protobuf:"varint,3,opt,name=day,proto3" json:"day,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Four-digit year, e.g. 2026.
+	Year int32 `protobuf:"varint,1,opt,name=year,proto3" json:"year,omitempty"`
+	// Month, 1 to 12.
+	Month int32 `protobuf:"varint,2,opt,name=month,proto3" json:"month,omitempty"`
+	// Day of the month, 1 to 31.
+	Day           int32 `protobuf:"varint,3,opt,name=day,proto3" json:"day,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -238,13 +241,19 @@ func (x *DateRange) GetEnd() *Date {
 	return nil
 }
 
+// Address is a postal address.
 type Address struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Lines         []string               `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
-	City          string                 `protobuf:"bytes,2,opt,name=city,proto3" json:"city,omitempty"`
-	State         string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
-	PostalCode    string                 `protobuf:"bytes,4,opt,name=postal_code,json=postalCode,proto3" json:"postal_code,omitempty"`
-	CountryCode   string                 `protobuf:"bytes,5,opt,name=country_code,json=countryCode,proto3" json:"country_code,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Street lines, in order.
+	Lines []string `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
+	// City or town.
+	City string `protobuf:"bytes,2,opt,name=city,proto3" json:"city,omitempty"`
+	// Two-letter state or province code, e.g. OH.
+	State string `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	// ZIP or postal code.
+	PostalCode string `protobuf:"bytes,4,opt,name=postal_code,json=postalCode,proto3" json:"postal_code,omitempty"`
+	// Two-letter country code, e.g. US. Empty means US.
+	CountryCode   string `protobuf:"bytes,5,opt,name=country_code,json=countryCode,proto3" json:"country_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -314,12 +323,17 @@ func (x *Address) GetCountryCode() string {
 	return ""
 }
 
+// PersonName is a person's name.
 type PersonName struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	First         string                 `protobuf:"bytes,1,opt,name=first,proto3" json:"first,omitempty"`
-	Middle        string                 `protobuf:"bytes,2,opt,name=middle,proto3" json:"middle,omitempty"`
-	Last          string                 `protobuf:"bytes,3,opt,name=last,proto3" json:"last,omitempty"`
-	Suffix        string                 `protobuf:"bytes,4,opt,name=suffix,proto3" json:"suffix,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// First (given) name.
+	First string `protobuf:"bytes,1,opt,name=first,proto3" json:"first,omitempty"`
+	// Middle name or initial.
+	Middle string `protobuf:"bytes,2,opt,name=middle,proto3" json:"middle,omitempty"`
+	// Last (family) name.
+	Last string `protobuf:"bytes,3,opt,name=last,proto3" json:"last,omitempty"`
+	// Suffix, e.g. Jr or III.
+	Suffix        string `protobuf:"bytes,4,opt,name=suffix,proto3" json:"suffix,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -386,12 +400,18 @@ func (x *PersonName) GetSuffix() string {
 // is incremented by the store on every write and used for optimistic
 // concurrency.
 type AuditInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	CreatedBy     string                 `protobuf:"bytes,3,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
-	UpdatedBy     string                 `protobuf:"bytes,4,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
-	Revision      int64                  `protobuf:"varint,5,opt,name=revision,proto3" json:"revision,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// When the record was first stored.
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// When the record was last changed.
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// Who or what stored it first: a user, or a sender like ACMEHR.
+	CreatedBy string `protobuf:"bytes,3,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	// Who or what changed it last.
+	UpdatedBy string `protobuf:"bytes,4,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
+	// Number of times the record has been written, from 1. A change must
+	// name the revision it read, so two writers can't overwrite each other.
+	Revision      int64 `protobuf:"varint,5,opt,name=revision,proto3" json:"revision,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

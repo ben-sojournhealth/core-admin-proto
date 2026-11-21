@@ -47,8 +47,6 @@ type Service struct {
 	Ref func(*claimsv1.Claim) string
 
 	remittances int
-	// Last claim number sequence handed out, by prefix.
-	issued map[string]int
 }
 
 type logKey struct{}
@@ -198,8 +196,14 @@ func (s *Service) register(ctx context.Context, c *claimsv1.Claim, reason string
 	}
 }
 
-// number gives a claim on its first run its number, from the original
-// that run matched, and returns that original.
+// number makes sure a claim has its number before it is first saved, and
+// returns the original its first run matched, if any.
+//
+// A provider's submission (837, API, portal, paper), corrections and
+// voids included, is a new claim with a new number: intake reserved it
+// with the rest of the file, or one is reserved now. Only adjustments
+// and voids we create are versions of an existing number, and they
+// arrive numbered (AdjustClaim, VoidClaim).
 func (s *Service) number(ctx context.Context, c *claimsv1.Claim) (*claimsv1.Claim, error) {
 	var orig *claimsv1.Claim
 	if id := c.GetOriginalClaimId(); id != "" {
@@ -208,14 +212,10 @@ func (s *Service) number(ctx context.Context, c *claimsv1.Claim) (*claimsv1.Clai
 			return nil, err
 		}
 	}
-	switch {
-	case c.GetClaimNumber() != "":
-		// Numbered by an earlier attempt.
+	if c.GetClaimNumber() != "" {
 		return orig, nil
-	case orig == nil:
-		return nil, s.assignNumber(ctx, c)
 	}
-	return orig, s.nextVersion(ctx, orig, c)
+	return orig, s.assignNumber(ctx, c)
 }
 
 func voidReason(c *claimsv1.Claim, reason string) string {
@@ -422,6 +422,7 @@ func (s *Service) laterClaims(ctx context.Context, orig *claimsv1.Claim, exclude
 	at := orig.GetAdjudication().GetAdjudicatedTime().AsTime()
 	out, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{
 		PageSize: 10_000,
+		Where:    []store.Cond{store.Eq(fam, "adjudication", "familyAccumulatorsId")},
 		Filter: func(o *claimsv1.Claim) bool {
 			return o.GetId() != orig.GetId() && o.GetId() != excludeID &&
 				finalized(o.GetStatus()) &&
@@ -521,7 +522,7 @@ func (s *Service) AdjustClaim(ctx context.Context, req *claimsv1.AdjustClaimRequ
 	}
 	// An early, plain answer for the examiner. What guarantees one open
 	// replacement is the engine locking the original in the transaction.
-	pending, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1, Filter: func(o *claimsv1.Claim) bool {
+	pending, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1, Where: []store.Cond{store.Eq(orig.GetId(), "originalClaimId")}, Filter: func(o *claimsv1.Claim) bool {
 		return o.GetOriginalClaimId() == orig.GetId() && !finalized(o.GetStatus()) &&
 			o.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT
 	}})
@@ -566,11 +567,18 @@ func (s *Service) AdjustClaim(ctx context.Context, req *claimsv1.AdjustClaimRequ
 			}
 		}
 	} else {
+		// Our adjustment: the next version of the original's number.
+		if err := s.nextVersion(ctx, orig, repl); err != nil {
+			return nil, err
+		}
 		if resp.Claim, err = s.register(ctx, repl, req.GetReason()); err != nil {
 			return nil, err
 		}
 		s.logf(ctx, "Created replacement %s for %s (%s).", s.ref(resp.Claim), s.ref(orig), req.GetReason())
-		flagged, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 10_000, Filter: func(o *claimsv1.Claim) bool {
+		// Flags are raised on the family's later claims (claims_by_family).
+		flagged, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 10_000, Where: []store.Cond{
+			store.Eq(orig.GetAdjudication().GetFamilyAccumulatorsId(), "adjudication", "familyAccumulatorsId"),
+		}, Filter: func(o *claimsv1.Claim) bool {
 			for _, f := range o.GetReviewFlags() {
 				if f.GetSourceClaimId() == orig.GetId() && f.GetClearedTime() == nil {
 					return true

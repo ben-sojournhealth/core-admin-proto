@@ -13,8 +13,11 @@ message Money {
 // Date is a calendar date with no time zone (date of service, effective
 // date, DOB). Mirrors google.type.Date.
 message Date {
+  // Four-digit year, e.g. 2026.
   int32 year = 1;
+  // Month, 1 to 12.
   int32 month = 2;
+  // Day of the month, 1 to 31.
   int32 day = 3;
 }
 
@@ -24,18 +27,29 @@ message DateRange {
   Date end = 2;
 }
 
+// Address is a postal address.
 message Address {
+  // Street lines, in order.
   repeated string lines = 1;
+  // City or town.
   string city = 2;
+  // Two-letter state or province code, e.g. OH.
   string state = 3;
+  // ZIP or postal code.
   string postal_code = 4;
+  // Two-letter country code, e.g. US. Empty means US.
   string country_code = 5;
 }
 
+// PersonName is a person's name.
 message PersonName {
+  // First (given) name.
   string first = 1;
+  // Middle name or initial.
   string middle = 2;
+  // Last (family) name.
   string last = 3;
+  // Suffix, e.g. Jr or III.
   string suffix = 4;
 }
 
@@ -51,10 +65,16 @@ enum Gender {
 // is incremented by the store on every write and used for optimistic
 // concurrency.
 message AuditInfo {
+  // When the record was first stored.
   google.protobuf.Timestamp create_time = 1;
+  // When the record was last changed.
   google.protobuf.Timestamp update_time = 2;
+  // Who or what stored it first: a user, or a sender like ACMEHR.
   string created_by = 3;
+  // Who or what changed it last.
   string updated_by = 4;
+  // Number of times the record has been written, from 1. A change must
+  // name the revision it read, so two writers can't overwrite each other.
   int64 revision = 5;
 }
 

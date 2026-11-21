@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Eligibility Works</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --nav: #eef1f4; --ink: #18202b; --muted: #687384; --line: #e2e6ec;
+  --brand: #0f766e; --brand-ink: #ffffff; --brand-soft: #e3f3f1;
+  --amber: #8a5a00; --amber-soft: #fff4d9; --amber-line: #f2d48b;
+  --red: #b42318; --red-soft: #fdecea; --green: #157347; --green-soft: #e2f4ea; --gray-soft: #edf0f3;
+  --blue: #1d4ed8; --blue-soft: #e6edff;
+  --code: #f3f5f8; --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101418; --panel: #171c22; --nav: #13181d; --ink: #e6eaef; --muted: #93a0b0; --line: #262e37;
+    --brand: #2dd4bf; --brand-ink: #062320; --brand-soft: #123532;
+    --amber: #f3c969; --amber-soft: #2e2611; --amber-line: #5c4a1c;
+    --red: #ff8f85; --red-soft: #3a1d1b; --green: #6fdc9f; --green-soft: #15301f; --gray-soft: #232a33;
+    --blue: #93b4ff; --blue-soft: #1a2440;
+    --code: #12171c; --shadow: none;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; }
+a { color: inherit; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.top { height: 50px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.top b { font-size: 15px; }
+.top .right { margin-left: auto; display: flex; gap: 14px; font-size: 13px; color: var(--muted); }
+.top .right a { text-decoration: none; } .top .right a:hover { color: var(--brand); }
+.stage { flex: 1; overflow: auto; display: flex; justify-content: center; padding: 28px 24px; }
+.slide { width: 100%; max-width: 1120px; }
+.slide h1 { font-size: 30px; letter-spacing: -.02em; margin: 0 0 6px; }
+.slide .lede { color: var(--muted); font-size: 17px; margin: 0 0 22px; max-width: 820px; }
+.kicker { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); margin-bottom: 8px; }
+.bar { height: 52px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 20px; border-top: 1px solid var(--line); background: var(--panel); }
+.bar button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 5px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+.bar button:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+.bar button:disabled { opacity: .4; cursor: default; }
+.dots { display: flex; gap: 6px; flex-wrap: wrap; }
+.dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); cursor: pointer; }
+.dots i.on { background: var(--brand); }
+.count { margin-left: auto; color: var(--muted); font-size: 13px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 900px) { .grid2, .grid4 { grid-template-columns: 1fr; } }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow); }
+.box h3 { margin: 0 0 6px; font-size: 15px; }
+.box p { margin: 0; color: var(--muted); font-size: 14px; }
+.big { font-size: 44px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.note { margin-top: 18px; padding: 12px 16px; border-left: 3px solid var(--brand); background: var(--brand-soft); border-radius: 0 10px 10px 0; font-size: 15px; }
+.warn { border-color: var(--amber); background: var(--amber-soft); }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; background: var(--gray-soft); color: var(--muted); white-space: nowrap; }
+.chip.APPLIED, .chip.ok { background: var(--green-soft); color: var(--green); }
+.chip.EXCEPTION, .chip.bad { background: var(--red-soft); color: var(--red); }
+.chip.PROPOSED { background: var(--amber-soft); color: var(--amber); }
+.chip.SKIPPED { background: var(--gray-soft); color: var(--muted); }
+
+/* pipeline */
+.flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.flow .node { flex: 1; min-width: 150px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+.flow .node.truth { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.flow .node b { display: block; font-size: 16px; margin-bottom: 4px; }
+.flow .node span { color: var(--muted); font-size: 13.5px; }
+.flow .arrow { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0 8px; color: var(--muted); font-size: 12px; min-width: 70px; text-align: center; }
+.flow .arrow::before { content: "→"; font-size: 24px; color: var(--brand); }
+.stack { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 160px; }
+
+/* timelines */
+.tl { display: grid; grid-template-columns: 240px minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; }
+.tl.noans { grid-template-columns: 240px minmax(0, 1fr); }
+.tl .lab { font-size: 13.5px; }
+.tl .lab small { display: block; color: var(--muted); font-size: 12px; }
+.tl .ans { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.track { position: relative; height: 24px; background: var(--code); border-radius: 6px; }
+.track .span { position: absolute; top: 4px; bottom: 4px; border-radius: 4px; background: var(--brand); }
+.track .span.cobra { background: var(--blue); }
+.track .span.off { background: repeating-linear-gradient(135deg, var(--red) 0 5px, transparent 5px 9px); opacity: .85; }
+.track .span.ignored { opacity: .25; }
+.track .mark { position: absolute; top: -6px; bottom: -6px; width: 2px; background: var(--amber); }
+.months { position: relative; height: 18px; font-size: 11px; color: var(--muted); }
+.months span { position: absolute; }
+.result .track { outline: 2px solid var(--brand); }
+.strike { text-decoration: line-through; color: var(--muted); }
+.axis { font-size: 12px; color: var(--muted); }
+
+.cols3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 900px) { .cols3 { grid-template-columns: 1fr; } }
+.box.hl { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+.colhead { font-weight: 650; font-size: 15px; margin-bottom: 8px; }
+.colhead .n { font-size: 28px; font-weight: 700; margin-right: 8px; }
+.colhead small { display: block; color: var(--muted); font-weight: 400; font-size: 12.5px; }
+ul.names { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+ul.names li { font-size: 13.5px; padding: 2px 10px; border-radius: 999px; background: var(--green-soft); color: var(--green); }
+ul.names li.out { background: var(--amber-soft); color: var(--amber); }
+.box.hl ul.names li { background: var(--amber-soft); color: var(--amber); }
+.people { display: grid; grid-template-columns: 260px minmax(0, 1fr) 190px; gap: 10px 16px; align-items: center; }
+.people .who small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.people .pair { display: flex; flex-direction: column; gap: 5px; }
+.people .pair > div { display: grid; grid-template-columns: 104px 1fr; gap: 8px; align-items: center; }
+.people .tag { font-size: 11.5px; color: var(--muted); }
+.people .rng { display: flex; flex-direction: column; gap: 12px; }
+.people .rng small { color: var(--muted); font-size: 12px; }
+@media (max-width: 900px) { .people { grid-template-columns: 1fr; } }
+.reasons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.reasons span { font-size: 13.5px; padding: 4px 12px; border-radius: 999px; background: var(--gray-soft); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12.5px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+.steps td.msg { color: var(--muted); font-size: 13px; }
+.check { display: grid; grid-template-columns: 32px 1fr; gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.check:last-child { border-bottom: 0; }
+.check .tick { font-size: 20px; line-height: 1.2; }
+.check .tick.ok { color: var(--green); } .check .tick.bad { color: var(--red); }
+.check b { font-size: 15.5px; } .check p { margin: 2px 0 0; color: var(--muted); font-size: 14px; } .check small { color: var(--muted); font-size: 12.5px; }
+ul.plain { margin: 0; padding-left: 20px; } ul.plain li { margin: 6px 0; }
+.loading { color: var(--muted); padding: 80px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="top"><b>How eligibility works</b><span class="mono" style="color:var(--muted)">every example below ran just now, on real 834 samples</span>
+  <div class="right"><a href="/enrollment-intake/">Enrollment Intake</a><a href="/eligibility/">Eligibility</a><a href="/">All demos</a></div></div>
+<div class="stage"><div class="slide" id="slide"><div class="loading">Running the examples…</div></div></div>
+<div class="bar"><button id="prev">← Back</button><button id="next">Next →</button><div class="dots" id="dots"></div><span class="count" id="count"></span></div>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const when = (iso) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" });
+const day = (iso) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+let T = null;
+
+// Timelines run across 2026.
+const Y0 = Date.UTC(2026, 0, 1), Y1 = Date.UTC(2027, 0, 1);
+const pos = (iso) => Math.min(100, Math.max(0, ((Date.parse(iso + "T00:00:00Z") - Y0) / (Y1 - Y0)) * 100));
+const next = (iso) => new Date(Date.parse(iso + "T00:00:00Z") + 864e5).toISOString().slice(0, 10);
+const months = () => `<div class="months">${["Jan", "Mar", "May", "Jul", "Sep", "Nov"].map((m, i) => `<span style="left:${(Date.UTC(2026, i * 2, 1) - Y0) / (Y1 - Y0) * 100}%">${m}</span>`).join("")}</div>`;
+function track(bars, mark) {
+  return `<div class="track">${bars.map((b) => {
+    const a = pos(b.from), z = b.to ? pos(next(b.to)) : 100;
+    return z > a ? `<div class="span ${b.cls || ""}" style="left:${a}%;width:${z - a}%"></div>` : "";
+  }).join("")}${mark ? `<div class="mark" style="left:${pos(mark)}%"></div>` : ""}</div>`;
+}
+const spanBars = (spans) => spans.map((s) => ({ from: s.from, to: s.to, cls: s.cobra ? "cobra" : "" }));
+
+function versionChart(versions, mark, answers) {
+  const rows = versions.slice().reverse().map((v, i) => `
+    <div class="lab"><b>v${v.version}</b> · ${when(v.recorded)}<small>${esc(v.title)}</small></div>
+    ${track(spanBars(v.spans), mark)}
+    ${answers ? `<div class="ans">${esc(answers[v.version] || "")}</div>` : ""}`).join("");
+  return `<div class="tl ${answers ? "" : "noans"}"><div class="axis">recorded ↓ · coverage dates →</div>${months()}${answers ? "<div></div>" : ""}${rows}</div>`;
+}
+
+function assertionChart(as, resultSpans) {
+  const rows = as.map((a) => {
+    const cls = (a.covered ? (a.cobra ? "cobra" : "") : "off") + (a.ignored ? " ignored" : "");
+    return `<div class="lab ${a.ignored ? "strike" : ""}"><b>#${a.sequence}</b> ${a.covered ? "covered" : "not covered"} from ${day(a.from)}${a.through ? " to " + day(a.through) : ""}<small>${esc(a.cause)} · ${esc(a.by)}${a.ignored ? " · doesn't get a say" : ""}</small></div>${track([{ from: a.from, to: a.through, cls }])}`;
+  }).join("");
+  return `<div class="tl noans"><div class="axis">in the order recorded</div>${months()}${rows}
+    <div class="lab result"><b>Result</b><small>for each date, the latest assertion with a say</small></div><div class="result">${track(spanBars(resultSpans))}</div></div>`;
+}
+
+const steps = (ss) => `<table class="steps"><thead><tr><th>#</th><th>File</th><th>Input</th><th>Outcome</th></tr></thead><tbody>${ss.map((s) => `
+  <tr><td class="mono">${s.sequence}</td><td class="mono">${esc(s.file)}<div style="color:var(--muted);font-size:12px">${esc(s.by)}</div></td><td>${esc(s.title)}</td>
+  <td><span class="chip ${s.status}">${esc(s.status.toLowerCase())}</span><div class="msg" style="color:var(--muted);font-size:12.5px;margin-top:2px">${esc(s.message)}</div></td></tr>`).join("")}</tbody></table>`;
+const last = (ex) => ex.versions[ex.versions.length - 1].spans;
+
+const SLIDES = [
+  () => `<div style="padding-top:6vh"><div class="kicker">Eligibility</div><h1 style="font-size:44px">Eligibility you can audit</h1>
+    <p class="lede">834 files become members. Nothing is ever overwritten, so we can say what we believed on any date, why, and prove it by rebuilding everything from scratch.</p>
+    <div class="flow" style="max-width:900px;margin-top:34px">
+      <div class="node truth"><b>Keep every input</b><span>Each 834 member loop is recorded, in order, and never changed.</span></div><div class="arrow"></div>
+      <div class="node"><b>Derive by replay</b><span>Members are computed from the inputs, not edited.</span></div><div class="arrow"></div>
+      <div class="node"><b>Version every change</b><span>Each change to a member is kept with the input that caused it.</span></div></div>
+    <p style="color:var(--muted);margin-top:40px">Use ← → to move.</p></div>`,
+
+  () => `<div class="kicker">The problem</div><h1>Enrollment data doesn't arrive tidy</h1>
+    <p class="lede">Files arrive out of order, contradict each other, and come from more than one sender. Edit members in place and each of these erases what we knew before.</p>
+    <div class="grid4">
+      <div class="box"><h3>Retro terms</h3><p>Sent March 16, ending coverage January 31. Claims were paid in between.</p></div>
+      <div class="box"><h3>Flip-flops</h3><p>A day later, a reinstatement undoes it. Then a date gets corrected.</p></div>
+      <div class="box"><h3>Full files</h3><p>A file of everyone enrolled. Being left out of it means terminated, or a mistake.</p></div>
+      <div class="box"><h3>Two senders</h3><p>The employer speaks for employees, the COBRA vendor for continuees.</p></div></div>
+    <div class="note">The question that matters later: <b>when this claim was paid, what did we believe?</b> Only kept history can answer it.</div>`,
+
+  () => `<div class="kicker">The approach</div><h1>Three layers</h1>
+    <p class="lede">The input log is the source of truth. Members are derived from it, so they can be thrown away and rebuilt at any time.</p>
+    <div class="flow">
+      <div class="node"><b>834 files</b><span>From employers and COBRA vendors.</span></div><div class="arrow">intake<br>verbatim · 999</div>
+      <div class="node truth"><b>Input log</b><span>Every member loop and approval, numbered 1, 2, 3… Append-only.</span></div><div class="arrow">replay<br>rules ${esc("eligibility-2")}</div>
+      <div class="stack"><div class="node"><b>Members</b><span>Current coverage. What claims read.</span></div>
+        <div class="node"><b>Member versions</b><span>Every change, when it was recorded, and which input caused it.</span></div></div></div>
+    <div class="grid2" style="margin-top:20px">
+      <div class="box"><h3>A new version only when something changes</h3><p>A full file confirming coverage we already have adds an input but no versions.</p></div>
+      <div class="box"><h3>Inputs that can't apply are kept too</h3><p>An unknown code or a stranger's termination is recorded as an exception and changes nothing.</p></div></div>`,
+
+  () => {
+    const ex = T.examples.retro;
+    const answers = {}; ex.questions.slice(0, 3).forEach((q, i) => answers[i + 1] = q.answer.replace(/ \(v\d\)/, ""));
+    return `<div class="kicker">Temporality</div><h1>Two kinds of time</h1>
+    <p class="lede">Every fact about coverage has two dates: <b>when it applies</b> (across) and <b>when we recorded it</b> (down). Keeping both is what makes the history answerable.</p>
+    <div class="grid2" style="grid-template-columns:1fr 2.2fr">
+      <div><div class="box" style="margin-bottom:12px"><h3>Effective time →</h3><p>When coverage applies: January 1 to January 31, say.</p></div>
+        <div class="box"><h3>Recorded time ↓</h3><p>When we learned it: the moment an input was recorded. Each row is one version.</p></div>
+        <div class="note">The yellow line is <b>February 10</b>. Read down it: what we believed about that day, at each moment.</div></div>
+      <div class="box">${versionChart(ex.versions, "2026-02-10", answers)}<p style="margin-top:12px">${esc(ex.member)}: a retro term, then a reinstatement. A claim for Feb 10 paid before the term relied on v1; that row is still there.</p></div></div>`;
+  },
+
+  () => {
+    const ex = T.examples.retro;
+    return `<div class="kicker">How coverage is decided</div><h1>Each input is an assertion; the latest wins</h1>
+    <p class="lede">An input doesn't edit coverage. It asserts something for a range of dates. For each date, the most recently recorded assertion wins.</p>
+    <div class="box">${assertionChart(ex.assertions, last(ex))}</div>
+    <div class="note">So a retro term and its reinstatement are just two more assertions. Nothing is erased, and the result is the same however many times you replay.</div>`;
+  },
+
+  () => {
+    const ex = T.examples.retro;
+    return `<div class="kicker">Example 1</div><h1>A retro term, then a reinstatement</h1>
+    <p class="lede">${esc(ex.member)} is terminated back to January 31, then reinstated from February 1 the next day.</p>
+    <div class="grid2"><div class="box">${steps(ex.steps)}</div>
+      <div class="box"><h3>Ask the history</h3><table><thead><tr><th>As of</th><th>About</th><th>We believed</th></tr></thead><tbody>${ex.questions.map((q) => `<tr><td>${when(q.asked)}</td><td>${day(q.about)}</td><td><b>${esc(q.answer)}</b></td></tr>`).join("")}</tbody></table>
+      <p style="margin-top:10px">v3 has the same coverage as v1, but v2 is kept: it's what we believed for a day.</p></div></div>`;
+  },
+
+  () => {
+    const ff = T.examples.fullfile.fullFile;
+    const left = new Set(ff.leftOut.map((p) => p.name));
+    const list = (names, mark) => `<ul class="names">${names.map((n) => `<li class="${mark && left.has(n) ? "out" : ""}">${esc(n)}</li>`).join("")}</ul>`;
+    const bars = (spans) => track(spans.map((s) => ({ from: s.from, to: s.to })));
+    const range = (spans) => spans.map((s) => `${day(s.from)} – ${s.to ? day(s.to) : "open"}`).join(", ");
+    return `<div class="kicker">Example 2</div><h1>Full files: being left out is a proposal, not a change</h1>
+    <p class="lede">A change file says what changed. A full file lists everyone who should be enrolled and never says "terminate". Anyone we have who isn't in it is <b>proposed</b> for termination, and a person decides.</p>
+    <div class="cols3">
+      <div class="box"><div class="colhead"><span class="n">${ff.enrolled.length}</span>Enrolled on ${day(ff.effective)}<small>before the file arrived</small></div>${list(ff.enrolled, true)}</div>
+      <div class="box"><div class="colhead"><span class="n">${ff.inFile.length}</span>In the April full file<small class="mono">${esc(ff.file)}</small></div>${list(ff.inFile)}</div>
+      <div class="box hl"><div class="colhead"><span class="n">${ff.leftOut.length}</span>Left out: proposed<small>coverage would end the day before</small></div>${list(ff.leftOut.map((p) => p.name))}</div>
+    </div>
+    <div class="box" style="margin-top:14px">
+      <div class="people"><div></div><div class="pair"><div><span></span>${months()}</div></div><div></div>
+      ${ff.leftOut.map((p) => `
+        <div class="who"><b>${esc(p.name)}</b>${/addition/.test(p.enrolledBy) ? ` <span class="chip PROPOSED">added by a change file</span>` : ""}<small>enrolled by ${esc({ addition: "an addition", audit: "a full file" }[p.enrolledBy.split(" · ")[1]] || p.enrolledBy)} in <span class="mono">${esc(p.enrolledByFile)}</span></small></div>
+        <div class="pair"><div><span class="tag">before approval</span>${bars(p.before)}</div><div><span class="tag">after approval</span>${bars(p.after)}</div></div>
+        <div class="rng"><small>${esc(range(p.before))}</small><small>${esc(range(p.after))}</small></div>`).join("")}
+      </div></div>
+    <div class="grid2" style="margin-top:14px">
+      <div class="note">Until someone approves, <b>nobody's coverage changes</b>: the full file itself added ${ff.versionsBeforeApproval} member versions.</div>
+      <div class="note warn">Approval is all or nothing today. Approving ends Noah's coverage too, though he was only added after the file was made, so this file would go back to Acme.</div></div>`;
+  },
+
+  () => {
+    const ex = T.examples.cobra;
+    const prop = ex.proposals[0];
+    return `<div class="kicker">Example 3</div><h1>Two senders: the COBRA vendor speaks for continuees</h1>
+    <p class="lede">The vendor puts ${esc(ex.member)} on COBRA from April 1. The employer's termination arrives afterwards, then its full file without her.</p>
+    <div class="box">${assertionChart(ex.assertions, last(ex))}</div>
+    <div class="grid2" style="margin-top:14px">
+      <div class="note">The employer's termination <b>doesn't get a say</b> over coverage the vendor established. As of now, May 15 is <b>${esc(ex.questions[0].answer.replace(/ \(v\d\)/, ""))}</b>.</div>
+      <div class="note">The employer's full file proposes ending only <b>${esc(prop ? prop.terms.map((t) => t.name).join(", ") : "no one")}</b>: it speaks only for members the employer enrolled.</div></div>`;
+  },
+
+  () => {
+    const ex = T.examples.exceptions;
+    return `<div class="kicker">Example 4</div><h1>What can't be applied changes nothing</h1>
+    <p class="lede">Inputs we can't apply are still recorded, with the reason, so nothing is lost and nothing is guessed.</p>
+    <div class="grid2" style="grid-template-columns:2fr 1fr"><div class="box">${steps(ex.steps)}</div>
+      <div class="box" style="text-align:center"><div class="big">${ex.versionsAdded}</div><p>member versions added</p></div></div>`;
+  },
+
+  () => {
+    const f = T.examples.regen.facts, rb = f.rebuilt;
+    const bars = (spans) => track(spans.map((x) => ({ from: x.from, to: x.to, cls: x.cobra ? "cobra" : "" })));
+    return `<div class="kicker">Regeneration</div><h1>We can always rebuild today's data</h1>
+    <p class="lede">Members are a product of the inputs. Replay the inputs and you get them back exactly, so the current dataset can be regenerated whenever we need it.</p>
+    <div class="grid2">
+      <div class="box"><h3>Rebuilt from nothing</h3>
+        <div class="big" style="margin:6px 0">${rb.differences}<span style="font-size:18px;font-weight:600;color:var(--muted)"> differences</span></div>
+        <p>A brand-new, empty database was given only the ${rb.inputs} recorded inputs, plus the customers and plans they refer to. Replaying them produced the same ${rb.members} members: same ids, card numbers and coverage.</p></div>
+      <div class="box"><h3>When the rules change, see who it affects first</h3>
+        <p>Replaying the same inputs under <span class="mono">${esc(f.rulesThen)}</span> (before sender authority) instead of <span class="mono">${esc(f.rulesNow)}</span> changes ${f.changed.length} member:</p>
+        <div class="people" style="grid-template-columns:120px minmax(0,1fr);margin-top:12px"><div></div><div class="pair"><div><span></span>${months()}</div></div>
+        ${f.changed.map((c) => `<div class="who"><b>${esc(c.name)}</b></div>
+          <div class="pair"><div><span class="tag">now · ${esc(f.rulesNow)}</span>${bars(c.now)}</div><div><span class="tag">under ${esc(f.rulesThen)}</span>${bars(c.then)}</div></div>`).join("")}</div>
+        <p style="margin-top:12px">Under the old rules the employer's full file ended her COBRA. Adopting a rules change writes new versions marked "regenerated"; old versions, and the claims decided on them, stay as they were.</p></div></div>
+    <div class="box" style="margin-top:14px"><h3>Other times we'd regenerate</h3>
+      <div class="reasons"><span>A bug fix in the rules</span><span>A new client's sender setup</span><span>A new table built from history, like coverage by date</span><span>A new database, or a test copy of production</span><span>Recovering from damage to the members table</span></div></div>`;
+  },
+
+  () => `<div class="kicker">Confidence</div><h1>How we know it's right</h1>
+    <p class="lede">These checks just ran over ${esc(T.checkRun)}. The test suite runs them too, after sending every sample in 12 random orders.</p>
+    <div class="box">${T.checks.map((c) => `<div class="check"><div class="tick ${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✗"}</div><div><b>${esc(c.name)}</b><p>${esc(c.meaning)}</p><small>${esc(c.detail)}</small></div></div>`).join("")}</div>
+    <div class="note">The strongest is <b>history matches replay at every step</b>: the audit trail isn't a separate log that could disagree. It's what replay gives, input by input.</div>`,
+
+  () => `<div class="kicker">Limits</div><h1>Not built yet</h1>
+    <div class="grid2"><div class="box"><ul class="plain">
+      <li><b>Claims don't adjust automatically</b> when eligibility changes retroactively. By choice, for now: people decide.</li>
+      <li><b>COBRA premiums</b>: paid-through dates and grace periods (claims pend while unpaid).</li>
+      <li><b>Identity corrections</b>: a corrected name or birth date can look like a new person; that needs a merge input.</li></ul></div>
+      <div class="box"><ul class="plain">
+      <li><b>Partial approval</b>: a full file's terminations are approved all together.</li>
+      <li><b>Scale</b>: each input replays the whole log. In Postgres, replay starts from a checkpoint.</li>
+      <li><b>Sender authority</b> covers employer and COBRA administrator; other roles (a benefits platform, a carrier) would be new entries.</li></ul></div></div>`,
+];
+
+let cur = 0;
+function show(i) {
+  cur = Math.max(0, Math.min(SLIDES.length - 1, i));
+  $("#slide").innerHTML = SLIDES[cur]();
+  $("#prev").disabled = cur === 0; $("#next").disabled = cur === SLIDES.length - 1;
+  $("#dots").innerHTML = SLIDES.map((_, k) => `<i class="${k === cur ? "on" : ""}" data-k="${k}"></i>`).join("");
+  document.querySelectorAll("#dots i").forEach((d) => d.onclick = () => go(+d.dataset.k));
+  $("#count").textContent = `${cur + 1} / ${SLIDES.length}`;
+  $(".stage").scrollTop = 0;
+}
+function go(i) { history.replaceState(null, "", "#" + (i + 1)); show(i); }
+$("#prev").onclick = () => go(cur - 1);
+$("#next").onclick = () => go(cur + 1);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") { e.preventDefault(); go(cur + 1); }
+  if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); go(cur - 1); }
+});
+(async () => {
+  const r = await fetch("api/tour");
+  if (!r.ok) { $("#slide").innerHTML = `<div class="loading">Couldn't run the examples: ${esc(await r.text())}</div>`; return; }
+  T = await r.json();
+  show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+})();
+</script>
+</body>
+</html>

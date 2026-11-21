@@ -319,7 +319,7 @@ function showJob(v) {
   const failed = v.status === "FAILED";
   const flow = `
     <div class="panel flow">
-      <div class="step"><small>File</small><b class="mono" style="font-size:15px;margin:6px 0 7px">ISA ${esc(v.icn || "—")}</b><div class="sub">${esc(v.sender || "?")} → ${esc(v.receiver || "?")}${v.usage === "T" ? " · test" : ""}</div></div>
+      <div class="step"><small>File</small><b class="mono" style="font-size:15px;margin:6px 0 7px">ISA ${esc(v.icn || "—")}</b><div class="sub">${esc(v.sender || "?")} → ${esc(v.receiver || "?")}${v.usage === "T" ? " · test" : ""}</div>${v.numbers ? `<div class="sub mono" title="claim numbers reserved for this file, one per claim loop in file order">${esc(v.numbers)}</div>` : ""}</div>
       <div class="step ${failed ? "dead" : ""}"><small>999</small><b>${failed ? "—" : `${okSets}/${nSets}`}</b><div class="pills">${failed ? `<span class="chip FAILED">Not acknowledged</span>` : `${okSets ? `<span class="chip ok">${okSets} accepted</span>` : ""}${nSets - okSets ? `<span class="chip bad">${nSets - okSets} rejected</span>` : ""}`}</div></div>
       <div class="step ${failed ? "dead" : ""}"><small>Claims loaded</small><b>${failed ? 0 : loaded}<span class="muted" style="font-size:15px;font-weight:500"> / ${nClaims}</span></b><div class="pills">${pill("REJECTED", "rejected")}${pill("NOT_LOADED", "not loaded")}</div></div>
     </div>`;
@@ -331,10 +331,10 @@ function showJob(v) {
         <span class="sub">${s.claims.length} claim${s.claims.length === 1 ? "" : "s"}</span></div>
       ${s.errors.length ? `<div class="errs">${s.errors.map((e) => `<div><code>${esc(e.code)}</code><span>${esc(e.message)}</span><span class="sub">segment ${e.segment}</span></div>`).join("")}</div>` : ""}
       <div class="tablewrap"><table>
-        <thead><tr><th>Patient control #</th><th>Patient</th><th>Provider</th><th class="r">Charge</th><th></th><th>Loaded</th></tr></thead>
+        <thead><tr><th>Claim # · patient control #</th><th>Patient</th><th>Provider</th><th class="r">Charge</th><th></th><th>Loaded</th></tr></thead>
         <tbody>${s.claims.map((r) => `
           <tr data-key="${esc(r.key)}" title="Click to see the claim proto ingestion produced">
-            <td><span class="mono">${esc(r.pcn)}</span> ${freqChip(r)}${r.quoted ? `<div class="via">quotes ${esc(r.quoted)}</div>` : ""}</td>
+            <td>${r.number ? `<span class="mono" style="font-weight:650">${esc(r.number)}</span>${!s.accepted || !r.loaded ? ` <span class="chip NOT_LOADED" title="reserved for this claim loop, not used: ${s.accepted ? "not loaded" : "its set was rejected on the 999"}">unused</span>` : ""}<div class="via mono">${esc(r.pcn)}</div>` : `<span class="mono">${esc(r.pcn)}</span>`} ${freqChip(r)}${r.quoted ? `<div class="via">quotes ${esc(r.quoted)}</div>` : ""}</td>
             <td>${esc(r.patient)}<div class="sub mono">${esc(r.card)}${r.dependent ? " · patient loop" : ""}</div></td>
             <td>${esc(r.provider)}</td>
             <td class="r num">${r.charge ? usd(r.charge) : `<span class="muted">–</span>`}</td>

@@ -29,6 +29,12 @@ type Repos struct {
 	Members store.Store[*eligibilityv1.Member]
 	// One record per subscriber unit, plan and benefit period.
 	FamilyAccumulators store.Store[*eligibilityv1.FamilyAccumulators]
+	// 834 member loops as sent.
+	EnrollmentTransactions store.Store[*eligibilityv1.EnrollmentTransaction]
+	// Everything that can change eligibility, in order; append-only.
+	EligibilityInputs store.Store[*eligibilityv1.EligibilityInput]
+	// Every version of every member eligibility derived; append-only.
+	MemberVersions store.Store[*eligibilityv1.MemberVersion]
 
 	Providers    store.Store[*providerv1.Provider]
 	Networks     store.Store[*providerv1.Network]
@@ -46,35 +52,13 @@ type Repos struct {
 
 	// 835s as sent.
 	Remittances store.Store[*remittancev1.Remittance]
+
+	// Claim number blocks.
+	ClaimNumbers ClaimNumbers
 }
 
 // InTx runs f in one transaction across every store: all of its writes
 // commit together or none do. See store.Transactor.
 func (r *Repos) InTx(ctx context.Context, f func(ctx context.Context) error) error {
 	return r.DB.InTx(ctx, f)
-}
-
-// NewInMemory returns Repos backed entirely by store.Memory, in one
-// database.
-func NewInMemory() *Repos {
-	db := store.NewMemoryDB()
-	return &Repos{
-		DB:                 db,
-		Customers:          store.NewMemoryIn[*customerv1.Customer](db),
-		Groups:             store.NewMemoryIn[*customerv1.Group](db),
-		Plans:              store.NewMemoryIn[*planv1.Plan](db),
-		Members:            store.NewMemoryIn[*eligibilityv1.Member](db),
-		FamilyAccumulators: store.NewMemoryIn[*eligibilityv1.FamilyAccumulators](db),
-		Providers:          store.NewMemoryIn[*providerv1.Provider](db),
-		Networks:           store.NewMemoryIn[*providerv1.Network](db),
-		Contracts:          store.NewMemoryIn[*providerv1.Contract](db),
-		FeeSchedules:       store.NewMemoryIn[*providerv1.FeeSchedule](db),
-		Claims:             store.NewMemoryIn[*claimsv1.Claim](db),
-		StopLossPolicies:   store.NewMemoryIn[*stoplossv1.StopLossPolicy](db),
-		SpecificExposures:  store.NewMemoryIn[*stoplossv1.SpecificExposure](db),
-		AggregateExposures: store.NewMemoryIn[*stoplossv1.AggregateExposure](db),
-		StopLossFilings:    store.NewMemoryIn[*stoplossv1.StopLossFiling](db),
-		IngestionJobs:      store.NewMemoryIn[*ingestionv1.IngestionJob](db),
-		Remittances:        store.NewMemoryIn[*remittancev1.Remittance](db),
-	}
 }

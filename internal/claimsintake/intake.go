@@ -3,17 +3,18 @@ package claimsintake
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	ingestionv1 "coreadmin/gen/coreadmin/ingestion/v1"
+	"coreadmin/internal/claims"
 	"coreadmin/internal/ids"
 	"coreadmin/internal/repo"
 	"coreadmin/internal/store"
 	"coreadmin/internal/x12"
+	"coreadmin/internal/x12ack"
 )
 
 // Receiver takes in a claim exactly as submitted (claims.Service).
@@ -93,22 +94,29 @@ func (p *Processor) Ingest(ctx context.Context, filename string, raw []byte) (*i
 	// Check every set first, so the 999 covers the whole file, then load
 	// the accepted ones.
 	all := MapFile(ic, job.GetId())
+
+	// Reserve a claim number for every claim loop in the file, in file
+	// order, rejected sets included: a number with no claim then means
+	// that loop didn't load, and the job says why.
+	if err := p.number(ctx, job, all); err != nil {
+		return nil, err
+	}
 	job.Status = ingestionv1.IngestionStatus_INGESTION_STATUS_LOADING
 	if job, err = p.Repos.IngestionJobs.Create(ctx, job); err != nil {
 		return nil, err
 	}
 
-	ack := &ack{ic: ic, sender: p.ReceiverID, now: p.Now()}
+	ack := &x12ack.Builder{IC: ic, Sender: p.ReceiverID, Now: p.Now()}
 	for _, ch := range all {
 		res := &ingestionv1.TransactionSetResult{
 			ControlNumber: ch.Set.ST.E(2), Accepted: len(ch.Errs) == 0, ClaimCount: int32(len(ch.Claims)),
 		}
 		job.TransactionSets = append(job.TransactionSets, res)
-		ack.add(ch.Set, ch.Errs)
+		ack.Add(ch.Set, ch.Errs)
 		job.Counts.RecordsTotal += int64(len(ch.Claims))
 		for _, e := range ch.Errs {
 			res.Errors = append(res.Errors, &ingestionv1.RecordError{
-				RecordIndex: int64(e.Segment.Pos), Code: errCode(e), Message: e.Message,
+				RecordIndex: int64(e.Segment.Pos), Code: e.Code(), Message: e.Message,
 			})
 		}
 		if !res.Accepted {
@@ -143,12 +151,39 @@ func (p *Processor) Ingest(ctx context.Context, filename string, raw []byte) (*i
 	return p.Repos.IngestionJobs.Update(ctx, job)
 }
 
+// number reserves the file's block of claim numbers and gives each claim
+// loop its number by position.
+func (p *Processor) number(ctx context.Context, job *ingestionv1.IngestionJob, all []Checked) error {
+	count := 0
+	for _, ch := range all {
+		count += len(ch.Claims)
+	}
+	if count == 0 {
+		return nil
+	}
+	prefix := claims.NumberPrefix(job.GetReceivedTime().AsTime(), claimsv1.ClaimSource_CLAIM_SOURCE_EDI_837)
+	first, err := p.Repos.ClaimNumbers.Reserve(ctx, prefix, count, job.GetOriginalFilename()+" ("+job.GetId()+")")
+	if err != nil {
+		return err
+	}
+	job.ClaimNumbers = &ingestionv1.ClaimNumberBlock{Prefix: prefix, First: int32(first), Last: int32(first + count - 1)}
+	i := 0
+	for _, ch := range all {
+		for _, pc := range ch.Claims {
+			pc.Claim.ClaimNumber, pc.Claim.ClaimVersion = claims.FormatNumber(prefix, first+i), 1
+			i++
+		}
+	}
+	p.logf("Reserved claim numbers %s to %s for %s.", claims.FormatNumber(prefix, first), claims.FormatNumber(prefix, first+count-1), job.GetOriginalFilename())
+	return nil
+}
+
 // Checked is one transaction set: the claims mapped from it and the errors
 // the 999 reports for it. Any error rejects the whole set.
 type Checked struct {
 	Set    *x12.Set
 	Claims []ParsedClaim
-	Errs   []SegmentError
+	Errs   []x12ack.Error
 }
 
 // MapFile checks and maps every transaction set in an interchange. Each
@@ -162,13 +197,13 @@ func MapFile(ic *x12.Interchange, jobID string) []Checked {
 		for _, set := range g.Sets {
 			ch := Checked{Set: set}
 			if set.ST.E(1) != "837" || g.GS.E(8) != Guide837P {
-				ch.Errs = append(ch.Errs, SegmentError{Segment: set.ST, SegmentCode: "8", Element: 3, ElementCode: "7",
+				ch.Errs = append(ch.Errs, x12ack.Error{Segment: set.ST, SegmentCode: "8", Element: 3, ElementCode: "7",
 					Message: fmt.Sprintf("transaction %s %s is not an 837P (%s)", set.ST.E(1), g.GS.E(8), Guide837P)})
 			} else {
 				ch.Claims, ch.Errs = Map837P(ic.Delims, set)
 			}
 			for _, prob := range set.Problems {
-				ch.Errs = append(ch.Errs, SegmentError{Segment: set.SE, Message: prob})
+				ch.Errs = append(ch.Errs, x12ack.Error{Segment: set.SE, Message: prob})
 			}
 			for _, pc := range ch.Claims {
 				pc.Claim.ClearinghouseId = ic.Sender()
@@ -185,7 +220,9 @@ func MapFile(ic *x12.Interchange, jobID string) []Checked {
 
 // loaded returns the job that already loaded this interchange, if any.
 func (p *Processor) loaded(ctx context.Context, ic *x12.Interchange) (*ingestionv1.IngestionJob, error) {
-	jobs, _, err := p.Repos.IngestionJobs.List(ctx, store.ListOptions[*ingestionv1.IngestionJob]{PageSize: 1, Filter: func(j *ingestionv1.IngestionJob) bool {
+	jobs, _, err := p.Repos.IngestionJobs.List(ctx, store.ListOptions[*ingestionv1.IngestionJob]{PageSize: 1, Where: []store.Cond{
+		store.Eq(ic.ControlNumber(), "envelope", "interchangeControlNumber"), store.Eq(ic.Sender(), "envelope", "senderId"),
+	}, Filter: func(j *ingestionv1.IngestionJob) bool {
 		return j.GetStatus() != ingestionv1.IngestionStatus_INGESTION_STATUS_FAILED &&
 			j.GetEnvelope().GetSenderId() == ic.Sender() &&
 			j.GetEnvelope().GetInterchangeControlNumber() == ic.ControlNumber()
@@ -194,91 +231,4 @@ func (p *Processor) loaded(ctx context.Context, ic *x12.Interchange) (*ingestion
 		return nil, err
 	}
 	return jobs[0], nil
-}
-
-func errCode(e SegmentError) string {
-	switch {
-	case e.ElementCode != "":
-		return fmt.Sprintf("IK4-%s", e.ElementCode)
-	case e.SegmentCode != "":
-		return fmt.Sprintf("IK3-%s", e.SegmentCode)
-	}
-	return "IK5"
-}
-
-// ack builds the 999 for an interchange.
-type ack struct {
-	ic       *x12.Interchange
-	sender   string
-	now      time.Time
-	sets     []string // rendered AK2..IK5 blocks
-	accepted int
-	received int
-}
-
-func (a *ack) add(set *x12.Set, errs []SegmentError) {
-	a.received++
-	var w x12.Writer
-	w.Seg("AK2", set.ST.E(1), set.ST.E(2), set.ST.E(3))
-	envelope := false
-	for _, e := range errs {
-		if e.SegmentCode == "" {
-			envelope = true
-			continue
-		}
-		// IK302 is the segment's position in the set (ST = 1).
-		w.Seg("IK3", e.Segment.ID(), fmt.Sprint(e.Segment.Pos-set.ST.Pos+1), "", e.SegmentCode)
-		if e.Element > 0 {
-			w.Seg("IK4", fmt.Sprint(e.Element), "", e.ElementCode, truncate(e.Segment.E(e.Element), 99))
-		}
-	}
-	switch {
-	case len(errs) == 0:
-		a.accepted++
-		w.Seg("IK5", "A")
-	case envelope:
-		w.Seg("IK5", "R", "4")
-	default:
-		w.Seg("IK5", "R", "5")
-	}
-	a.sets = append(a.sets, w.String())
-}
-
-func (a *ack) String() string {
-	var w x12.Writer
-	gs := x12.Segment{El: []string{"GS"}}
-	if len(a.ic.Groups) > 0 {
-		gs = a.ic.Groups[0].GS
-	}
-	date, tm := a.now.Format("060102"), a.now.Format("1504")
-	control := fmt.Sprintf("%09d", a.now.Unix()%1_000_000_000)
-	w.ISA(a.sender, a.ic.Sender(), date, tm, control, a.ic.ISA.E(15))
-	w.Seg("GS", "FA", a.sender, a.ic.Sender(), a.now.Format("20060102"), tm, gs.E(6), "X", "005010X231A1")
-	w.Seg("ST", "999", "0001", "005010X231A1")
-	w.Seg("AK1", gs.E(1), gs.E(6), gs.E(8))
-	out := w.String()
-	for _, s := range a.sets {
-		out += s
-	}
-	status := "A"
-	switch {
-	case a.accepted == 0:
-		status = "R"
-	case a.accepted < a.received:
-		status = "P"
-	}
-	var t x12.Writer
-	t.Seg("AK9", status, fmt.Sprint(a.received), fmt.Sprint(a.received), fmt.Sprint(a.accepted))
-	segs := strings.Count(out, "~") - 2 + 1 // segments since ST, plus AK9
-	t.Seg("SE", fmt.Sprint(segs+1), "0001")
-	t.Seg("GE", "1", gs.E(6))
-	t.Seg("IEA", "1", control)
-	return out + t.String()
-}
-
-func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
 }

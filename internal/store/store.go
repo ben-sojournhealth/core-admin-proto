@@ -2,14 +2,15 @@
 //
 // Every top-level resource is a protobuf message with an `id` and an
 // `audit` field, persisted as protojson. Store is the interface services
-// program against; Memory is the in-process implementation used for the
-// prototype and tests. A real backend (Postgres, with each record in a
-// jsonb `data` column) implements the same interface.
+// program against; PG (pg.go) implements it on Postgres, versioned and
+// insert-only: nothing is overwritten, so every table is its own audit
+// log.
 package store
 
 import (
 	"context"
 	"errors"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -54,13 +55,50 @@ type Resource interface {
 	GetAudit() *commonv1.AuditInfo
 }
 
-// ListOptions controls List. Filter runs against each resource; results
-// are ordered by id.
+// ListOptions controls List. Results are ordered by id. Where narrows
+// the records a store reads (a database answers it from an index); Filter
+// then runs in Go on each record that passed. Use Where for the
+// conditions an access pattern depends on, and Filter for the rest.
 type ListOptions[T Resource] struct {
+	Where     []Cond
 	Filter    func(T) bool
 	PageSize  int
 	PageToken string
 }
+
+// Op is how a Cond compares.
+type Op int
+
+const (
+	// OpEq: the field at Path equals Value.
+	OpEq Op = iota + 1
+	// OpPrefix: the field at Path starts with Value.
+	OpPrefix
+	// OpContains: the record contains the JSON document Value, as
+	// Postgres's @> (every key and array element in Value is present).
+	OpContains
+)
+
+// Cond is a condition on a stored record, addressed by the record's
+// protojson field names (lowerCamelCase, as stored): e.g. Path
+// {"sourceRecord", "ingestionJobId"}. Enum fields compare by value name,
+// int64 fields by their decimal string.
+type Cond struct {
+	Path  []string
+	Op    Op
+	Value string
+}
+
+// Eq is the condition that the field at path equals value.
+func Eq(value string, path ...string) Cond { return Cond{Path: path, Op: OpEq, Value: value} }
+
+// Prefix is the condition that the field at path starts with prefix.
+func Prefix(prefix string, path ...string) Cond { return Cond{Path: path, Op: OpPrefix, Value: prefix} }
+
+// Contains is the condition that the record contains doc, a JSON object:
+// e.g. {"claims":[{"claimId":"x"}]} for a record whose claims list has an
+// entry with that claimId.
+func Contains(doc string) Cond { return Cond{Op: OpContains, Value: doc} }
 
 // Store persists one resource type.
 //
@@ -83,6 +121,19 @@ type Store[T Resource] interface {
 	// UPDATE (which waits rather than failing). Outside a transaction it
 	// only checks that the record exists.
 	Lock(ctx context.Context, id string) error
+	// Versions is the record's history, oldest first, the current version
+	// last. A deleted record's history remains.
+	Versions(ctx context.Context, id string) ([]Version[T], error)
+}
+
+// Version is one version of a record: what it was, and when it was the
+// valid one.
+type Version[T Resource] struct {
+	Record   T
+	Revision int64
+	// From when it was valid; To when it stopped (zero while current).
+	From, To   time.Time
+	RecordedBy string
 }
 
 type actorKey struct{}

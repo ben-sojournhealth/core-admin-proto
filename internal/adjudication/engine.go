@@ -389,7 +389,7 @@ func (e *DefaultEngine) MatchOriginal(ctx context.Context, c *claimsv1.Claim) (*
 	if v, _ := strconv.Atoi(m[2]); m[2] != "" && v < 2 {
 		return nil, claimsv1.OriginalMatch_ORIGINAL_MATCH_NONE, notFound
 	}
-	versions, _, err := e.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1000, Filter: func(o *claimsv1.Claim) bool {
+	versions, _, err := e.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1000, Where: []store.Cond{store.Eq(m[1], "claimNumber")}, Filter: func(o *claimsv1.Claim) bool {
 		return o.GetClaimNumber() == m[1] && o.GetId() != c.GetId() &&
 			o.GetFrequency() != claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID &&
 			// A version of the same number can only replace an earlier one.
@@ -437,7 +437,7 @@ func (e *DefaultEngine) checkOriginal(ctx context.Context, c, orig *claimsv1.Cla
 	if orig.GetPayment().GetState() == claimsv1.PaymentState_PAYMENT_STATE_SELECTED && ctx.Value(projectionKey{}) == nil {
 		return Pend(PendOriginalInPaymentRun, "original %s is in a payment run that has not been released", name)
 	}
-	open, _, err := e.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1, Filter: func(o *claimsv1.Claim) bool {
+	open, _, err := e.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1, Where: []store.Cond{store.Eq(orig.GetId(), "originalClaimId")}, Filter: func(o *claimsv1.Claim) bool {
 		return o.GetId() != c.GetId() && o.GetOriginalClaimId() == orig.GetId() &&
 			(o.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_PENDED || o.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_RECEIVED)
 	}})
@@ -466,9 +466,10 @@ func displayNumber(c *claimsv1.Claim) string {
 // and birth date. The member's customer becomes the claim's.
 func (e *DefaultEngine) resolveMember(ctx context.Context, c *claimsv1.Claim) (*eligibilityv1.Member, error) {
 	byCard := func(card string) ([]*eligibilityv1.Member, error) {
-		ms, _, err := e.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 2, Filter: func(m *eligibilityv1.Member) bool {
-			return card != "" && m.GetCardId() == card
-		}})
+		if card == "" {
+			return nil, nil
+		}
+		ms, _, err := e.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 2, Where: []store.Cond{store.Eq(card, "cardId")}})
 		return ms, err
 	}
 	ms, err := byCard(c.GetMemberCardId())
@@ -483,7 +484,7 @@ func (e *DefaultEngine) resolveMember(ctx context.Context, c *claimsv1.Claim) (*
 	}
 	m := ms[0]
 	if pt := c.GetSubmittedPatient(); pt.GetDependentLoop() {
-		household, _, err := e.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 50, Filter: func(o *eligibilityv1.Member) bool {
+		household, _, err := e.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 50, Where: []store.Cond{store.Eq(m.GetSubscriberId(), "subscriberId")}, Filter: func(o *eligibilityv1.Member) bool {
 			return o.GetCustomerId() == m.GetCustomerId() && o.GetSubscriberId() == m.GetSubscriberId()
 		}})
 		if err != nil {
@@ -549,8 +550,13 @@ func claimSignature(c *claimsv1.Claim) string {
 // provider, date of service and lines.
 func (e *DefaultEngine) findDuplicate(ctx context.Context, c *claimsv1.Claim) (string, error) {
 	sig := claimSignature(c)
+	if c.GetMemberId() == "" {
+		return "", nil
+	}
+	// The member's other claims: the signature starts with the member.
 	dups, _, err := e.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{
 		PageSize: 1,
+		Where:    []store.Cond{store.Eq(c.GetMemberId(), "memberId")},
 		Filter: func(o *claimsv1.Claim) bool {
 			if o.GetId() == c.GetId() || o.GetId() == c.GetOriginalClaimId() || o.GetOriginalClaimId() == c.GetId() {
 				return false
@@ -575,10 +581,10 @@ func (e *DefaultEngine) findDuplicate(ctx context.Context, c *claimsv1.Claim) (s
 // for the billed TIN on dos. An unknown provider is not an error: it is
 // treated as non-contracted.
 func (e *DefaultEngine) resolveProvider(ctx context.Context, ref *claimsv1.ProviderRef, dos *commonv1.Date) (*providerv1.Provider, []*providerv1.NetworkParticipation, error) {
-	ps, _, err := e.Repos.Providers.List(ctx, store.ListOptions[*providerv1.Provider]{
-		PageSize: 1,
-		Filter:   func(p *providerv1.Provider) bool { return p.GetNpi() == ref.GetNpi() },
-	})
+	if ref.GetNpi() == "" {
+		return nil, nil, nil
+	}
+	ps, _, err := e.Repos.Providers.List(ctx, store.ListOptions[*providerv1.Provider]{PageSize: 1, Where: []store.Cond{store.Eq(ref.GetNpi(), "npi")}})
 	if err != nil || len(ps) == 0 {
 		return nil, nil, err
 	}

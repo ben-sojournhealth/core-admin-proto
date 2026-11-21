@@ -89,7 +89,7 @@ func (s *Service) SelectForPayment(ctx context.Context, ids []string) ([]string,
 // ReleasePaymentRun issues payment for every selected claim: the point
 // after which a claim can no longer be pulled.
 func (s *Service) ReleasePaymentRun(ctx context.Context) ([]string, error) {
-	selected, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 10_000, Filter: func(c *claimsv1.Claim) bool {
+	selected, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 10_000, Where: []store.Cond{store.Eq("PAYMENT_STATE_SELECTED", "payment", "state")}, Filter: func(c *claimsv1.Claim) bool {
 		return c.GetPayment().GetState() == claimsv1.PaymentState_PAYMENT_STATE_SELECTED
 	}})
 	if err != nil {

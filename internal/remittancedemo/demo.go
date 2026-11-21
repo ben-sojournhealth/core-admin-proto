@@ -22,6 +22,7 @@ import (
 	"coreadmin/internal/claims"
 	"coreadmin/internal/dates"
 	"coreadmin/internal/remittance"
+	"coreadmin/internal/repo"
 	"coreadmin/internal/sim"
 	"coreadmin/internal/x12"
 )
@@ -328,7 +329,12 @@ func Run(ctx context.Context, id, method string) (*View, error) {
 	if x == nil {
 		return nil, fmt.Errorf("no sample %q", id)
 	}
-	s, err := sim.New()
+	repos, drop, err := repo.NewSandbox(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer drop()
+	s, err := sim.NewIn(repos)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package remittance_test
 
 import (
 	"context"
+	"coreadmin/internal/repo/repotest"
 	"errors"
 	"fmt"
 	"strings"
@@ -28,7 +29,7 @@ const (
 
 func setup(t *testing.T) (*sim.Sim, *remittance.Builder) {
 	t.Helper()
-	s, err := journey.New()
+	s, err := journey.NewIn(repotest.New(t))
 	if err != nil {
 		t.Fatal(err)
 	}

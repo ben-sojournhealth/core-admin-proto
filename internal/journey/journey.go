@@ -15,6 +15,7 @@ import (
 	commonv1 "coreadmin/gen/coreadmin/common/v1"
 	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
 	"coreadmin/internal/claims"
+	"coreadmin/internal/repo"
 	"coreadmin/internal/sim"
 	"coreadmin/internal/store"
 )
@@ -51,9 +52,9 @@ var families = []family{
 	}},
 }
 
-// New returns a Journey sandbox with the workload already played.
-func New() (*sim.Sim, error) {
-	s, err := sim.New()
+// NewIn plays the workload into repos, which must be empty.
+func NewIn(repos *repo.Repos) (*sim.Sim, error) {
+	s, err := sim.NewIn(repos)
 	if err != nil {
 		return nil, err
 	}
@@ -251,28 +252,14 @@ func GetDetail(s *sim.Sim, id string) (*Detail, error) {
 // Usually they share a claim number, but a correction linked after it was
 // numbered keeps its own, so the links, not the number, define the family.
 func lineage(ctx context.Context, s *sim.Sim, c *claimsv1.Claim) ([]*claimsv1.Claim, error) {
-	all, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 100_000, Filter: func(o *claimsv1.Claim) bool {
-		return o.GetOriginalClaimId() != "" || o.GetClaimNumber() == c.GetClaimNumber()
-	}})
-	if err != nil {
-		return nil, err
-	}
-	byID := map[string]*claimsv1.Claim{c.GetId(): c}
-	children := map[string][]*claimsv1.Claim{}
-	for _, o := range all {
-		byID[o.GetId()] = o
-		if p := o.GetOriginalClaimId(); p != "" {
-			children[p] = append(children[p], o)
-		}
-	}
+	// Up the original links to the root, then down through each claim's
+	// replacements and voids (claims_by_original).
 	root := c
 	for seen := map[string]bool{}; root.GetOriginalClaimId() != "" && !seen[root.GetId()]; {
 		seen[root.GetId()] = true
-		p, ok := byID[root.GetOriginalClaimId()]
-		if !ok {
-			if p, err = s.Repos.Claims.Get(ctx, root.GetOriginalClaimId()); err != nil {
-				break
-			}
+		p, err := s.Repos.Claims.Get(ctx, root.GetOriginalClaimId())
+		if err != nil {
+			break
 		}
 		root = p
 	}
@@ -285,7 +272,11 @@ func lineage(ctx context.Context, s *sim.Sim, c *claimsv1.Claim) ([]*claimsv1.Cl
 		}
 		seen[x.GetId()] = true
 		out = append(out, x)
-		queue = append(queue, children[x.GetId()]...)
+		children, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1000, Where: []store.Cond{store.Eq(x.GetId(), "originalClaimId")}})
+		if err != nil {
+			return nil, err
+		}
+		queue = append(queue, children...)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		return out[i].GetReceivedTime().AsTime().Before(out[j].GetReceivedTime().AsTime())

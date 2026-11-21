@@ -1,0 +1,7 @@
+{
+  "id": "grp_brightline_main",
+  "customerId": "cust_brightline",
+  "name": "Brightline - All Employees",
+  "planIds": ["plan_brightline_ppo"],
+  "effective": {"start": {"year": 2026, "month": 1, "day": 1}}
+}
