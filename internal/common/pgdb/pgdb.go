@@ -1,14 +1,17 @@
 // Package pgdb connects to the local Postgres everything runs on: the
 // demo, the tests and the per-request sandboxes.
 //
-// One Postgres serves them all: an embedded one, with its data under
-// ./data/pg at the module root, on port 5433. `make pg` starts it; if it
-// isn't running, the first caller starts it, and it keeps running after
-// that process exits, so later runs reuse it. COREADMIN_PG_URL points at a
-// different server instead.
+// One Postgres serves them all, and every checkout of the repo (worktrees
+// included): an embedded one on port 5433, its data in a directory of its
+// own outside any checkout (Dir), so removing a worktree never removes the
+// server's data. `make pg` starts it; if it isn't running, the first caller
+// starts it, and it keeps running after that process exits, so later runs
+// reuse it. COREADMIN_PG_URL points at a different server instead.
 //
-// The demo uses the database coreadmin; tests use coreadmin_test, so a
-// test can never touch demo data.
+// Each checkout has its own databases, so demos and tests in two worktrees
+// never touch each other's data: coreadmin and coreadmin_test in the main
+// checkout, coreadmin_<worktree> and coreadmin_test_<worktree> in a
+// worktree. Tests never use the demo's database.
 package pgdb
 
 import (
@@ -17,7 +20,9 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -35,13 +40,41 @@ var (
 	pools = map[string]*pgxpool.Pool{}
 )
 
-// Database is the database this process uses: coreadmin_test in a test
-// binary, coreadmin otherwise.
+// Database is the database this process uses: coreadmin, or
+// coreadmin_test in a test binary, with the worktree's name after it in a
+// worktree (see Checkout). COREADMIN_DB overrides it.
 func Database() string {
-	if testing.Testing() {
-		return "coreadmin_test"
+	if db := os.Getenv("COREADMIN_DB"); db != "" {
+		return db
 	}
-	return "coreadmin"
+	name := "coreadmin"
+	if testing.Testing() {
+		name += "_test"
+	}
+	if c := Checkout(); c != "" {
+		name += "_" + c
+	}
+	return name
+}
+
+// Checkout is "" in the repo's main checkout, and the worktree's folder
+// name, made safe for a database name, in a git worktree (whose .git is a
+// file, not a directory).
+func Checkout() string {
+	root := moduleRoot()
+	if fi, err := os.Stat(filepath.Join(root, ".git")); err != nil || fi.IsDir() {
+		return ""
+	}
+	return strings.Trim(nonIdent.ReplaceAllString(strings.ToLower(filepath.Base(root)), "_"), "_")
+}
+
+var nonIdent = regexp.MustCompile(`[^a-z0-9_]+`)
+
+// moduleRoot is the checkout this code was built from.
+func moduleRoot() string {
+	_, file, _, _ := runtime.Caller(0)
+	// internal/common/pgdb/pgdb.go -> module root.
+	return filepath.Join(filepath.Dir(file), "..", "..", "..")
 }
 
 // Pool returns this process's pool for Database, starting Postgres and
@@ -124,11 +157,18 @@ func up(ctx context.Context, url string) bool {
 	return true
 }
 
-// Dir is where the embedded Postgres keeps its data and binaries.
+// Dir is where the embedded Postgres keeps its data and binaries: shared
+// by every checkout, outside all of them (on macOS, ~/Library/Application
+// Support/coreadmin/pg). COREADMIN_PG_DIR overrides it.
 func Dir() string {
-	_, file, _, _ := runtime.Caller(0)
-	// internal/common/pgdb/pgdb.go -> module root.
-	return filepath.Join(filepath.Dir(file), "..", "..", "..", "data", "pg")
+	if d := os.Getenv("COREADMIN_PG_DIR"); d != "" {
+		return d
+	}
+	base, err := os.UserConfigDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	return filepath.Join(base, "coreadmin", "pg")
 }
 
 // Start starts the embedded Postgres, leaving it running. It downloads

@@ -26,9 +26,8 @@ func main() {
 		if _, err := pgdb.Pool(context.Background()); err != nil {
 			fail(err)
 		}
-		fmt.Println("Postgres is running.")
-		fmt.Println("demo:  ", pgdb.URL("coreadmin"))
-		fmt.Println("tests: ", pgdb.URL("coreadmin_test"))
+		fmt.Println("Postgres is running; data in", pgdb.Dir())
+		fmt.Println("this checkout's demo database:", pgdb.URL(pgdb.Database()))
 	case "stop":
 		var ctl string
 		for _, c := range []string{filepath.Join(pgdb.Dir(), "bin", "bin", "pg_ctl"), filepath.Join(pgdb.Dir(), "run", "bin", "pg_ctl")} {
@@ -46,7 +45,7 @@ func main() {
 			fail(err)
 		}
 	case "url":
-		fmt.Println(pgdb.URL("coreadmin"))
+		fmt.Println(pgdb.URL(pgdb.Database()))
 	default:
 		fail(fmt.Errorf("unknown command %q: start, stop or url", cmd))
 	}

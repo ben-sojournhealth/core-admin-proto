@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package coreadmin.claims.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// FamilyAccumulators holds every accumulator balance for one subscriber
+// unit, on one plan, for one benefit period. It is a single record on
+// purpose: a claim can touch several balances (individual and family
+// deductible, individual and family out-of-pocket), and keeping them
+// behind one audit.revision makes posting a claim one conditional write.
+// Two claims for the same family cannot both be calculated against a
+// stale balance: the second write is rejected and recalculated.
+//
+// Balances change only through entries, so they can be audited and
+// reversed when claims are adjusted or voided.
+//
+// A dependent who moves to another subscriber mid-period keeps their
+// individual balances here; carrying them over is an explicit transfer
+// (entries with external_source set on the new family's record).
+message FamilyAccumulators {
+  // Deterministic id: {subscriber_id}:{plan_id}:{benefit period start,
+  // YYYY-MM-DD}.
+  string id = 1;
+  string customer_id = 2;
+  string subscriber_id = 3;
+  string plan_id = 4;
+  common.v1.DateRange benefit_period = 5;
+  repeated AccumulatorBalance balances = 6;
+  // Append-only, in posting order.
+  repeated AccumulatorEntry entries = 7;
+  common.v1.AuditInfo audit = 15;
+}
+
+// AccumulatorBalance is the running total for one accumulator (defined on
+// the plan) for one owner.
+message AccumulatorBalance {
+  string accumulator_id = 1;
+  // member_id for INDIVIDUAL accumulators, subscriber_id for FAMILY.
+  string owner_id = 2;
+  // Sum of this balance's entries.
+  common.v1.Money applied = 3;
+  common.v1.Money limit = 4;
+}
+
+message AccumulatorEntry {
+  string accumulator_id = 1;
+  string owner_id = 2;
+  string claim_id = 3;
+  int32 claim_line_number = 4;
+  // Negative amounts reverse a prior posting.
+  common.v1.Money amount = 5;
+  common.v1.Date service_date = 6;
+  google.protobuf.Timestamp posted_time = 7;
+  // Source of an external posting (e.g. pharmacy PBM feed, prior carrier
+  // carryover, transfer from another family record). Empty for claims
+  // adjudicated here.
+  string external_source = 8;
+}

@@ -1,4 +1,4 @@
-package repo
+package claimsdb
 
 import (
 	"context"
@@ -27,10 +27,10 @@ type ClaimNumbers interface {
 // sequence. The block's ref and the claims that use it explain any gap.
 type pgClaimNumbers struct{ db *store.PGDB }
 
-func (n *pgClaimNumbers) table() string { return n.db.Qualified(Claims, "claim_number_blocks") }
+func (n *pgClaimNumbers) table() string { return n.db.Qualified(Schema, "claim_number_blocks") }
 
 func (n *pgClaimNumbers) migrate(ctx context.Context) error {
-	_, err := n.db.Pool.Exec(ctx, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %q", n.db.Schema(Claims)))
+	_, err := n.db.Pool.Exec(ctx, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %q", n.db.Schema(Schema)))
 	if err != nil {
 		return err
 	}

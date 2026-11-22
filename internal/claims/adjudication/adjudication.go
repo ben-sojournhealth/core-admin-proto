@@ -131,7 +131,7 @@ type CostShareRequest struct {
 	// calculator adds this line's cost sharing to it, so later lines on
 	// the same claim see earlier lines' amounts. It is never saved; only
 	// AccumulatorLedger.Post changes stored balances.
-	Accumulators *eligibilityv1.FamilyAccumulators
+	Accumulators *claimsv1.FamilyAccumulators
 	LineNumber   int32
 }
 
@@ -148,7 +148,7 @@ type AccumulatorLedger interface {
 	// benefit period containing AsOf (an empty record at revision 0 if
 	// nothing has posted yet). The record's audit.revision is what Post
 	// must be given.
-	Snapshot(ctx context.Context, req SnapshotRequest) (*eligibilityv1.FamilyAccumulators, error)
+	Snapshot(ctx context.Context, req SnapshotRequest) (*claimsv1.FamilyAccumulators, error)
 	// Post applies a claim's postings in one conditional write. Called
 	// exactly once per claim, when it is finalized. If the family record
 	// is no longer at req.Revision, nothing is applied and Post returns
@@ -179,7 +179,7 @@ type PostRequest struct {
 	Revision int64
 	// New is the record header (id, customer, subscriber, plan, benefit
 	// period) used to create the record on the family's first posting.
-	New *eligibilityv1.FamilyAccumulators
+	New *claimsv1.FamilyAccumulators
 	// Limits is each accumulator's limit on the plan version used, by
 	// accumulator id; copied onto balances for display.
 	Limits      map[string]*commonv1.Money

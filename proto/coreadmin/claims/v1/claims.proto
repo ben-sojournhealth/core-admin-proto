@@ -345,7 +345,7 @@ message Adjudication {
   repeated AccumulatorPosting accumulator_postings = 12;
   // Engine version / rules hash, so a decision can be reproduced.
   string engine_version = 13;
-  // The eligibility.v1.FamilyAccumulators record cost sharing was
+  // The FamilyAccumulators record cost sharing was
   // calculated against, and its audit.revision at that time.
   string family_accumulators_id = 14;
   int64 family_accumulators_revision = 15;

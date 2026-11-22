@@ -4,27 +4,38 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
 
+	"coreadmin/internal/claims/claimsdb"
 	"coreadmin/internal/common/repo"
+	"coreadmin/internal/employer/employerdb"
+	"coreadmin/internal/finance/financedb"
+	"coreadmin/internal/network/networkdb"
 )
 
-// Which domain each Repos store belongs to (its table's schema).
-var storeDomain = map[string]string{
-	"Customers": repo.Employer, "Groups": repo.Employer, "Plans": repo.Employer, "Members": repo.Employer,
-	"EnrollmentIngestionJobs": repo.Employer, "EnrollmentTransactions": repo.Employer,
-	"EligibilityInputs": repo.Employer, "MemberVersions": repo.Employer,
-
-	"Claims": repo.Claims, "FamilyAccumulators": repo.Claims, "FeeSchedules": repo.Claims,
-	"ClaimIngestionJobs": repo.Claims, "Remittances": repo.Claims, "ClaimNumbers": repo.Claims,
-
-	"Providers": repo.Network, "Networks": repo.Network, "Contracts": repo.Network,
-
-	"StopLossPolicies": repo.Finance, "SpecificExposures": repo.Finance,
-	"AggregateExposures": repo.Finance, "StopLossFilings": repo.Finance,
-}
+// Which domain each Repos store belongs to: the domain whose <domain>db
+// package declares it.
+var storeDomain = func() map[string]string {
+	owners := map[reflect.Type]string{
+		reflect.TypeOf(employerdb.EmployerStores{}): employerdb.Schema,
+		reflect.TypeOf(claimsdb.ClaimsStores{}):     claimsdb.Schema,
+		reflect.TypeOf(networkdb.NetworkStores{}):   networkdb.Schema,
+		reflect.TypeOf(financedb.FinanceStores{}):   financedb.Schema,
+	}
+	m := map[string]string{}
+	for _, f := range reflect.VisibleFields(reflect.TypeOf(repo.Repos{})) {
+		if len(f.Index) == 2 {
+			parent := reflect.TypeOf(repo.Repos{}).FieldByIndex(f.Index[:1]).Type
+			if d, ok := owners[parent]; ok {
+				m[f.Name] = d
+			}
+		}
+	}
+	return m
+}()
 
 // Each domain's code is everything under internal/<domain>/, except its
 // demos (packages named *demo): like Journey, the simulator and seed data,
@@ -68,16 +79,21 @@ func TestDomainsUseOnlyTheirOwnStores(t *testing.T) {
 	}
 }
 
-// Every store in Repos is assigned a domain above.
+// Every domain's stores are in Repos, and every embedded group of stores
+// belongs to a domain.
 func TestEveryStoreHasADomain(t *testing.T) {
-	src, err := os.ReadFile("repo.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	field := regexp.MustCompile(`(?m)^\t([A-Z][A-Za-z]*)\s+(store\.Store|ClaimNumbers)`)
-	for _, m := range field.FindAllStringSubmatch(string(src), -1) {
-		if _, ok := storeDomain[m[1]]; !ok {
-			t.Errorf("Repos.%s has no domain in storeDomain", m[1])
+	for _, f := range reflect.VisibleFields(reflect.TypeOf(repo.Repos{})) {
+		if f.Anonymous {
+			continue
 		}
+		if len(f.Index) == 1 && f.Name != "DB" {
+			t.Errorf("Repos.%s isn't declared by a domain's db package", f.Name)
+		}
+		if len(f.Index) == 2 && storeDomain[f.Name] == "" {
+			t.Errorf("Repos.%s has no domain", f.Name)
+		}
+	}
+	if len(storeDomain) < 15 {
+		t.Errorf("only %d stores found: %v", len(storeDomain), storeDomain)
 	}
 }

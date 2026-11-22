@@ -9,7 +9,6 @@ import (
 	"time"
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
-	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
 	"coreadmin/internal/claims"
 	"coreadmin/internal/common/store"
 )
@@ -100,7 +99,7 @@ func TestVoidIsAllOrNothing(t *testing.T) {
 	}}); len(voids) != 0 {
 		t.Errorf("a void was saved: %s", describe(voids[0]))
 	}
-	var accAfter *eligibilityv1.FamilyAccumulators
+	var accAfter *claimsv1.FamilyAccumulators
 	accAfter, _ = s.Repos.FamilyAccumulators.Get(ctx, accID)
 	if accAfter.GetAudit().GetRevision() != accBefore.GetAudit().GetRevision() {
 		t.Errorf("accumulators reversed by a void that didn't happen")

@@ -133,7 +133,7 @@ type Calculation struct {
 	// Header of the family accumulator record the result was calculated
 	// against, and its revision. Nil when the claim never got as far as
 	// accumulators (e.g. no eligibility).
-	Family   *eligibilityv1.FamilyAccumulators
+	Family   *claimsv1.FamilyAccumulators
 	Revision int64
 	// Limits by accumulator id, from the plan version used.
 	Limits map[string]*commonv1.Money
@@ -310,7 +310,7 @@ func (e *DefaultEngine) run(ctx context.Context, calc *Calculation) error {
 		return err
 	}
 	calc.Revision = work.GetAudit().GetRevision()
-	calc.Family = &eligibilityv1.FamilyAccumulators{
+	calc.Family = &claimsv1.FamilyAccumulators{
 		Id: work.GetId(), CustomerId: work.GetCustomerId(), SubscriberId: work.GetSubscriberId(),
 		PlanId: work.GetPlanId(), BenefitPeriod: work.GetBenefitPeriod(),
 	}
@@ -781,7 +781,7 @@ type accumulatorRef struct {
 // With both an individual and a family accumulator: embedded means the
 // member is done when either their own or the family limit is reached;
 // non-embedded means only the family total matters.
-func remaining(v *planv1.PlanVersion, typ planv1.AccumulatorType, tierID string, m *eligibilityv1.Member, work *eligibilityv1.FamilyAccumulators) (int64, []accumulatorRef) {
+func remaining(v *planv1.PlanVersion, typ planv1.AccumulatorType, tierID string, m *eligibilityv1.Member, work *claimsv1.FamilyAccumulators) (int64, []accumulatorRef) {
 	var ind, fam *planv1.Accumulator
 	for _, a := range v.GetAccumulators() {
 		if a.GetType() != typ || !slices.Contains(a.GetTierIds(), tierID) {
@@ -823,7 +823,7 @@ func remaining(v *planv1.PlanVersion, typ planv1.AccumulatorType, tierID string,
 //
 // Order: deductible, then copay, then coinsurance on what is left. The
 // deductible counts toward the out-of-pocket maximum.
-func applyCostShare(la *claimsv1.LineAdjudication, cs *planv1.CostShare, v *planv1.PlanVersion, tierID string, m *eligibilityv1.Member, work *eligibilityv1.FamilyAccumulators, lineNumber int32) []*claimsv1.AccumulatorPosting {
+func applyCostShare(la *claimsv1.LineAdjudication, cs *planv1.CostShare, v *planv1.PlanVersion, tierID string, m *eligibilityv1.Member, work *claimsv1.FamilyAccumulators, lineNumber int32) []*claimsv1.AccumulatorPosting {
 	allowed := la.GetPricing().GetAllowed().GetCents()
 	dedLeft, dedAccs := remaining(v, planv1.AccumulatorType_ACCUMULATOR_TYPE_DEDUCTIBLE, tierID, m, work)
 	oopLeft, oopAccs := remaining(v, planv1.AccumulatorType_ACCUMULATOR_TYPE_OUT_OF_POCKET, tierID, m, work)

@@ -26,8 +26,9 @@ check: gen lint test
 demo: gen
 	go run ./cmd/demo
 
-# The local Postgres (embedded; data in ./data/pg, port 5433). Tests and
-# the demo start it if it isn't running; it keeps running until stopped.
+# The local Postgres (embedded, port 5433; data outside every checkout, see
+# internal/common/pgdb). Tests and the demo start it if it isn't running;
+# it keeps running until stopped.
 pg:
 	go run ./cmd/pg start
 

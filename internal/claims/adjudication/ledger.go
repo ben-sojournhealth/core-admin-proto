@@ -11,7 +11,6 @@ import (
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	commonv1 "coreadmin/gen/coreadmin/common/v1"
-	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
 	"coreadmin/internal/common/dates"
 	"coreadmin/internal/common/store"
 )
@@ -20,7 +19,7 @@ import (
 // record per subscriber unit, plan and benefit period. All of its safety
 // comes from the store's revision check; it holds no locks.
 type StoreLedger struct {
-	Records store.Store[*eligibilityv1.FamilyAccumulators]
+	Records store.Store[*claimsv1.FamilyAccumulators]
 	Now     func() time.Time
 }
 
@@ -31,12 +30,12 @@ func FamilyAccumulatorsID(subscriberID, planID string, periodStart *commonv1.Dat
 	return fmt.Sprintf("%s:%s:%s", subscriberID, planID, dates.Format(periodStart))
 }
 
-func (l *StoreLedger) Snapshot(ctx context.Context, req SnapshotRequest) (*eligibilityv1.FamilyAccumulators, error) {
+func (l *StoreLedger) Snapshot(ctx context.Context, req SnapshotRequest) (*claimsv1.FamilyAccumulators, error) {
 	period := req.Plan.GetBenefitPeriod()
 	id := FamilyAccumulatorsID(req.Member.GetSubscriberId(), req.Plan.GetId(), period.GetStart())
 	rec, err := l.Records.Get(ctx, id)
 	if errors.Is(err, store.ErrNotFound) {
-		rec = &eligibilityv1.FamilyAccumulators{
+		rec = &claimsv1.FamilyAccumulators{
 			Id:            id,
 			CustomerId:    req.Member.GetCustomerId(),
 			SubscriberId:  req.Member.GetSubscriberId(),
@@ -68,7 +67,7 @@ func (l *StoreLedger) Post(ctx context.Context, req PostRequest) error {
 		if req.New == nil {
 			return fmt.Errorf("adjudication: no accumulator record %s and no header to create it", req.FamilyAccumulatorsID)
 		}
-		rec = proto.Clone(req.New).(*eligibilityv1.FamilyAccumulators)
+		rec = proto.Clone(req.New).(*claimsv1.FamilyAccumulators)
 		rec.Balances, rec.Entries, rec.Audit = nil, nil, nil
 	} else if err != nil {
 		return err
@@ -94,7 +93,7 @@ func (l *StoreLedger) Post(ctx context.Context, req PostRequest) error {
 		if p.GetAmount().GetCents() == 0 {
 			continue
 		}
-		rec.Entries = append(rec.Entries, &eligibilityv1.AccumulatorEntry{
+		rec.Entries = append(rec.Entries, &claimsv1.AccumulatorEntry{
 			AccumulatorId:   p.GetAccumulatorId(),
 			OwnerId:         p.GetOwnerId(),
 			ClaimId:         req.ClaimID,
@@ -132,7 +131,7 @@ func (l *StoreLedger) Reverse(ctx context.Context, familyAccumulatorsID, claimID
 	return ErrBalancesChanged
 }
 
-func (l *StoreLedger) save(ctx context.Context, rec *eligibilityv1.FamilyAccumulators, exists bool) error {
+func (l *StoreLedger) save(ctx context.Context, rec *claimsv1.FamilyAccumulators, exists bool) error {
 	var err error
 	if exists {
 		_, err = l.Records.Update(ctx, rec)
@@ -148,7 +147,7 @@ func (l *StoreLedger) save(ctx context.Context, rec *eligibilityv1.FamilyAccumul
 type balanceKey struct{ accumulatorID, ownerID string }
 
 // netByBalance sums a claim's entries per balance (zero once reversed).
-func netByBalance(rec *eligibilityv1.FamilyAccumulators, claimID string) map[balanceKey]int64 {
+func netByBalance(rec *claimsv1.FamilyAccumulators, claimID string) map[balanceKey]int64 {
 	net := map[balanceKey]int64{}
 	for _, e := range rec.GetEntries() {
 		if e.GetClaimId() == claimID {
@@ -165,7 +164,7 @@ func netByBalance(rec *eligibilityv1.FamilyAccumulators, claimID string) map[bal
 
 // reverseEntries appends entries negating everything claimID has posted.
 // Reports whether anything changed.
-func reverseEntries(rec *eligibilityv1.FamilyAccumulators, claimID string, now *timestamppb.Timestamp) bool {
+func reverseEntries(rec *claimsv1.FamilyAccumulators, claimID string, now *timestamppb.Timestamp) bool {
 	net := netByBalance(rec, claimID)
 	// Keep entry order stable: walk existing entries rather than the map.
 	done := map[balanceKey]bool{}
@@ -176,7 +175,7 @@ func reverseEntries(rec *eligibilityv1.FamilyAccumulators, claimID string, now *
 			continue
 		}
 		done[k] = true
-		rec.Entries = append(rec.Entries, &eligibilityv1.AccumulatorEntry{
+		rec.Entries = append(rec.Entries, &claimsv1.AccumulatorEntry{
 			AccumulatorId: k.accumulatorID,
 			OwnerId:       k.ownerID,
 			ClaimId:       claimID,
@@ -189,7 +188,7 @@ func reverseEntries(rec *eligibilityv1.FamilyAccumulators, claimID string, now *
 }
 
 // Applied returns the amount applied to one balance.
-func Applied(rec *eligibilityv1.FamilyAccumulators, accumulatorID, ownerID string) int64 {
+func Applied(rec *claimsv1.FamilyAccumulators, accumulatorID, ownerID string) int64 {
 	for _, b := range rec.GetBalances() {
 		if b.GetAccumulatorId() == accumulatorID && b.GetOwnerId() == ownerID {
 			return b.GetApplied().GetCents()
@@ -199,7 +198,7 @@ func Applied(rec *eligibilityv1.FamilyAccumulators, accumulatorID, ownerID strin
 }
 
 // bump adds amount to a balance, creating it if needed.
-func bump(rec *eligibilityv1.FamilyAccumulators, accumulatorID, ownerID string, amount int64, limit *commonv1.Money) {
+func bump(rec *claimsv1.FamilyAccumulators, accumulatorID, ownerID string, amount int64, limit *commonv1.Money) {
 	for _, b := range rec.GetBalances() {
 		if b.GetAccumulatorId() == accumulatorID && b.GetOwnerId() == ownerID {
 			b.Applied = &commonv1.Money{Cents: b.GetApplied().GetCents() + amount}
@@ -209,7 +208,7 @@ func bump(rec *eligibilityv1.FamilyAccumulators, accumulatorID, ownerID string, 
 			return
 		}
 	}
-	rec.Balances = append(rec.Balances, &eligibilityv1.AccumulatorBalance{
+	rec.Balances = append(rec.Balances, &claimsv1.AccumulatorBalance{
 		AccumulatorId: accumulatorID,
 		OwnerId:       ownerID,
 		Applied:       &commonv1.Money{Cents: amount},
