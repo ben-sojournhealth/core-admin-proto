@@ -7,14 +7,14 @@
 <style>
 :root {
   --bg: #f4f5f7; --panel: #ffffff; --ink: #1c2330; --muted: #667085; --line: #d9dde5; --edge: #a3abb9;
-  --accent: #3b5bdb; --accent-ink: #ffffff; --accent-soft: #eef2ff; --ext: #f9fafb;
+  --accent: #3b5bdb; --accent-ink: #ffffff; --accent-soft: #eef2ff; --ext: #f9fafb; --domain: rgba(59,91,219,.035); --oos: #b54708;
   --shadow: 0 1px 2px rgba(16,24,40,.06);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #12151b; --panel: #1b1f27; --ink: #e7eaf0; --muted: #98a2b3; --line: #343b47; --edge: #5b6575;
-    --accent: #7c93ff; --accent-ink: #0d1020; --accent-soft: #232b4d; --ext: #161a21;
+    --accent: #7c93ff; --accent-ink: #0d1020; --accent-soft: #232b4d; --ext: #161a21; --domain: rgba(124,147,255,.05); --oos: #f79009;
     --shadow: none;
     color-scheme: dark;
   }
@@ -28,6 +28,9 @@ header h1 { font-size: 16px; font-weight: 650; margin: 0; }
 .legend .l-live::before { background: var(--accent-soft); border: 1.5px solid var(--accent); }
 .legend .l-planned::before { border: 1.5px dashed var(--edge); }
 .legend .l-ext::before { background: var(--ext); border: 1px solid var(--line); }
+.legend .l-oos::before { border: 1.5px dashed var(--oos); }
+.legend .l-hint::before { display: none; }
+.legend .l-hint { font-style: italic; }
 main { padding: 16px 18px 28px; max-width: 1240px; margin: 0 auto; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
 .diagram { overflow-x: auto; padding: 10px; }
@@ -46,9 +49,26 @@ svg { display: block; width: 100%; min-width: 860px; height: auto; }
 .node.app.live .s { fill: var(--accent-ink); opacity: .8; }
 .node.live:hover rect, .node.hl rect { stroke-width: 2.6; }
 .node.planned.hl rect { stroke: var(--accent); }
+.domain rect { fill: var(--domain); stroke: var(--muted); stroke-width: 1.2; }
+.domain text { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; fill: var(--muted); }
+/* Contracted out, not built for '28. */
+.node.oos rect { stroke: var(--oos); }
+.node .s.oos-text { fill: var(--oos); }
+.domain.oos rect { fill: none; stroke: var(--oos); stroke-width: 1.8; stroke-dasharray: 9 6; }
+.domain .oos-tag { fill: var(--oos); letter-spacing: .03em; text-transform: none; font-weight: 600; }
 .edge { fill: none; stroke: var(--edge); stroke-width: 1.5; }
 .edge-label { font-size: 11px; fill: var(--muted); }
 .arrow { fill: var(--edge); }
+.arrow.on { fill: var(--accent); }
+.link { transition: opacity .15s; }
+.link.quiet { opacity: 0; }
+#arch.focus .link { opacity: .12; }
+#arch.focus .link.quiet:not(.on) { opacity: 0; }
+#arch.focus .link.on { opacity: 1; }
+.link.on .edge { stroke: var(--accent); stroke-width: 2; }
+.link.on .edge[marker-end] { marker-end: url(#ah-on); }
+.link.on .edge[marker-start] { marker-start: url(#ah-on); }
+.link.on .edge-label { fill: var(--accent); font-weight: 600; }
 
 /* demo cards */
 h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 22px 2px 10px; font-weight: 650; }
@@ -65,40 +85,108 @@ a.demo:hover, .demo.hl { border-color: var(--accent); }
 <body>
 <header>
   <h1>Core Admin</h1>
-  <div class="legend"><span class="l-live">has a demo</span><span class="l-planned">demo planned</span><span class="l-ext">outside the system</span></div>
+  <div class="legend"><span class="l-live">has a demo</span><span class="l-planned">demo planned</span><span class="l-ext">outside the system</span><span class="l-oos">out of scope for '28</span><span class="l-hint">hover a component for its connections</span></div>
 </header>
 <main>
-  <div class="card diagram"><svg id="arch" viewBox="0 0 1100 480" role="img" aria-label="System architecture"></svg></div>
+  <div class="card diagram"><svg id="arch" viewBox="0 0 1100 1068" role="img" aria-label="System architecture"></svg></div>
   <h2>Demos</h2>
   <div class="demos" id="demos"></div>
 </main>
 <script>
 "use strict";
-// Components, laid out in columns: outside sources, ingestion, reference
-// data, claims, downstream. Ids match internal/demos.
-const NODES = [
-  { id: "enrollment",    x: 20,  y: 70,  w: 160, t: "Employers",        s: "834 enrollment", ext: true },
-  { id: "clearinghouse", x: 20,  y: 230, w: 160, t: "Clearinghouses",   s: "837 claims", ext: true },
-  { id: "rosters",       x: 20,  y: 390, w: 160, t: "Provider networks", s: "rosters · contracts", ext: true },
-  { id: "enrollment-intake", x: 220, y: 70,  w: 160, t: "Enrollment Intake", s: "834 full · change" },
-  { id: "claims-intake",     x: 220, y: 230, w: 160, t: "Claims Intake",     s: "837 · 999" },
-  { id: "provider-intake",   x: 220, y: 390, w: 160, t: "Provider Intake",   s: "roster loads" },
-  { id: "plan-design",   x: 410, y: 20,  w: 170, t: "Plan Design",      s: "per-customer benefits" },
-  { id: "eligibility",   x: 410, y: 130, w: 170, t: "Eligibility",      s: "members · coverage" },
-  { id: "provider-data", x: 410, y: 390, w: 170, t: "Provider Data",    s: "networks · pricing" },
-  { id: "journey",       x: 650, y: 18,  w: 190, h: 60, t: "Journey",      s: "claims portal", app: true },
-  { id: "adjudication",  x: 650, y: 148, w: 190, t: "Claim Adjudication", s: "price · pend · adjust · void" },
-  { id: "remittance",    x: 910, y: 20,  w: 170, t: "Remittance & EOBs", s: "835 · EOP · EOB" },
-  { id: "payments",      x: 910, y: 148, w: 170, t: "Payments",         s: "runs · EFT · checks" },
-  { id: "stop-loss",     x: 910, y: 368, w: 170, t: "Stop-Loss",        s: "specific · aggregate" },
+// Components, grouped by domain: Employer on top, Claims in the middle as
+// a left-to-right pipeline, Network below it; outside sources on the left.
+// Ids match internal/demos.
+// Room above the diagram for the admin portal bar.
+const TOP = 70;
+// Domains: a box drawn around the components that belong together.
+const DOMAINS = [
+  { t: "Employer", x: 200, y: 8, w: 660, h: 222 },
+  { t: "Claims", x: 200, y: 250, w: 660, h: 330 },
+  { t: "Network", x: 200, y: 600, w: 660, h: 240 },
+  { t: "Finance", x: 875, y: 450, w: 205, h: 230 },
+  // TPAs usually contract this out: shown, but out of scope for '28.
+  { t: "Medical Management", x: 200, y: 860, w: 400, h: 130, oos: true },
 ];
+const NODES = [
+  { id: "enrollment",    x: 20,  y: 95,  w: 160, t: "Employers",        s: "HR · 834 enrollment", ext: true },
+  { id: "clearinghouse", x: 20,  y: 392, w: 160, t: "Clearinghouses",   s: "837 claims", ext: true },
+  { id: "network-vendors", x: 20, y: 642, w: 160, t: "Network vendors", s: "network · provider files", ext: true },
+  { id: "rosters",       x: 20,  y: 732, w: 160, t: "Providers",        s: "rosters · contracts", ext: true },
+  // Employer
+  { id: "employer-portal",   x: 220, y: 50,  w: 160, t: "Employer Portal",   s: "approvals · views" },
+  { id: "plan-design",       x: 410, y: 50,  w: 170, t: "Plan Design",       s: "per-customer benefits" },
+  { id: "enrollment-intake", x: 220, y: 140, w: 160, t: "Enrollment Intake", s: "834 full · change" },
+  { id: "eligibility",       x: 410, y: 140, w: 170, t: "Eligibility",       s: "members · coverage" },
+  // Each employer's funding arrangement, funding requests with their claims
+  // register, and our invoices (admin fees, stop-loss premiums).
+  { id: "billing-funding",   x: 660, y: 140, w: 180, t: "Billing & Funding", s: "funding · admin fees" },
+  // Claims: the pipeline across the middle, reference data above it,
+  // disputes feeding back in below.
+  { id: "service-definitions", x: 660, y: 292, w: 180, t: "Service Definitions", s: "procedure code groups" },
+  { id: "claims-intake", x: 220, y: 392, w: 160, t: "Claims Intake",    s: "837 · 999" },
+  { id: "adjudication",  x: 410, y: 392, w: 190, t: "Claim Adjudication", s: "price · pend · adjust · void" },
+  { id: "remittance",    x: 660, y: 392, w: 180, t: "Remittance & EOBs", s: "835 · EOP · EOB" },
+  { id: "disputes",      x: 220, y: 492, w: 160, t: "Disputes",         s: "reconsiderations · appeals" },
+  { id: "settlement",    x: 660, y: 492, w: 180, t: "Settlement",       s: "payee · funds · netting" },
+  // Network. oos: out of scope for '28 (contracted out).
+  // What providers do through it, on two lines; s2oos: the second line is
+  // out of scope for '28.
+  { id: "provider-portal", x: 220, y: 732, w: 160, t: "Provider Portal", s: "claim status · disputes", s2: "prior auths", s2oos: true },
+  { id: "provider-data", x: 410, y: 642, w: 190, t: "Provider Data",    s: "management · directory" },
+  { id: "contracting",   x: 660, y: 642, w: 180, t: "Contracting",      s: "provider contracts", oos: true },
+  { id: "vendor-intake", x: 220, y: 642, w: 160, t: "Vendor Intake",    s: "network vendor files" },
+  { id: "roster-intake", x: 410, y: 732, w: 190, t: "Roster Intake",    s: "roster loads", oos: true },
+  { id: "credentialing", x: 660, y: 732, w: 180, t: "Credentialing",    s: "verification · sanctions", oos: true },
+  // Medical management
+  { id: "medical-policy", x: 220, y: 902, w: 160, t: "Medical Policy",   s: "criteria · auth lists" },
+  { id: "authorization",  x: 410, y: 902, w: 190, t: "Authorization",    s: "prior auth · UM review" },
+  // Finance
+  { id: "disbursement",  x: 890, y: 492, w: 175, t: "Disbursement",     s: "funding · EFT · checks" },
+  { id: "stop-loss",     x: 890, y: 592, w: 175, t: "Stop-Loss",        s: "specific · aggregate" },
+  // Over everything we run, not one component: drawn as a bar above the rest.
+  { id: "journey",       x: 200, y: -62, w: 880, h: 48, t: "Journey",      s: "admin portal", app: true, top: true },
+];
+// Edges: [from, to, path, label?, label x, label y, ends?]. ends "both"
+// draws an arrow at each end. Edges within a domain (or from an outside
+// source) always show; the rest show when one of their ends is hovered.
 const EDGES = [
-  ["M180,106 H220"], ["M180,266 H220"], ["M180,426 H220"],
-  ["M380,106 H395 V166 H410"], ["M380,426 H410"], ["M380,266 H700 V220"],
-  ["M580,56 H615 V160 H650"], ["M745,78 V148", "", 0, 0, "both"], ["M580,184 H650"], ["M580,426 H790 V220"],
-  ["M840,184 H910"], ["M840,206 H875 V404 H910"],
-  ["M840,162 H885 V56 H910", "preview", 892, 122], ["M995,148 V92", "paid", 1002, 124],
-  ["M995,220 V368", "paid dates", 1002, 298],
+  // Employer
+  ["enrollment", "employer-portal", "M180,113 H200 V86 H220"], ["enrollment", "enrollment-intake", "M180,149 H200 V176 H220"],
+  ["employer-portal", "plan-design", "M380,74 H410", "", 0, 0, "both"], ["employer-portal", "eligibility", "M380,100 H395 V158 H410", "", 0, 0, "both"],
+  ["enrollment-intake", "eligibility", "M380,176 H410"],
+  ["eligibility", "adjudication", "M495,212 V392", "members", 501, 240],
+  ["plan-design", "adjudication", "M580,100 H620 V376 H560 V392", "plans", 626, 250],
+  // Funding: member counts for admin fees; the employer sees each request
+  // and its claims register; funded cycles release payments.
+  ["eligibility", "billing-funding", "M580,176 H660", "counts", 600, 170],
+  ["employer-portal", "billing-funding", "M340,50 V30 H750 V140", "", 0, 0, "both"],
+  ["settlement", "billing-funding", "M840,546 H850 V200 H840", "needs", 790, 380],
+  ["billing-funding", "disbursement", "M840,176 H1000 V492", "funded", 1006, 300],
+  // Claims. Plan design names service definitions ("burn treatment: 20%").
+  ["service-definitions", "plan-design", "M660,310 H645 V80 H580"],
+  ["service-definitions", "adjudication", "M660,346 H640 V410 H600"],
+  ["clearinghouse", "claims-intake", "M180,428 H220"], ["claims-intake", "adjudication", "M380,428 H410"],
+  ["adjudication", "remittance", "M600,442 H660", "preview", 609, 456],
+  ["disputes", "adjudication", "M380,528 H395 V452 H410"],
+  // Settlement can be previewed before the claim finalizes, like the 835.
+  ["adjudication", "settlement", "M580,464 V528 H660", "preview", 600, 522],
+  ["settlement", "disbursement", "M840,528 H890"],
+  ["disbursement", "remittance", "M978,492 V428 H840", "paid", 984, 470],
+  ["adjudication", "stop-loss", "M595,464 V478 H870 V628 H890"],
+  ["disbursement", "stop-loss", "M978,564 V592", "paid dates", 984, 584],
+  // Network
+  ["network-vendors", "vendor-intake", "M180,678 H220"], ["rosters", "provider-portal", "M180,768 H220"],
+  ["rosters", "roster-intake", "M180,768 H205 V826 H495 V804"], ["rosters", "credentialing", "M180,768 H205 V826 H750 V804"],
+  ["rosters", "contracting", "M180,768 H205 V826 H850 V678 H840"],
+  ["vendor-intake", "provider-data", "M380,678 H410"], ["roster-intake", "provider-data", "M495,732 V714"],
+  ["credentialing", "provider-data", "M660,768 H620 V696 H600"],
+  ["provider-portal", "disputes", "M380,750 H395 V546 H380"],
+  ["provider-data", "adjudication", "M480,642 V464", "providers", 486, 620],
+  ["contracting", "adjudication", "M750,642 V583 H565 V464", "contracts", 756, 620],
+  ["provider-portal", "authorization", "M380,790 H403 V920 H410"],
+  ["medical-policy", "authorization", "M380,938 H410"],
+  ["authorization", "adjudication", "M600,920 H630 V597 H525 V464", "auths", 636, 880],
 ];
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -115,32 +203,62 @@ function target(component) {
   return d.path + (groups.length ? "?group=" + encodeURIComponent(groups.join(",")) : "");
 }
 
+// The domain a component sits in (by position), "ext:<id>" for an outside
+// source, "" for a component outside every domain.
+function domainOf(id) {
+  const n = NODES.find((n) => n.id === id);
+  if (n.ext) return "ext:" + id;
+  const d = DOMAINS.find((d) => n.x >= d.x && n.x + n.w <= d.x + d.w && n.y >= d.y && n.y <= d.y + d.h);
+  return d ? d.t : "";
+}
+// Edges inside one domain, and from outside sources, always show; edges
+// between domains show only when one of their ends is hovered.
+const alwaysShown = (from, to) => domainOf(from).startsWith("ext:") || domainOf(from) === domainOf(to);
+
 function draw() {
   let svg = `<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-    <path class="arrow" d="M0,0 L10,5 L0,10 z"/></marker></defs>`;
-  for (const [d, label, lx, ly, both] of EDGES) {
-    svg += `<path class="edge" d="${d}" marker-end="url(#ah)" ${both ? `marker-start="url(#ah)"` : ""}/>`;
-    if (label) svg += `<text class="edge-label" x="${lx}" y="${ly}">${esc(label)}</text>`;
+    <path class="arrow" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="ah-on" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path class="arrow on" d="M0,0 L10,5 L0,10 z"/></marker></defs><g transform="translate(0,${TOP})">`;
+  for (const d of DOMAINS) {
+    svg += `<g class="domain${d.oos ? " oos" : ""}"><rect x="${d.x}" y="${d.y}" width="${d.w}" height="${d.h}" rx="14"/>
+      <text x="${d.x + 14}" y="${d.y + 24}">${esc(d.t)}</text>
+      ${d.oos ? `<text class="oos-tag" x="${d.x + d.w - 14}" y="${d.y + 24}" text-anchor="end">out of scope for '28</text>` : ""}</g>`;
+  }
+  for (const [from, to, d, label, lx, ly, ends] of EDGES) {
+    const quiet = !alwaysShown(from, to);
+    svg += `<g class="link${quiet ? " quiet" : ""}" data-from="${from}" data-to="${to}">
+      <path class="edge" d="${d}" marker-end="url(#ah)" ${ends === "both" ? `marker-start="url(#ah)"` : ""}/>
+      ${label ? `<text class="edge-label" x="${lx}" y="${ly}">${esc(label)}</text>` : ""}</g>`;
   }
   for (const n of NODES) {
     const h = n.h || 72;
     const href = n.ext ? null : target(n.id);
-    const cls = (n.ext ? "ext" : href ? "live" : "planned") + (n.app ? " app" : "");
-    const ty = n.h ? n.y + h / 2 - 3 : n.y + 32;
+    const cls = (n.ext ? "ext" : href ? "live" : "planned") + (n.app ? " app" : "") + (n.oos ? " oos" : "");
+    const ty = n.top ? n.y + h / 2 + 5 : n.h ? n.y + h / 2 - 3 : n.s2 ? n.y + 26 : n.y + 32;
     const cx = n.x + n.w / 2;
     const anchor = n.ext ? `x="${n.x + 16}"` : `x="${cx}" text-anchor="middle"`;
     svg += `<g class="node ${cls}" data-c="${n.id}" ${href ? `data-href="${esc(href)}" tabindex="0" role="link"` : ""}>
       <title>${esc(n.t)}${href ? " · open demo" : n.ext ? "" : " · demo planned"}</title>
       <rect x="${n.x}" y="${n.y}" width="${n.w}" height="${h}" rx="10"/>
-      <text class="t" ${anchor} y="${ty}">${esc(n.t)}</text>
-      <text class="s" ${anchor} y="${ty + 19}">${esc(n.s)}</text></g>`;
+      <text class="t" ${anchor} y="${ty}">${esc(n.t)}${n.top ? `<tspan class="s" dx="10">${esc(n.s)}</tspan>` : ""}</text>
+      ${n.top ? "" : `<text class="s" ${anchor} y="${ty + 19}">${esc(n.s)}</text>`}
+      ${n.s2 ? `<text class="s${n.s2oos ? " oos-text" : ""}" ${anchor} y="${ty + 35}">${esc(n.s2)}</text>` : ""}</g>`;
   }
-  document.getElementById("arch").innerHTML = svg;
+  document.getElementById("arch").innerHTML = svg + "</g>";
 
   document.getElementById("demos").innerHTML = demos.map((d) => d.status === "live"
     ? `<a class="card demo" href="${esc(d.path)}" data-demo="${esc(d.id)}"><b>${esc(d.title)}</b><p>${esc(d.summary)}</p>
         <div class="meta">${d.scenarios ? `${d.scenarios} scenarios →` : "Open →"}</div></a>`
     : `<div class="card demo planned" data-demo="${esc(d.id)}"><b>${esc(d.title)}</b><p>${esc(d.summary)}</p><div class="meta">Planned</div></div>`).join("");
+}
+
+// Hovering a component shows all its connections, including those to other
+// domains, and fades the rest.
+function focusLinks(id) {
+  const svg = document.getElementById("arch");
+  svg.classList.toggle("focus", !!id);
+  svg.querySelectorAll(".link").forEach((l) => l.classList.toggle("on", !!id && (l.dataset.from === id || l.dataset.to === id)));
 }
 
 // Hovering a component highlights the demos that cover it, and the reverse.
@@ -152,6 +270,7 @@ function highlight(components, demoIds) {
 document.addEventListener("mouseover", (ev) => {
   const node = ev.target.closest(".node[data-c]");
   const card = ev.target.closest(".demo[data-demo]");
+  focusLinks(node?.dataset.c);
   if (node) return highlight([], [...new Set(linksFor(node.dataset.c).map((l) => l.demo.id))]);
   if (card) return highlight(demos.find((d) => d.id === card.dataset.demo).links.map((l) => l.component), []);
   highlight([], []);

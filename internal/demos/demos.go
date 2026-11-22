@@ -14,25 +14,49 @@ const (
 // Component ids, matching the nodes in the architecture diagram
 // (cmd/demo/web/index.html).
 const (
-	Enrollment    = "enrollment"    // 834 files from employers
-	Clearinghouse = "clearinghouse" // 837 claims
-	Rosters       = "rosters"       // provider rosters, contracts, fee schedules
+	Enrollment     = "enrollment"      // 834 files from employers
+	Clearinghouse  = "clearinghouse"   // 837 claims
+	NetworkVendors = "network-vendors" // network and provider files from vendors
+	Rosters        = "rosters"         // providers' rosters and contracts
 	// Each source is taken in its own way: its own format, checks and
 	// acknowledgment.
 	EnrollmentIntake = "enrollment-intake" // 834
 	ClaimsIntake     = "claims-intake"     // 837, 999
-	ProviderIntake   = "provider-intake"   // rosters
+	VendorIntake     = "vendor-intake"     // network vendor files
+	RosterIntake     = "roster-intake"     // rosters; out of scope for '28
 	PlanDesign       = "plan-design"
 	Eligibility      = "eligibility"
-	ProviderData     = "provider-data"
-	Adjudication     = "adjudication" // pricing, cost share, accumulators, pends, adjustments, voids
-	Payments         = "payments"
+	// Funding arrangements, funding requests and claims registers, and
+	// admin-fee billing.
+	BillingFunding = "billing-funding"
+	ProviderData   = "provider-data" // provider data management, directory
+	Contracting    = "contracting"   // provider contracts; pricing them is adjudication's
+	Credentialing  = "credentialing" // verifying providers before they join a network
+	// Named groups of procedure codes (burn treatment, blood transfusion)
+	// that adjudication's rules refer to.
+	ServiceDefinitions = "service-definitions"
+	Adjudication       = "adjudication" // pricing, cost share, accumulators, pends, adjustments, voids
+	// Medical management: usually contracted out by a TPA.
+	MedicalPolicy = "medical-policy" // criteria, auth-required lists
+	Authorization = "authorization"  // prior auth, UM review; matching auths to claims is adjudication's
+	// Providers dispute claim decisions (reconsiderations, appeals) from the
+	// provider portal; disputes are worked in claims.
+	Disputes = "disputes"
+	// Disputes and (out of scope for '28) prior auth requests from providers.
+	ProviderPortal = "provider-portal"
+	// What each claim pays, to whom and from whose money: a pure function of
+	// the claim, previewable before it finalizes; the payment cycle nets
+	// recorded lines across claims.
+	Settlement = "settlement"
+	// Finance: moving the money (funding, EFT, checks, reconciliation) and
+	// stop-loss.
+	Disbursement = "disbursement"
 	// 835s, provider EOPs and member EOBs: built from the adjudication,
 	// viewable before the claim is finalized; payment details fill in once
 	// it pays.
 	Remittance = "remittance"
 	StopLoss   = "stop-loss"
-	Journey    = "journey" // the claims examiner portal
+	Journey    = "journey" // the admin portal, over everything
 )
 
 // Link points a diagram component at a demo, optionally at one scenario
@@ -62,12 +86,12 @@ func Catalog() []Demo {
 			Scenarios: len(scenario.Library),
 			Links: []Link{
 				{Component: Adjudication},
-				{Component: Payments, Group: "Payments"},
+				{Component: Settlement, Group: "Payments"},
 			},
 		},
 		{
 			ID: "journey", Title: "Journey", Status: Live, Path: "/journey/",
-			Summary: "The claims portal: examiners work pend queues, review flags and holds, and adjust claims.",
+			Summary: "The admin portal: examiners work pend queues, review flags and holds, and adjust claims.",
 			Links:   []Link{{Component: Journey}},
 		},
 		{
@@ -82,8 +106,8 @@ func Catalog() []Demo {
 		},
 		{
 			ID: "provider-data", Title: "Provider Data", Status: Planned,
-			Summary: "Roster loads, network participation, contracts and how they change pricing.",
-			Links:   []Link{{Component: Rosters}, {Component: ProviderIntake}, {Component: ProviderData}},
+			Summary: "Roster loads, network participation, contracting and the provider directory.",
+			Links:   []Link{{Component: NetworkVendors}, {Component: Rosters}, {Component: VendorIntake}, {Component: RosterIntake}, {Component: ProviderData}, {Component: Contracting}, {Component: Credentialing}},
 		},
 		{
 			ID: "plan-design", Title: "Plan Design", Status: Planned,
@@ -101,9 +125,14 @@ func Catalog() []Demo {
 			Links:   []Link{{Component: Remittance}},
 		},
 		{
-			ID: "payments", Title: "Payments", Status: Planned,
-			Summary: "Payment runs, EFT and checks, and recoveries netted against later payments.",
-			Links:   []Link{{Component: Payments}},
+			ID: "settlement", Title: "Settlement", Status: Planned,
+			Summary: "What each claim will pay, to whom and from whose funds, before it finalizes; payment cycles net recoveries across claims.",
+			Links:   []Link{{Component: Settlement}},
+		},
+		{
+			ID: "disbursement", Title: "Disbursement", Status: Planned,
+			Summary: "Employer funding, EFT and checks, and bank reconciliation.",
+			Links:   []Link{{Component: Disbursement}},
 		},
 		{
 			ID: "stop-loss", Title: "Stop-Loss", Status: Planned,
