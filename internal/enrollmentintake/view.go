@@ -102,7 +102,7 @@ func summary(j *ingestionv1.IngestionJob) JobSummary {
 }
 
 func (p *Processor) jobs(ctx context.Context) ([]*ingestionv1.IngestionJob, error) {
-	jobs, _, err := p.Repos.IngestionJobs.List(ctx, store.ListOptions[*ingestionv1.IngestionJob]{PageSize: 1000, Filter: func(j *ingestionv1.IngestionJob) bool {
+	jobs, _, err := p.Repos.EnrollmentIngestionJobs.List(ctx, store.ListOptions[*ingestionv1.IngestionJob]{PageSize: 1000, Filter: func(j *ingestionv1.IngestionJob) bool {
 		return j.GetKind() == ingestionv1.IngestionKind_INGESTION_KIND_ENROLLMENT
 	}})
 	return jobs, err
@@ -136,7 +136,7 @@ func (p *Processor) Loaded(ctx context.Context) (map[string]bool, error) {
 
 // View builds the full view of a job.
 func (p *Processor) View(ctx context.Context, id string) (*JobView, error) {
-	j, err := p.Repos.IngestionJobs.Get(ctx, id)
+	j, err := p.Repos.EnrollmentIngestionJobs.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}

@@ -26,15 +26,17 @@ func explainer[T store.Resource](s store.Store[T]) func(c store.Cond) (string, e
 // Postgres's plan for that lookup uses it.
 func TestIndexesServeTheirAccessPatterns(t *testing.T) {
 	repos := repotest.New(t)
+	// By domain and table.
 	explain := map[string]func(c store.Cond) (string, error){
-		"claims":                  explainer(repos.Claims),
-		"members":                 explainer(repos.Members),
-		"groups":                  explainer(repos.Groups),
-		"providers":               explainer(repos.Providers),
-		"ingestion_jobs":          explainer(repos.IngestionJobs),
-		"enrollment_transactions": explainer(repos.EnrollmentTransactions),
-		"member_versions":         explainer(repos.MemberVersions),
-		"remittances":             explainer(repos.Remittances),
+		"claims.claims":                    explainer(repos.Claims),
+		"employer.members":                 explainer(repos.Members),
+		"employer.groups":                  explainer(repos.Groups),
+		"network.providers":                explainer(repos.Providers),
+		"claims.ingestion_jobs":            explainer(repos.ClaimIngestionJobs),
+		"employer.ingestion_jobs":          explainer(repos.EnrollmentIngestionJobs),
+		"employer.enrollment_transactions": explainer(repos.EnrollmentTransactions),
+		"employer.member_versions":         explainer(repos.MemberVersions),
+		"claims.remittances":               explainer(repos.Remittances),
 	}
 	gin := map[string]string{
 		"remittances_doc": `{"claims":[{"claimId":"x7"}]}`,
@@ -65,12 +67,12 @@ func TestIndexesServeTheirAccessPatterns(t *testing.T) {
 		doc["reviewFlags"] = []any{map[string]any{"sourceClaimId": "x#"}}
 		doc["claims"] = []any{map[string]any{"claimId": "x#"}}
 		tmpl, _ := json.Marshal(doc)
-		q := fmt.Sprintf(`INSERT INTO %q.%q (id, revision, tx_from, recorded_by, data)
-			SELECT 'r' || g, 1, now(), 'test', replace(replace($1, '@', (g %% 50)::text), '#', g::text)::jsonb FROM generate_series(1, 5000) g`, db.Schema, tb.Name)
+		q := fmt.Sprintf(`INSERT INTO %s (id, revision, tx_from, recorded_by, data)
+			SELECT 'r' || g, 1, now(), 'test', replace(replace($1, '@', (g %% 50)::text), '#', g::text)::jsonb FROM generate_series(1, 5000) g`, db.Qualified(tb.Schema, tb.Name))
 		if _, err := db.Pool.Exec(ctx, q, string(tmpl)); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := db.Pool.Exec(ctx, fmt.Sprintf("ANALYZE %q.%q", db.Schema, tb.Name)); err != nil {
+		if _, err := db.Pool.Exec(ctx, "ANALYZE "+db.Qualified(tb.Schema, tb.Name)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -78,9 +80,9 @@ func TestIndexesServeTheirAccessPatterns(t *testing.T) {
 	for _, tb := range repo.Tables {
 		for _, ix := range tb.Indexes {
 			n++
-			ex := explain[tb.Name]
+			ex := explain[tb.Schema+"."+tb.Name]
 			if ex == nil {
-				t.Errorf("%s: no explainer for table %s", ix.Name, tb.Name)
+				t.Errorf("%s: no explainer for table %s.%s", ix.Name, tb.Schema, tb.Name)
 				continue
 			}
 			conds := []store.Cond{store.Eq("v7", ix.Path...)}

@@ -8,6 +8,10 @@ plugins:
   - local: ["go", "tool", "protoc-gen-go"]
     out: gen
     opt: paths=source_relative
+  # simple: plain (ctx, *Request) (*Response, error) methods, so a domain
+  # service is called in-process like any Go interface.
   - local: ["go", "tool", "protoc-gen-connect-go"]
     out: gen
-    opt: paths=source_relative
+    opt:
+      - paths=source_relative
+      - simple

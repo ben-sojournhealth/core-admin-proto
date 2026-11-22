@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package coreadmin.employer.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "coreadmin/customer/v1/customer.proto";
+import "coreadmin/eligibility/v1/eligibility.proto";
+import "coreadmin/plan/v1/plan.proto";
+
+// EmployerService is what other domains may ask the Employer domain:
+// customers, members, their coverage and plan design. Other domains go
+// through it, never the Employer domain's tables.
+//
+// Answers use the latest data we have. A question about a date (coverage
+// on a claim's date of service, the plan version in force) is answered
+// from what we know now about that date: a retro-termination recorded
+// today changes the answer for last January.
+//
+// Unknown customers, members and plans are NOT_FOUND.
+service EmployerService {
+  rpc GetCustomer(GetCustomerRequest) returns (GetCustomerResponse);
+  rpc GetMember(GetMemberRequest) returns (GetMemberResponse);
+  // Every member carrying a member number (card id): normally one; more
+  // means the number is ambiguous.
+  rpc ListMembersByCard(ListMembersByCardRequest) returns (ListMembersByCardResponse);
+  // The members of one subscriber's family at a customer.
+  rpc GetHousehold(GetHouseholdRequest) returns (GetHouseholdResponse);
+  // A member's medical coverage on a date. It states facts; what they
+  // mean for a claim is the asker's rule.
+  rpc GetMedicalCoverage(GetMedicalCoverageRequest) returns (GetMedicalCoverageResponse);
+  // A plan and its version in force on a date.
+  rpc GetPlanVersion(GetPlanVersionRequest) returns (GetPlanVersionResponse);
+}
+
+message GetCustomerRequest {
+  string customer_id = 1;
+}
+
+message GetCustomerResponse {
+  customer.v1.Customer customer = 1;
+}
+
+message GetMemberRequest {
+  string member_id = 1;
+}
+
+message GetMemberResponse {
+  eligibility.v1.Member member = 1;
+}
+
+message ListMembersByCardRequest {
+  // The member number on the card.
+  string card_id = 1;
+}
+
+message ListMembersByCardResponse {
+  repeated eligibility.v1.Member members = 1;
+}
+
+message GetHouseholdRequest {
+  string customer_id = 1;
+  string subscriber_id = 2;
+}
+
+message GetHouseholdResponse {
+  // The subscriber and their dependents.
+  repeated eligibility.v1.Member members = 1;
+}
+
+message GetMedicalCoverageRequest {
+  string member_id = 1;
+  // The date asked about, e.g. a claim's date of service.
+  common.v1.Date on = 2;
+}
+
+message GetMedicalCoverageResponse {
+  // The member as we know them now.
+  eligibility.v1.Member member = 1;
+  // The medical coverage span whose dates include the date asked about,
+  // whatever its status (active, grace, terminated); a span in force wins
+  // over a terminated one. Absent if no span includes the date.
+  eligibility.v1.CoverageSpan span = 2;
+  // Some medical coverage started on or before the date. With no span, it
+  // means coverage ended before the date rather than not having begun.
+  bool started_before = 3;
+}
+
+message GetPlanVersionRequest {
+  string plan_id = 1;
+  common.v1.Date on = 2;
+}
+
+message GetPlanVersionResponse {
+  plan.v1.Plan plan = 1;
+  // The version in force on the date; absent if none is.
+  plan.v1.PlanVersion version = 2;
+}

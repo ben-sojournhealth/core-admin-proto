@@ -243,7 +243,7 @@ func (s *Service) describeInput(ctx context.Context, in *eligibilityv1.Eligibili
 }
 
 func (s *Service) filename(ctx context.Context, jobID string) string {
-	if j, err := s.Repos.IngestionJobs.Get(ctx, jobID); err == nil {
+	if j, err := s.Repos.EnrollmentIngestionJobs.Get(ctx, jobID); err == nil {
 		return j.GetOriginalFilename()
 	}
 	return ""

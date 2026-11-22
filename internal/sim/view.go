@@ -436,7 +436,7 @@ func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 		if t := c.GetClearinghouseReceivedTime(); t != nil {
 			in.ClearinghouseReceived = t.AsTime().Format(time.RFC3339)
 		}
-		if j, err := s.Repos.IngestionJobs.Get(context.Background(), src.GetIngestionJobId()); err == nil {
+		if j, err := s.Repos.ClaimIngestionJobs.Get(context.Background(), src.GetIngestionJobId()); err == nil {
 			in.Filename = j.GetOriginalFilename()
 		}
 		v.Intake = in

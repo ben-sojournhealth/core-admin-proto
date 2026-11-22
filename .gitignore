@@ -2,3 +2,5 @@
 /data/
 *.test
 .DS_Store
+/gen/*
+!/gen/embed.go

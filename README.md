@@ -5,11 +5,13 @@ A prototype core administration system for a health plan payer and TPA. It cover
 ## Layout
 
 ```
-proto/coreadmin/<domain>/v1/   Data models (<domain>.proto) and APIs (<domain>_service.proto)
-gen/                           Generated Go + Connect code, and descriptors.binpb with the .proto comments (committed; `make gen`)
+proto/coreadmin/<pkg>/v1/      Data models (<pkg>.proto), and each domain's service: what other domains may ask it (employer/v1, network/v1, claims/v1 *_service.proto)
+gen/                           Generated Go + Connect code, and descriptors.binpb with the .proto comments (not committed; `make gen`)
 internal/store/                Store[T] and Transactor; the versioned, insert-only Postgres implementation
 internal/repo/                 One store per resource type; Tables: the Postgres tables and their access-pattern indexes
 internal/pgdb/                 The local Postgres everything runs on
+internal/employer/             EmployerService: what other domains may ask the Employer domain
+internal/network/              NetworkService: what other domains may ask the Network domain
 internal/adjudication/         Claims pipeline interfaces (eligibility → pricing → cost share)
 internal/stoploss/             Stop-loss tracking interfaces
 internal/claims/               ClaimsService operations (process, reprocess, adjust, void, holds, flags)
@@ -91,7 +93,7 @@ Intake runs once per file and only reads. It copies the submitted fields onto th
 
 ### Claims Lifecycle
 
-A single page for making things happen to the system and watching its state change: process claims, clear pends, adjust and void, run and release payment runs, simulate bank events, change eligibility and fee schedule data. It shows the family's accumulator record (with its revision), every claim's line-by-line decision and stored protojson, and a plain-language event log. State is in Postgres (schema `lifecycle`); Reset starts over.
+A single page for making things happen to the system and watching its state change: process claims, clear pends, adjust and void, run and release payment runs, simulate bank events, change eligibility and fee schedule data. It shows the family's accumulator record (with its revision), every claim's line-by-line decision and stored protojson, and a plain-language event log. State is in Postgres (sandbox `lifecycle`); Reset starts over.
 
 The left panel is the scenario library (`internal/scenario/library.go`). Each scenario is a script of actions with the outcome expected after every step, so it works as a guided walkthrough in the UI and as a test (`go test ./internal/scenario`). To add an edge case, add a `Scenario` there.
 
@@ -138,7 +140,16 @@ payment.state:  SELECTED ─► ISSUED ─► CLEARED | RETURNED | VOIDED
 
 ## Storage
 
-Everything runs on Postgres: the demo, the tests, and the throwaway sandboxes the Remittance demo and the walkthrough build per request. There is no in-memory store. One local Postgres serves them all (`internal/pgdb`): an embedded one, data in `./data/pg`, port 5433. `make pg` starts it, and the demo or a test run starts it if it isn't running; it keeps running until `make pg-stop`. The demo uses the database `coreadmin`, with a schema per long-lived sandbox (`lifecycle`, `journey`, `enrollment`, recreated on start and on Reset) and a throwaway `s_*` schema per request. Tests use `coreadmin_test`, with a fresh schema per test, dropped when it ends (`repo/repotest`).
+Everything runs on Postgres: the demo, the tests, and the throwaway sandboxes the Remittance demo and the walkthrough build per request. There is no in-memory store. One local Postgres serves them all (`internal/pgdb`): an embedded one, data in `./data/pg`, port 5433. `make pg` starts it, and the demo or a test run starts it if it isn't running; it keeps running until `make pg-stop`. Each domain owns a schema holding its tables, and reads and writes only that schema (`repo.Tables` lists every table by domain):
+
+- `employer`: customers, groups, plans, members, the 834 ingestion jobs, enrollment transactions, eligibility inputs and member versions
+- `claims`: claims, family accumulators, fee schedules, the 837 ingestion jobs, remittances and claim number blocks
+- `network`: providers, networks and contracts
+- `finance`: stop-loss policies, exposures and filings
+
+No foreign keys cross schemas; a reference to another domain's record is a value. A domain's code asks other domains through their services, defined in proto and called in-process: `EmployerService` (`employer_service.proto`: customers, members, medical coverage on a date, the plan version in force) and `NetworkService` (`network_service.proto`: a provider and its participations on a date, contracts). It never touches their stores; a test enforces it. The services are generated with Connect in simple mode, so the same service could be served over the network unchanged. Answers use the latest data we have, about the date asked: a retro-termination recorded today changes the answer for a January date of service. Demos, the simulator and seed loading still set up every domain through `repo.Repos`.
+
+A sandbox is a prefix on those schemas (`journey_claims`, `journey_employer`, ...); production has no prefix. The demo uses the database `coreadmin`, with long-lived sandboxes `lifecycle`, `journey` and `enrollment` (recreated on start and on Reset) and a throwaway `s_*` sandbox per request. Tests use `coreadmin_test`, with a fresh sandbox per test, dropped when it ends (`repo/repotest`).
 
 **Nothing is overwritten.** Every table is versioned: `id`, `revision`, `tx_from`, `tx_to`, `recorded_by`, `data jsonb`. A write inserts a row; the only UPDATE closes the version it replaces (sets `tx_to`); a delete closes the current version without a successor. An exclusion constraint makes the database refuse two versions of a record valid at the same moment, so every table is its own audit log, and `Store.Versions` reads a record's history. Reads see current versions. Transactions are Postgres transactions at read committed: a write names the revision it read, so of two concurrent writes the second fails with a conflict and is retried, and `Lock` is `SELECT ... FOR UPDATE`. Each table's business keys (one current record per key) are still to be defined.
 
@@ -148,11 +159,11 @@ Everything runs on Postgres: the demo, the tests, and the throwaway sandboxes th
 
 ## Usage
 
-Requires Go and [buf](https://buf.build). The codegen plugins are pinned as Go tools in `go.mod`.
+Requires Go and [buf](https://buf.build). The codegen plugins are pinned as Go tools in `go.mod`. Generated code isn't committed: run `make gen` after cloning, and after changing or merging protos (`make test`, `make demo` and `make check` run it first).
 
 ```
-make gen     # regenerate gen/ from proto/
+make gen     # generate gen/ from proto/
 make lint    # buf lint + go vet
 make test
-make check   # lint, regenerate, test, and fail if gen/ is stale
+make check   # regenerate, lint, test
 ```

@@ -104,7 +104,7 @@ func summary(j *ingestionv1.IngestionJob) JobSummary {
 
 // Jobs lists loaded files, newest first.
 func (p *Processor) Jobs(ctx context.Context) ([]JobSummary, error) {
-	jobs, _, err := p.Repos.IngestionJobs.List(ctx, store.ListOptions[*ingestionv1.IngestionJob]{PageSize: 1000})
+	jobs, _, err := p.Repos.ClaimIngestionJobs.List(ctx, store.ListOptions[*ingestionv1.IngestionJob]{PageSize: 1000})
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func (p *Processor) Jobs(ctx context.Context) ([]JobSummary, error) {
 
 // Loaded reports which interchange control numbers have been loaded.
 func (p *Processor) Loaded(ctx context.Context) (map[string]bool, error) {
-	jobs, _, err := p.Repos.IngestionJobs.List(ctx, store.ListOptions[*ingestionv1.IngestionJob]{PageSize: 1000})
+	jobs, _, err := p.Repos.ClaimIngestionJobs.List(ctx, store.ListOptions[*ingestionv1.IngestionJob]{PageSize: 1000})
 	out := map[string]bool{}
 	for _, j := range jobs {
 		if j.GetStatus() != ingestionv1.IngestionStatus_INGESTION_STATUS_FAILED {
@@ -130,7 +130,7 @@ func (p *Processor) Loaded(ctx context.Context) (map[string]bool, error) {
 
 // View builds the full view of a job.
 func (p *Processor) View(ctx context.Context, id string) (*JobView, error) {
-	j, err := p.Repos.IngestionJobs.Get(ctx, id)
+	j, err := p.Repos.ClaimIngestionJobs.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}

@@ -26,8 +26,8 @@ var (
 	unmarshal = protojson.UnmarshalOptions{}
 )
 
-// PGDB is a Postgres schema holding one versioned table per resource
-// type. Nothing is overwritten: every write inserts a row, and the only
+// PGDB is a set of Postgres schemas, one per domain, holding one versioned
+// table per resource type. Nothing is overwritten: every write inserts a row, and the only
 // UPDATE closes the version it replaces. Every table has the same shape:
 //
 //	id           text         the record
@@ -47,11 +47,21 @@ var (
 // A write names the revision it read, so of two concurrent writes the
 // second fails with ErrConflict; Lock is SELECT ... FOR UPDATE.
 type PGDB struct {
-	Pool   *pgxpool.Pool
-	Schema string
+	Pool *pgxpool.Pool
+	// Prefix names a sandbox: its schemas are <prefix>_<domain>. Empty in
+	// production, where each domain's schema is just its name.
+	Prefix string
 	// Now is the clock for transaction time. Defaults to time.Now; the
 	// sandboxes set their own, so demos are repeatable.
 	Now func() time.Time
+}
+
+// Schema is the name of a domain's schema in this database.
+func (db *PGDB) Schema(domain string) string {
+	if db.Prefix == "" {
+		return domain
+	}
+	return db.Prefix + "_" + domain
 }
 
 func (db *PGDB) now() time.Time {
@@ -64,6 +74,8 @@ func (db *PGDB) now() time.Time {
 // Table is one resource type's table and the indexes its access patterns
 // need.
 type Table struct {
+	// Schema is the domain that owns the table.
+	Schema  string
 	Name    string
 	Indexes []Index
 }
@@ -81,22 +93,28 @@ type Index struct {
 
 var ident = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-func (db *PGDB) qualified(table string) string { return fmt.Sprintf("%q.%q", db.Schema, table) }
+// Qualified is a table's name in SQL: "schema"."table".
+func (db *PGDB) Qualified(domain, table string) string {
+	return fmt.Sprintf("%q.%q", db.Schema(domain), table)
+}
 
-// Migrate creates the schema, its tables and their indexes, if missing.
+// Migrate creates the tables' schemas, the tables and their indexes, if
+// missing.
 func (db *PGDB) Migrate(ctx context.Context, tables []Table) error {
-	if !ident.MatchString(db.Schema) {
-		return fmt.Errorf("%w: schema %q", ErrInvalid, db.Schema)
-	}
 	stmts := []string{
 		"CREATE EXTENSION IF NOT EXISTS btree_gist", // = on text inside an exclusion constraint
-		fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %q", db.Schema),
 	}
+	made := map[string]bool{}
 	for _, t := range tables {
-		if !ident.MatchString(t.Name) {
-			return fmt.Errorf("%w: table %q", ErrInvalid, t.Name)
+		schema := db.Schema(t.Schema)
+		if !ident.MatchString(schema) || !ident.MatchString(t.Name) {
+			return fmt.Errorf("%w: table %q.%q", ErrInvalid, schema, t.Name)
 		}
-		q := db.qualified(t.Name)
+		if !made[schema] {
+			made[schema] = true
+			stmts = append(stmts, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %q", schema))
+		}
+		q := db.Qualified(t.Schema, t.Name)
 		stmts = append(stmts,
 			fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 				id text NOT NULL,
@@ -136,12 +154,26 @@ func (db *PGDB) Migrate(ctx context.Context, tables []Table) error {
 	return nil
 }
 
-// Drop drops the schema and everything in it.
-func (db *PGDB) Drop(ctx context.Context) error {
-	if !ident.MatchString(db.Schema) {
-		return fmt.Errorf("%w: schema %q", ErrInvalid, db.Schema)
+// Drop drops a sandbox's schemas for the given domains, and everything in
+// them. It refuses without a prefix: production schemas are never dropped.
+func (db *PGDB) Drop(ctx context.Context, domains ...string) error {
+	if db.Prefix == "" {
+		return fmt.Errorf("%w: drop without a sandbox prefix", ErrInvalid)
 	}
-	_, err := db.Pool.Exec(ctx, fmt.Sprintf("DROP SCHEMA IF EXISTS %q CASCADE", db.Schema))
+	for _, d := range domains {
+		if err := DropSchema(ctx, db.Pool, db.Schema(d)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DropSchema drops one schema and everything in it.
+func DropSchema(ctx context.Context, pool *pgxpool.Pool, schema string) error {
+	if !ident.MatchString(schema) {
+		return fmt.Errorf("%w: schema %q", ErrInvalid, schema)
+	}
+	_, err := pool.Exec(ctx, fmt.Sprintf("DROP SCHEMA IF EXISTS %q CASCADE", schema))
 	return err
 }
 
@@ -227,8 +259,9 @@ type PG[T Resource] struct {
 	table string
 }
 
-func NewPG[T Resource](db *PGDB, table string) *PG[T] {
-	return &PG[T]{db: db, table: db.qualified(table)}
+// NewPG is the store for a table in a domain's schema.
+func NewPG[T Resource](db *PGDB, domain, table string) *PG[T] {
+	return &PG[T]{db: db, table: db.Qualified(domain, table)}
 }
 
 func (s *PG[T]) newT() T {

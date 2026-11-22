@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package coreadmin.network.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "coreadmin/provider/v1/provider.proto";
+
+// NetworkService is what other domains may ask the Network domain:
+// providers, their network participation and contracts. Other domains go
+// through it, never the Network domain's tables.
+//
+// Answers use the latest data we have; a question about a date is
+// answered from what we know now about that date.
+service NetworkService {
+  // The provider with an NPI and its network participations in force on a
+  // date. An unknown NPI is an empty response, not an error.
+  rpc GetProvider(GetProviderRequest) returns (GetProviderResponse);
+  // A contract's terms. An unknown contract is NOT_FOUND.
+  rpc GetContract(GetContractRequest) returns (GetContractResponse);
+}
+
+message GetProviderRequest {
+  string npi = 1;
+  // Only participations under this TIN; every TIN when empty.
+  string tin = 2;
+  common.v1.Date on = 3;
+}
+
+message GetProviderResponse {
+  // Absent for an unknown NPI.
+  provider.v1.Provider provider = 1;
+  // Participations under the TIN in force on the date.
+  repeated provider.v1.NetworkParticipation participations = 2;
+}
+
+message GetContractRequest {
+  string contract_id = 1;
+}
+
+message GetContractResponse {
+  provider.v1.Contract contract = 1;
+}

@@ -12,6 +12,7 @@ import (
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	customerv1 "coreadmin/gen/coreadmin/customer/v1"
+	"coreadmin/internal/repo"
 	"coreadmin/internal/repo/repotest"
 	"coreadmin/internal/store"
 )
@@ -89,7 +90,7 @@ func TestOneVersionAtATime(t *testing.T) {
 	ctx := context.Background()
 	repos.Customers.Create(ctx, &customerv1.Customer{Id: "c1"})
 	db := repos.DB.(*store.PGDB)
-	_, err := db.Pool.Exec(ctx, fmt.Sprintf(`INSERT INTO %q.customers (id, revision, tx_from, recorded_by, data) VALUES ('c1', 9, now() - interval '1 day', 'x', '{}')`, db.Schema))
+	_, err := db.Pool.Exec(ctx, fmt.Sprintf(`INSERT INTO %s (id, revision, tx_from, recorded_by, data) VALUES ('c1', 9, now() - interval '1 day', 'x', '{}')`, db.Qualified(repo.Employer, "customers")))
 	if err == nil || !strings.Contains(err.Error(), "customers_one_version_at_a_time") {
 		t.Errorf("overlapping version accepted: %v", err)
 	}

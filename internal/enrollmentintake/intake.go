@@ -66,7 +66,7 @@ func (p *Processor) Ingest(ctx context.Context, filename string, raw []byte) (*i
 		job.Errors = append(job.Errors, &ingestionv1.RecordError{Code: code, Message: msg})
 		job.CompletedTime = timestamppb.New(p.Now())
 		p.logf("File %s failed: %s. Nothing was loaded.", filename, msg)
-		return p.Repos.IngestionJobs.Create(ctx, job)
+		return p.Repos.EnrollmentIngestionJobs.Create(ctx, job)
 	}
 
 	ic, err := x12.Parse(raw)
@@ -95,7 +95,7 @@ func (p *Processor) Ingest(ctx context.Context, filename string, raw []byte) (*i
 	// the accepted ones.
 	all := MapFile(ic, job.GetId())
 	job.Status = ingestionv1.IngestionStatus_INGESTION_STATUS_LOADING
-	if job, err = p.Repos.IngestionJobs.Create(ctx, job); err != nil {
+	if job, err = p.Repos.EnrollmentIngestionJobs.Create(ctx, job); err != nil {
 		return nil, err
 	}
 
@@ -140,7 +140,7 @@ func (p *Processor) Ingest(ctx context.Context, filename string, raw []byte) (*i
 	job.CompletedTime = timestamppb.New(p.Now())
 	p.logf("File %s loaded: %d member loop(s) taken in, %d not loaded. 999 returned to %s.",
 		filename, job.GetCounts().GetRecordsCreated(), job.GetCounts().GetRecordsErrored(), ic.Sender())
-	return p.Repos.IngestionJobs.Update(ctx, job)
+	return p.Repos.EnrollmentIngestionJobs.Update(ctx, job)
 }
 
 // Checked is one transaction set: the member loops mapped from it and the
@@ -186,7 +186,7 @@ func MapFile(ic *x12.Interchange, jobID string) []Checked {
 
 // loaded returns the job that already loaded this interchange, if any.
 func (p *Processor) loaded(ctx context.Context, ic *x12.Interchange) (*ingestionv1.IngestionJob, error) {
-	jobs, _, err := p.Repos.IngestionJobs.List(ctx, store.ListOptions[*ingestionv1.IngestionJob]{PageSize: 1, Where: []store.Cond{
+	jobs, _, err := p.Repos.EnrollmentIngestionJobs.List(ctx, store.ListOptions[*ingestionv1.IngestionJob]{PageSize: 1, Where: []store.Cond{
 		store.Eq(ic.ControlNumber(), "envelope", "interchangeControlNumber"), store.Eq(ic.Sender(), "envelope", "senderId"),
 	}, Filter: func(j *ingestionv1.IngestionJob) bool {
 		return j.GetKind() == ingestionv1.IngestionKind_INGESTION_KIND_ENROLLMENT &&

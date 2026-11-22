@@ -16,6 +16,8 @@ package remittance
 
 import (
 	"context"
+	employerv1 "coreadmin/gen/coreadmin/employer/v1"
+	"coreadmin/internal/employer"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,9 +52,19 @@ var (
 // Builder makes remittances.
 type Builder struct {
 	Repos *repo.Repos
+	// Employer names the payer and the patient. Nil means the Employer
+	// domain's own implementation over Repos.
+	Employer employer.API
 	// Who providers call about a remittance (PER*BL).
 	ContactName, ContactPhone string
 	Now                       func() time.Time
+}
+
+func (b *Builder) employer() employer.API {
+	if b.Employer != nil {
+		return b.Employer
+	}
+	return employer.New(b.Repos)
 }
 
 // Build makes the remittance for one payment to one payee. Every claim
@@ -78,7 +90,8 @@ func (b *Builder) Build(ctx context.Context, claims []*claimsv1.Claim, pay *remi
 			Tin:  first.GetBillingProvider().GetTin(),
 		},
 	}
-	cust, err := b.Repos.Customers.Get(ctx, rem.GetCustomerId())
+	cres, err := b.employer().GetCustomer(ctx, &employerv1.GetCustomerRequest{CustomerId: rem.GetCustomerId()})
+	cust := cres.GetCustomer()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s has no matched customer", ErrNotReportable, number(first))
 	}
@@ -171,9 +184,9 @@ func (b *Builder) entry(ctx context.Context, c *claimsv1.Claim) (*remittancev1.R
 
 	// The patient as we know them, falling back to as sent.
 	e.PatientName, e.PatientMemberId = c.GetSubmittedPatient().GetName(), c.GetMemberCardId()
-	if m, err := b.Repos.Members.Get(ctx, c.GetMemberId()); err == nil {
-		e.PatientName, e.PatientMemberId = m.GetName(), m.GetCardId()
-	} else if !errors.Is(err, store.ErrNotFound) {
+	if res, err := b.employer().GetMember(ctx, &employerv1.GetMemberRequest{MemberId: c.GetMemberId()}); err == nil {
+		e.PatientName, e.PatientMemberId = res.GetMember().GetName(), res.GetMember().GetCardId()
+	} else if !employer.NotFound(err) {
 		return nil, err
 	}
 	if r := c.GetRenderingProvider(); r.GetNpi() != "" && r.GetNpi() != c.GetBillingProvider().GetNpi() {

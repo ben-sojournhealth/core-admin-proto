@@ -18,9 +18,13 @@ import (
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	commonv1 "coreadmin/gen/coreadmin/common/v1"
 	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
+	employerv1 "coreadmin/gen/coreadmin/employer/v1"
+	networkv1 "coreadmin/gen/coreadmin/network/v1"
 	planv1 "coreadmin/gen/coreadmin/plan/v1"
 	providerv1 "coreadmin/gen/coreadmin/provider/v1"
 	"coreadmin/internal/dates"
+	"coreadmin/internal/employer"
+	"coreadmin/internal/network"
 	"coreadmin/internal/repo"
 	"coreadmin/internal/store"
 )
@@ -97,10 +101,29 @@ func (e *DenyError) Error() string { return fmt.Sprintf("deny %s: %s", e.Code, e
 // pipeline described in the package doc. Professional claims only; no
 // coordination of benefits, benefit limits or bundling edits.
 type DefaultEngine struct {
-	Repos   *repo.Repos
-	Ledger  AccumulatorLedger
-	Now     func() time.Time
-	Version string
+	Repos *repo.Repos
+	// Employer and Network answer adjudication's questions about members,
+	// coverage, plans, providers and contracts. Nil means the domains'
+	// own implementations over Repos.
+	Employer employer.API
+	Network  network.API
+	Ledger   AccumulatorLedger
+	Now      func() time.Time
+	Version  string
+}
+
+func (e *DefaultEngine) employer() employer.API {
+	if e.Employer != nil {
+		return e.Employer
+	}
+	return employer.New(e.Repos)
+}
+
+func (e *DefaultEngine) network() network.API {
+	if e.Network != nil {
+		return e.Network
+	}
+	return network.New(e.Repos)
 }
 
 // Calculation is an adjudication result that has not been committed.
@@ -236,23 +259,24 @@ func (e *DefaultEngine) run(ctx context.Context, calc *Calculation) error {
 	if memberErr != nil {
 		return memberErr
 	}
-	span, err := resolveCoverage(member, dos)
+	coverage, err := e.employer().GetMedicalCoverage(ctx, &employerv1.GetMedicalCoverageRequest{MemberId: member.GetId(), On: dos})
+	if err != nil {
+		return err
+	}
+	span, err := resolveCoverage(coverage, dos)
 	if err != nil {
 		return err
 	}
 	adj.CoverageSpanId = span.GetId()
 
 	// 2. Plan version.
-	plan, err := e.Repos.Plans.Get(ctx, span.GetPlanId())
-	if err != nil {
+	pv, err := e.employer().GetPlanVersion(ctx, &employerv1.GetPlanVersionRequest{PlanId: span.GetPlanId(), On: dos})
+	if employer.NotFound(err) {
 		return Pend(PendNoPlanVersion, "plan %s not found", span.GetPlanId())
+	} else if err != nil {
+		return err
 	}
-	var version *planv1.PlanVersion
-	for _, v := range plan.GetVersions() {
-		if dates.In(dos, v.GetEffective()) {
-			version = v
-		}
-	}
+	plan, version := pv.GetPlan(), pv.GetVersion()
 	if version == nil {
 		return Pend(PendNoPlanVersion, "plan %s has no version in force on %s", plan.GetId(), dates.Format(dos))
 	}
@@ -465,17 +489,11 @@ func displayNumber(c *claimsv1.Claim) string {
 // loop, the member in the subscriber's household with the same first name
 // and birth date. The member's customer becomes the claim's.
 func (e *DefaultEngine) resolveMember(ctx context.Context, c *claimsv1.Claim) (*eligibilityv1.Member, error) {
-	byCard := func(card string) ([]*eligibilityv1.Member, error) {
-		if card == "" {
-			return nil, nil
-		}
-		ms, _, err := e.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 2, Where: []store.Cond{store.Eq(card, "cardId")}})
-		return ms, err
-	}
-	ms, err := byCard(c.GetMemberCardId())
+	byCard, err := e.employer().ListMembersByCard(ctx, &employerv1.ListMembersByCardRequest{CardId: c.GetMemberCardId()})
 	if err != nil {
 		return nil, err
 	}
+	ms := byCard.GetMembers()
 	if len(ms) > 1 {
 		return nil, Pend(PendMemberNotFound, "member id %q matches members of more than one customer", c.GetMemberCardId())
 	}
@@ -484,14 +502,12 @@ func (e *DefaultEngine) resolveMember(ctx context.Context, c *claimsv1.Claim) (*
 	}
 	m := ms[0]
 	if pt := c.GetSubmittedPatient(); pt.GetDependentLoop() {
-		household, _, err := e.Repos.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 50, Where: []store.Cond{store.Eq(m.GetSubscriberId(), "subscriberId")}, Filter: func(o *eligibilityv1.Member) bool {
-			return o.GetCustomerId() == m.GetCustomerId() && o.GetSubscriberId() == m.GetSubscriberId()
-		}})
+		household, err := e.employer().GetHousehold(ctx, &employerv1.GetHouseholdRequest{CustomerId: m.GetCustomerId(), SubscriberId: m.GetSubscriberId()})
 		if err != nil {
 			return nil, err
 		}
 		var found *eligibilityv1.Member
-		for _, o := range household {
+		for _, o := range household.GetMembers() {
 			b, pb := o.GetBirthDate(), pt.GetBirthDate()
 			if strings.EqualFold(o.GetName().GetFirst(), pt.GetName().GetFirst()) &&
 				b.GetYear() == pb.GetYear() && b.GetMonth() == pb.GetMonth() && b.GetDay() == pb.GetDay() {
@@ -507,34 +523,26 @@ func (e *DefaultEngine) resolveMember(ctx context.Context, c *claimsv1.Claim) (*
 	return m, nil
 }
 
-// resolveCoverage finds the medical coverage span in force on dos.
+// resolveCoverage finds the medical coverage span in force on the date of
+// service, from the member's coverage on that date as we know it now.
 //
 // A member whose coverage ended before dos is denied (the member is
 // liable). A member with no coverage yet pends, because enrollment files
 // often arrive after the first claims.
-func resolveCoverage(m *eligibilityv1.Member, dos *commonv1.Date) (*eligibilityv1.CoverageSpan, error) {
-	hadEarlier := false
-	for _, s := range m.GetCoverage() {
-		if s.GetLine() != eligibilityv1.CoverageLine_COVERAGE_LINE_MEDICAL {
-			continue
+func resolveCoverage(c *employerv1.GetMedicalCoverageResponse, dos *commonv1.Date) (*eligibilityv1.CoverageSpan, error) {
+	if s := c.GetSpan(); s != nil && s.GetStatus() != eligibilityv1.CoverageStatus_COVERAGE_STATUS_TERMINATED {
+		if s.GetStatus() == eligibilityv1.CoverageStatus_COVERAGE_STATUS_GRACE {
+			return nil, Pend(PendCoverageInGrace, "coverage %s is in a premium grace period", s.GetId())
 		}
-		if dates.In(dos, s.GetEffective()) && s.GetStatus() != eligibilityv1.CoverageStatus_COVERAGE_STATUS_TERMINATED {
-			if s.GetStatus() == eligibilityv1.CoverageStatus_COVERAGE_STATUS_GRACE {
-				return nil, Pend(PendCoverageInGrace, "coverage %s is in a premium grace period", s.GetId())
-			}
-			return s, nil
-		}
-		if dates.Cmp(s.GetEffective().GetStart(), dos) <= 0 {
-			hadEarlier = true
-		}
+		return s, nil
 	}
-	if hadEarlier {
+	if c.GetStartedBefore() {
 		return nil, &DenyError{
 			Code:    DenyCoverageTerminated,
 			Message: fmt.Sprintf("coverage ended before the date of service %s", dates.Format(dos)),
 		}
 	}
-	return nil, Pend(PendNoEligibility, "member %s has no medical coverage on %s", m.GetId(), dates.Format(dos))
+	return nil, Pend(PendNoEligibility, "member %s has no medical coverage on %s", c.GetMember().GetId(), dates.Format(dos))
 }
 
 func claimSignature(c *claimsv1.Claim) string {
@@ -581,22 +589,13 @@ func (e *DefaultEngine) findDuplicate(ctx context.Context, c *claimsv1.Claim) (s
 // for the billed TIN on dos. An unknown provider is not an error: it is
 // treated as non-contracted.
 func (e *DefaultEngine) resolveProvider(ctx context.Context, ref *claimsv1.ProviderRef, dos *commonv1.Date) (*providerv1.Provider, []*providerv1.NetworkParticipation, error) {
-	if ref.GetNpi() == "" {
-		return nil, nil, nil
-	}
-	ps, _, err := e.Repos.Providers.List(ctx, store.ListOptions[*providerv1.Provider]{PageSize: 1, Where: []store.Cond{store.Eq(ref.GetNpi(), "npi")}})
-	if err != nil || len(ps) == 0 {
+	res, err := e.network().GetProvider(ctx, &networkv1.GetProviderRequest{Npi: ref.GetNpi(), Tin: ref.GetTin(), On: dos})
+	if err != nil || res.GetProvider() == nil {
 		return nil, nil, err
 	}
-	p := ps[0]
+	p, parts := res.GetProvider(), res.GetParticipations()
 	if p.GetStatus() == providerv1.ProviderStatus_PROVIDER_STATUS_SANCTIONED {
 		return nil, nil, &DenyError{Code: DenyProviderSanctioned, Message: "provider is excluded from payment"}
-	}
-	var parts []*providerv1.NetworkParticipation
-	for _, np := range p.GetParticipations() {
-		if (ref.GetTin() == "" || np.GetTin() == ref.GetTin()) && dates.In(dos, np.GetEffective()) {
-			parts = append(parts, np)
-		}
 	}
 	return p, parts, nil
 }
@@ -725,12 +724,13 @@ func (e *DefaultEngine) price(ctx context.Context, line *claimsv1.ClaimLine, tie
 		return nil, Pend(PendNoPrice, "no non-contracted rate for procedure %s", line.GetProcedureCode())
 	}
 
-	contract, err := e.Repos.Contracts.Get(ctx, part.GetContractId())
-	if errors.Is(err, store.ErrNotFound) {
+	cres, err := e.network().GetContract(ctx, &networkv1.GetContractRequest{ContractId: part.GetContractId()})
+	if network.NotFound(err) {
 		return nil, Pend(PendNoPrice, "contract %s not found", part.GetContractId())
 	} else if err != nil {
 		return nil, err
 	}
+	contract := cres.GetContract()
 	for i, term := range contract.GetTerms() {
 		if len(term.GetProcedureCodes()) > 0 && !slices.Contains(term.GetProcedureCodes(), line.GetProcedureCode()) {
 			continue
