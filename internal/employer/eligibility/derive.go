@@ -509,6 +509,9 @@ func (d *deriver) demographics(p *person, t *eligibilityv1.EnrollmentTransaction
 			m.Gender = commonv1.Gender_GENDER_UNKNOWN
 		}
 	}
+	if t.GetMemberIdQualifier() == "34" && t.GetMemberId() != "" {
+		m.Ssn = t.GetMemberId()
+	}
 	if a := t.GetAddress(); a != nil {
 		m.Address = &commonv1.Address{Lines: titles(a.GetLines()), City: title(a.GetCity()), State: a.GetState(), PostalCode: a.GetPostalCode(), CountryCode: a.GetCountryCode()}
 	}

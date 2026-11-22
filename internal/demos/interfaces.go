@@ -27,7 +27,7 @@ const (
 // Interfaces lists every line of the map that has a proto service.
 var Interfaces = []Interface{
 	{From: Eligibility, To: Adjudication, Service: employerService, Calls: []Call{
-		{By: "Claim Adjudication", Methods: []string{"ListMembersByCard", "GetHousehold", "GetMedicalCoverage"}},
+		{By: "Claim Adjudication", Methods: []string{"MatchClaimMember", "GetMedicalCoverage"}},
 		{By: "Remittance & EOBs", Methods: []string{"GetMember", "GetCustomer"}},
 	}},
 	{From: PlanDesign, To: Adjudication, Service: employerService, Calls: []Call{

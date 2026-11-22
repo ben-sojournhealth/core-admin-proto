@@ -124,9 +124,14 @@ message Claim {
   string payer_claim_control_number = 35;
   // The clearinghouse's tracking number for the claim (837 REF*D9).
   string clearinghouse_trace_number = 36;
-  // The patient as the provider identified them, kept so an examiner can
-  // find the member when no member matched.
-  SubmittedPatient submitted_patient = 37;
+  // The patient as the provider identified them (837: loop 2010CA), when
+  // sent apart from the subscriber: a dependent without a member number of
+  // their own. Absent when the subscriber is the patient.
+  SubmittedPerson submitted_patient = 37;
+  // The subscriber as the provider identified them (837: loop 2010BA).
+  // With submitted_patient, what the member is matched from, and what an
+  // examiner searches by when no member matched.
+  SubmittedPerson submitted_subscriber = 40;
   // Where in an inbound file the claim came from.
   SourceRecord source_record = 38;
   // For a replacement or void: the original, when it is known rather than
@@ -145,17 +150,24 @@ message ClaimLink {
   string note = 4;
 }
 
-message SubmittedPatient {
-  // Member id from the 2010BA subscriber loop.
-  string card_id = 1;
+// SubmittedPerson is a subscriber or patient as a claim identified them.
+// Every field is as sent.
+message SubmittedPerson {
+  // The member number sent for the person. An 837 sends it for the
+  // subscriber (2010BA NM109) and not for a patient in the 2000C loop.
+  string member_number = 1;
+  // The person's name (NM1).
   common.v1.PersonName name = 2;
+  // The person's date of birth (DMG02).
   common.v1.Date birth_date = 3;
-  // F, M or U as sent.
+  // F, M or U as sent (DMG03).
   string gender_code = 4;
-  // True when the patient was sent in the 2000C patient loop: a dependent
-  // without their own member id, identified by name and birth date under
-  // the subscriber's card_id.
-  bool dependent_loop = 5;
+  // Social Security number, if sent (REF*SY). Never put it in a log, an
+  // error or a pend message.
+  string ssn = 6;
+
+  reserved 5;
+  reserved "card_id", "dependent_loop";
 }
 
 // SourceRecord locates a claim in the file it arrived in.

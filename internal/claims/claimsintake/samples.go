@@ -31,7 +31,8 @@ var (
 	ortiz = prov{org: "ORTIZ ORTHOPEDICS", npi: "1987654321", tin: "452345678", taxonomy: "207X00000X"}
 )
 
-type person struct{ last, first, dob, sex string }
+// ssn is sent as REF*SY when set (SSNs starting with 9 are never issued).
+type person struct{ last, first, dob, sex, ssn string }
 
 type svc struct {
 	proc    string
@@ -97,6 +98,9 @@ func file(icn, bhtDate, bhtTime string, sets ...txn) string {
 			w.Seg("SBR", "P", rel, "GRP0042", "", "", "", "", "", "CI")
 			w.Seg("NM1", "IL", "1", c.subscriber.last, c.subscriber.first, "", "", "", "MI", c.card)
 			w.Seg("DMG", "D8", c.subscriber.dob, c.subscriber.sex)
+			if c.subscriber.ssn != "" {
+				w.Seg("REF", "SY", c.subscriber.ssn)
+			}
 			w.Seg("NM1", "PR", "2", "ACME HEALTH PLAN", "", "", "", "", "PI", "ACMEHP")
 			if c.patient != nil {
 				hl++
@@ -144,14 +148,14 @@ func file(icn, bhtDate, bhtTime string, sets ...txn) string {
 }
 
 var (
-	jordan = person{"RIVERA", "JORDAN", "19850412", "U"}
-	sam    = person{"RIVERA", "SAM", "19870903", "U"}
-	riley  = person{"RIVERA", "RILEY", "20150621", "U"}
-	priya  = person{"PATEL", "PRIYA", "19791102", "F"}
-	arjun  = person{"PATEL", "ARJUN", "19770519", "M"}
-	chidi  = person{"OKAFOR", "CHIDI", "19900208", "M"}
-	ada    = person{"OKAFOR", "ADA", "20190830", "F"}
-	taylor = person{"NGUYEN", "TAYLOR", "19920314", "U"}
+	jordan = person{"RIVERA", "JORDAN", "19850412", "U", "999101001"}
+	sam    = person{"RIVERA", "SAM", "19870903", "U", ""}
+	riley  = person{"RIVERA", "RILEY", "20150621", "U", ""}
+	priya  = person{"PATEL", "PRIYA", "19791102", "F", ""}
+	arjun  = person{"PATEL", "ARJUN", "19770519", "M", ""}
+	chidi  = person{"OKAFOR", "CHIDI", "19900208", "M", ""}
+	ada    = person{"OKAFOR", "ADA", "20190830", "F", ""}
+	taylor = person{"NGUYEN", "TAYLOR", "19920314", "U", ""}
 )
 
 // Samples is the demo's file library.

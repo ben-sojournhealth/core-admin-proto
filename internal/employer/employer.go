@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -64,26 +65,55 @@ func (s *Service) GetMember(ctx context.Context, req *employerv1.GetMemberReques
 	return &employerv1.GetMemberResponse{Member: m}, nil
 }
 
-func (s *Service) ListMembersByCard(ctx context.Context, req *employerv1.ListMembersByCardRequest) (*employerv1.ListMembersByCardResponse, error) {
-	if req.GetCardId() == "" {
-		return &employerv1.ListMembersByCardResponse{}, nil
+// MatchClaimMember finds the member a claim is for. The rule: the
+// subscriber's member number names one member; a patient sent apart from
+// the subscriber is the member of that member's household with the same
+// first name and birth date. SSN, last name and gender are not matched on
+// yet.
+func (s *Service) MatchClaimMember(ctx context.Context, req *employerv1.MatchClaimMemberRequest) (*employerv1.MatchClaimMemberResponse, error) {
+	outcome := func(o employerv1.MemberMatchOutcome) (*employerv1.MatchClaimMemberResponse, error) {
+		return &employerv1.MatchClaimMemberResponse{Outcome: o}, nil
 	}
-	ms, _, err := s.r.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 2, Where: []store.Cond{store.Eq(req.GetCardId(), "cardId")}})
+	number := req.GetSubscriber().GetMemberNumber()
+	if number == "" {
+		return outcome(employerv1.MemberMatchOutcome_MEMBER_MATCH_OUTCOME_NOT_FOUND)
+	}
+	// Member numbers are unique within a customer, not across customers.
+	ms, _, err := s.r.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 2, Where: []store.Cond{store.Eq(number, "cardId")}})
 	if err != nil {
 		return nil, err
 	}
-	return &employerv1.ListMembersByCardResponse{Members: ms}, nil
-}
-
-func (s *Service) GetHousehold(ctx context.Context, req *employerv1.GetHouseholdRequest) (*employerv1.GetHouseholdResponse, error) {
-	ms, _, err := s.r.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 50,
-		Where:  []store.Cond{store.Eq(req.GetSubscriberId(), "subscriberId")},
-		Filter: func(m *eligibilityv1.Member) bool { return m.GetCustomerId() == req.GetCustomerId() },
-	})
-	if err != nil {
-		return nil, err
+	switch {
+	case len(ms) == 0:
+		return outcome(employerv1.MemberMatchOutcome_MEMBER_MATCH_OUTCOME_NOT_FOUND)
+	case len(ms) > 1:
+		return outcome(employerv1.MemberMatchOutcome_MEMBER_MATCH_OUTCOME_AMBIGUOUS)
 	}
-	return &employerv1.GetHouseholdResponse{Members: ms}, nil
+	m := ms[0]
+	if pt := req.GetPatient(); pt != nil {
+		household, _, err := s.r.Members.List(ctx, store.ListOptions[*eligibilityv1.Member]{PageSize: 50,
+			Where:  []store.Cond{store.Eq(m.GetSubscriberId(), "subscriberId")},
+			Filter: func(o *eligibilityv1.Member) bool { return o.GetCustomerId() == m.GetCustomerId() },
+		})
+		if err != nil {
+			return nil, err
+		}
+		var found []*eligibilityv1.Member
+		for _, o := range household {
+			if strings.EqualFold(o.GetName().GetFirst(), pt.GetName().GetFirst()) && o.GetBirthDate() != nil &&
+				dates.Cmp(o.GetBirthDate(), pt.GetBirthDate()) == 0 {
+				found = append(found, o)
+			}
+		}
+		switch {
+		case len(found) == 0:
+			return outcome(employerv1.MemberMatchOutcome_MEMBER_MATCH_OUTCOME_NOT_FOUND)
+		case len(found) > 1:
+			return outcome(employerv1.MemberMatchOutcome_MEMBER_MATCH_OUTCOME_AMBIGUOUS)
+		}
+		m = found[0]
+	}
+	return &employerv1.MatchClaimMemberResponse{Outcome: employerv1.MemberMatchOutcome_MEMBER_MATCH_OUTCOME_MATCHED, Member: m}, nil
 }
 
 func (s *Service) GetMedicalCoverage(ctx context.Context, req *employerv1.GetMedicalCoverageRequest) (*employerv1.GetMedicalCoverageResponse, error) {

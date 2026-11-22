@@ -426,12 +426,15 @@ func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 		v.Correction = cv
 	}
 	if src := c.GetSourceRecord(); src != nil {
-		pt := c.GetSubmittedPatient()
+		pt, dependent := c.GetSubmittedPatient(), c.GetSubmittedPatient() != nil
+		if !dependent {
+			pt = c.GetSubmittedSubscriber()
+		}
 		in := &IntakeView{
 			PCN: c.GetPatientControlNumber(), JobID: src.GetIngestionJobId(), Set: src.GetTransactionSetControlNumber(),
 			Clearinghouse: c.GetClearinghouseId(), Trace: c.GetClearinghouseTraceNumber(), Quoted: c.GetPayerClaimControlNumber(),
 			Patient: strings.TrimSpace(pt.GetName().GetFirst() + " " + pt.GetName().GetLast()),
-			Born:    dates.Format(pt.GetBirthDate()), Card: pt.GetCardId(), Dependent: pt.GetDependentLoop(),
+			Born:    dates.Format(pt.GetBirthDate()), Card: c.GetMemberCardId(), Dependent: dependent,
 		}
 		if t := c.GetClearinghouseReceivedTime(); t != nil {
 			in.ClearinghouseReceived = t.AsTime().Format(time.RFC3339)

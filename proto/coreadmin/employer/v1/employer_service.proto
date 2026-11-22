@@ -20,11 +20,10 @@ import "coreadmin/plan/v1/plan.proto";
 service EmployerService {
   rpc GetCustomer(GetCustomerRequest) returns (GetCustomerResponse);
   rpc GetMember(GetMemberRequest) returns (GetMemberResponse);
-  // Every member carrying a member number (card id): normally one; more
-  // means the number is ambiguous.
-  rpc ListMembersByCard(ListMembersByCardRequest) returns (ListMembersByCardResponse);
-  // The members of one subscriber's family at a customer.
-  rpc GetHousehold(GetHouseholdRequest) returns (GetHouseholdResponse);
+  // The member a claim is for, matched from what the claim submitted about
+  // its subscriber and patient. The matching rule is the Employer
+  // domain's; what no match means for the claim is the asker's rule.
+  rpc MatchClaimMember(MatchClaimMemberRequest) returns (MatchClaimMemberResponse);
   // A member's medical coverage on a date. It states facts; what they
   // mean for a claim is the asker's rule.
   rpc GetMedicalCoverage(GetMedicalCoverageRequest) returns (GetMedicalCoverageResponse);
@@ -48,23 +47,49 @@ message GetMemberResponse {
   eligibility.v1.Member member = 1;
 }
 
-message ListMembersByCardRequest {
-  // The member number on the card.
-  string card_id = 1;
+// ClaimPerson is a person as a claim identified them. Every field is as
+// submitted and may be empty.
+message ClaimPerson {
+  // The member number (card id) sent for the person. An 837 sends it for
+  // the subscriber (2010BA NM109) and not for a patient in the 2000C loop.
+  string member_number = 1;
+  // Social Security number, if sent (837: REF*SY).
+  string ssn = 2;
+  // The person's name.
+  common.v1.PersonName name = 3;
+  // The person's date of birth.
+  common.v1.Date birth_date = 4;
+  // F, M or U as sent.
+  string gender_code = 5;
 }
 
-message ListMembersByCardResponse {
-  repeated eligibility.v1.Member members = 1;
+message MatchClaimMemberRequest {
+  // The subscriber the claim names (837: loop 2010BA).
+  ClaimPerson subscriber = 1;
+  // The patient, when the claim names one apart from the subscriber (837:
+  // loop 2010CA, a dependent without a member number of their own).
+  // Absent when the subscriber is the patient.
+  ClaimPerson patient = 2;
 }
 
-message GetHouseholdRequest {
-  string customer_id = 1;
-  string subscriber_id = 2;
+message MatchClaimMemberResponse {
+  // Whether exactly one member matched.
+  MemberMatchOutcome outcome = 1;
+  // The matched member as we know them now. Set only when outcome is
+  // MATCHED.
+  eligibility.v1.Member member = 2;
 }
 
-message GetHouseholdResponse {
-  // The subscriber and their dependents.
-  repeated eligibility.v1.Member members = 1;
+// MemberMatchOutcome is the result of matching a claim's people to a
+// member.
+enum MemberMatchOutcome {
+  MEMBER_MATCH_OUTCOME_UNSPECIFIED = 0;
+  // Exactly one member matched.
+  MEMBER_MATCH_OUTCOME_MATCHED = 1;
+  // No member matched.
+  MEMBER_MATCH_OUTCOME_NOT_FOUND = 2;
+  // More than one member matched and nothing sent tells them apart.
+  MEMBER_MATCH_OUTCOME_AMBIGUOUS = 3;
 }
 
 message GetMedicalCoverageRequest {

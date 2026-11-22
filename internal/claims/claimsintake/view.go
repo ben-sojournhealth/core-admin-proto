@@ -239,9 +239,12 @@ var mapped = protojson.MarshalOptions{UseProtoNames: true}
 
 func row(key string, pc ParsedClaim, c *claimsv1.Claim) ClaimRow {
 	in := pc.Claim
-	pt := in.GetSubmittedPatient()
+	pt, dependent := in.GetSubmittedPatient(), in.GetSubmittedPatient() != nil
+	if !dependent {
+		pt = in.GetSubmittedSubscriber()
+	}
 	row := ClaimRow{
-		Key: key, PCN: in.GetPatientControlNumber(), Card: pt.GetCardId(), Dependent: pt.GetDependentLoop(),
+		Key: key, PCN: in.GetPatientControlNumber(), Card: in.GetMemberCardId(), Dependent: dependent,
 		Patient:   title(pt.GetName().GetFirst() + " " + pt.GetName().GetLast()),
 		Provider:  title(in.GetBillingProvider().GetName()),
 		Charge:    in.GetTotalCharge().GetCents(),

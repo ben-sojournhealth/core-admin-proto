@@ -484,43 +484,46 @@ func displayNumber(c *claimsv1.Claim) string {
 	return c.GetClaimNumber()
 }
 
-// resolveMember matches the patient from the submitted fields only: the
-// member id on the card, or, for a dependent sent in the 2000C patient
-// loop, the member in the subscriber's household with the same first name
-// and birth date. The member's customer becomes the claim's.
+// resolveMember asks Employer which member the claim is for, from the
+// submitted fields only: the subscriber and, when sent apart, the patient.
+// The member's customer becomes the claim's. Pend messages never quote an
+// SSN.
 func (e *DefaultEngine) resolveMember(ctx context.Context, c *claimsv1.Claim) (*eligibilityv1.Member, error) {
-	byCard, err := e.employer().ListMembersByCard(ctx, &employerv1.ListMembersByCardRequest{CardId: c.GetMemberCardId()})
+	sub, pt := claimPerson(c.GetSubmittedSubscriber()), claimPerson(c.GetSubmittedPatient())
+	if sub == nil {
+		sub = &employerv1.ClaimPerson{}
+	}
+	// member_card_id is the member number on every claim, whatever its
+	// source; an 837 also carries it on the submitted subscriber.
+	sub.MemberNumber = c.GetMemberCardId()
+	res, err := e.employer().MatchClaimMember(ctx, &employerv1.MatchClaimMemberRequest{Subscriber: sub, Patient: pt})
 	if err != nil {
 		return nil, err
 	}
-	ms := byCard.GetMembers()
-	if len(ms) > 1 {
-		return nil, Pend(PendMemberNotFound, "member id %q matches members of more than one customer", c.GetMemberCardId())
+	switch res.GetOutcome() {
+	case employerv1.MemberMatchOutcome_MEMBER_MATCH_OUTCOME_MATCHED:
+		return res.GetMember(), nil
+	case employerv1.MemberMatchOutcome_MEMBER_MATCH_OUTCOME_AMBIGUOUS:
+		return nil, Pend(PendMemberNotFound, "more than one member matches %s", submittedAs(c))
 	}
-	if len(ms) == 0 {
-		return nil, Pend(PendMemberNotFound, "no member with member id %q", c.GetMemberCardId())
+	return nil, Pend(PendMemberNotFound, "no member matches %s", submittedAs(c))
+}
+
+// claimPerson is a submitted person as the Employer service takes them.
+func claimPerson(p *claimsv1.SubmittedPerson) *employerv1.ClaimPerson {
+	if p == nil {
+		return nil
 	}
-	m := ms[0]
-	if pt := c.GetSubmittedPatient(); pt.GetDependentLoop() {
-		household, err := e.employer().GetHousehold(ctx, &employerv1.GetHouseholdRequest{CustomerId: m.GetCustomerId(), SubscriberId: m.GetSubscriberId()})
-		if err != nil {
-			return nil, err
-		}
-		var found *eligibilityv1.Member
-		for _, o := range household.GetMembers() {
-			b, pb := o.GetBirthDate(), pt.GetBirthDate()
-			if strings.EqualFold(o.GetName().GetFirst(), pt.GetName().GetFirst()) &&
-				b.GetYear() == pb.GetYear() && b.GetMonth() == pb.GetMonth() && b.GetDay() == pb.GetDay() {
-				found = o
-			}
-		}
-		if found == nil {
-			return nil, Pend(PendMemberNotFound, "no member named %s, born %s, in the household of member id %s",
-				pt.GetName().GetFirst(), dates.Format(pt.GetBirthDate()), c.GetMemberCardId())
-		}
-		m = found
+	return &employerv1.ClaimPerson{MemberNumber: p.GetMemberNumber(), Ssn: p.GetSsn(), Name: p.GetName(),
+		BirthDate: p.GetBirthDate(), GenderCode: p.GetGenderCode()}
+}
+
+// submittedAs describes who the claim named, for a pend message.
+func submittedAs(c *claimsv1.Claim) string {
+	if pt := c.GetSubmittedPatient(); pt != nil {
+		return fmt.Sprintf("patient %s, born %s, under member id %q", pt.GetName().GetFirst(), dates.Format(pt.GetBirthDate()), c.GetMemberCardId())
 	}
-	return m, nil
+	return fmt.Sprintf("member id %q", c.GetMemberCardId())
 }
 
 // resolveCoverage finds the medical coverage span in force on the date of

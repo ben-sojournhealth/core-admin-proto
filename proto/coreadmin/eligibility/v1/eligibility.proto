@@ -20,6 +20,9 @@ message Member {
   string card_id = 9;
   repeated common.v1.ExternalId external_ids = 10;
   repeated CoverageSpan coverage = 11;
+  // Social Security number, when the sponsor sent one (834: NM109 with
+  // NM108 = 34). Never put it in a log, an error or a pend message.
+  string ssn = 12;
   common.v1.AuditInfo audit = 15;
 }
 

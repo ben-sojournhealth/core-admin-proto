@@ -81,7 +81,9 @@ func TestMapsClaimsVerbatim(t *testing.T) {
 		"trace":               {c.GetClearinghouseTraceNumber(), "CP101RIV-88213"},
 		"source job":          {c.GetSourceRecord().GetIngestionJobId(), job.GetId()},
 		"source set":          {c.GetSourceRecord().GetTransactionSetControlNumber(), "0001"},
-		"patient as sent":     {c.GetSubmittedPatient().GetName().GetFirst(), "JORDAN"},
+		"subscriber as sent":  {c.GetSubmittedSubscriber().GetName().GetFirst(), "JORDAN"},
+		"no separate patient": {c.GetSubmittedPatient() == nil, true},
+		"subscriber ssn":      {c.GetSubmittedSubscriber().GetSsn(), "999101001"},
 		"line procedure":      {c.GetLines()[0].GetProcedureCode(), "99213"},
 		"line pos":            {c.GetLines()[0].GetPlaceOfServiceCode(), "11"},
 		"line units":          {c.GetLines()[0].GetUnitsMilli(), int64(1000)},
@@ -120,7 +122,8 @@ func TestMapsPatientLoop(t *testing.T) {
 	pt := c.GetSubmittedPatient()
 	// The member id stays the subscriber's, as sent; the patient is only
 	// described.
-	if c.GetMemberCardId() != "ACM100101" || pt.GetCardId() != "ACM100101" || !pt.GetDependentLoop() ||
+	if c.GetMemberCardId() != "ACM100101" || c.GetSubmittedSubscriber().GetMemberNumber() != "ACM100101" ||
+		c.GetSubmittedSubscriber().GetName().GetFirst() != "JORDAN" || pt.GetMemberNumber() != "" ||
 		pt.GetName().GetFirst() != "RILEY" || pt.GetBirthDate().GetYear() != 2015 || pt.GetBirthDate().GetDay() != 21 {
 		t.Errorf("card %q, patient %v", c.GetMemberCardId(), pt)
 	}

@@ -82,7 +82,7 @@ const (
 func TestReceiveMatchesAndNumbers(t *testing.T) {
 	s := sandbox(t)
 	riley := submitted("RIV-88240", "ACM100101", "99214", 250, 13)
-	riley.SubmittedPatient = &claimsv1.SubmittedPatient{CardId: "ACM100101", DependentLoop: true,
+	riley.SubmittedPatient = &claimsv1.SubmittedPerson{
 		Name: &commonv1.PersonName{First: "RILEY", Last: "RIVERA"}, BirthDate: &commonv1.Date{Year: 2015, Month: 6, Day: 21}}
 
 	// A provider's correction or void is a new submission, so it gets a

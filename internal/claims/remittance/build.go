@@ -183,7 +183,10 @@ func (b *Builder) entry(ctx context.Context, c *claimsv1.Claim) (*remittancev1.R
 	}
 
 	// The patient as we know them, falling back to as sent.
-	e.PatientName, e.PatientMemberId = c.GetSubmittedPatient().GetName(), c.GetMemberCardId()
+	e.PatientName, e.PatientMemberId = c.GetSubmittedSubscriber().GetName(), c.GetMemberCardId()
+	if pt := c.GetSubmittedPatient(); pt != nil {
+		e.PatientName = pt.GetName()
+	}
 	if res, err := b.employer().GetMember(ctx, &employerv1.GetMemberRequest{MemberId: c.GetMemberId()}); err == nil {
 		e.PatientName, e.PatientMemberId = res.GetMember().GetName(), res.GetMember().GetCardId()
 	} else if !employer.NotFound(err) {
