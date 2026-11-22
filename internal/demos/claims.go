@@ -26,6 +26,11 @@ const (
 func claimsDemos() []Demo {
 	return []Demo{
 		{
+			ID: "adjudication", Title: "Claim Adjudication", Status: Live, Path: "/adjudication/",
+			Summary: "Inside adjudication: each step a claim goes through, what it can pend or deny, and what it asks other domains.",
+			Links:   []Link{{Component: Adjudication}},
+		},
+		{
 			ID: "claims-lifecycle", Title: "Claims Lifecycle", Status: Live, Path: "/claims-lifecycle/",
 			Summary:   "A claim from intake to payment: adjudication, accumulators, pends, adjustments and voids.",
 			Scenarios: len(scenario.Library),

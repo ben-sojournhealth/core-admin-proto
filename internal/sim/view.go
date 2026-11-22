@@ -15,10 +15,10 @@ import (
 	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
 	planv1 "coreadmin/gen/coreadmin/plan/v1"
 	providerv1 "coreadmin/gen/coreadmin/provider/v1"
-	"coreadmin/internal/adjudication"
 	"coreadmin/internal/claims"
-	"coreadmin/internal/dates"
-	"coreadmin/internal/store"
+	"coreadmin/internal/claims/adjudication"
+	"coreadmin/internal/common/dates"
+	"coreadmin/internal/common/store"
 )
 
 // State is everything the UI shows, flattened for rendering. Amounts are

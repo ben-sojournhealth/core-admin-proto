@@ -2,11 +2,11 @@ package seed_test
 
 import (
 	"context"
-	"coreadmin/internal/repo/repotest"
+	"coreadmin/internal/common/repo/repotest"
 	"testing"
 
+	"coreadmin/internal/common/store"
 	"coreadmin/internal/seed"
-	"coreadmin/internal/store"
 	seeddata "coreadmin/seed"
 )
 

@@ -1,5 +1,5 @@
 // Command pg manages the local Postgres everything runs on (see
-// internal/pgdb): start it, stop it, or print how to connect.
+// internal/common/pgdb): start it, stop it, or print how to connect.
 //
 //	go run ./cmd/pg start
 //	go run ./cmd/pg stop
@@ -13,7 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"coreadmin/internal/pgdb"
+	"coreadmin/internal/common/pgdb"
 )
 
 func main() {

@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 
-	"coreadmin/internal/remittancedemo"
+	"coreadmin/internal/claims/remittancedemo"
 )
 
 // registerRemittance serves the Remittance demo: adjudication results in,

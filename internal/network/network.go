@@ -13,9 +13,9 @@ import (
 	networkv1 "coreadmin/gen/coreadmin/network/v1"
 	"coreadmin/gen/coreadmin/network/v1/networkv1connect"
 	providerv1 "coreadmin/gen/coreadmin/provider/v1"
-	"coreadmin/internal/dates"
-	"coreadmin/internal/repo"
-	"coreadmin/internal/store"
+	"coreadmin/internal/common/dates"
+	"coreadmin/internal/common/repo"
+	"coreadmin/internal/common/store"
 )
 
 // API is how other domains call the Network domain.

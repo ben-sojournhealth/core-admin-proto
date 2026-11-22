@@ -15,9 +15,9 @@ import (
 	commonv1 "coreadmin/gen/coreadmin/common/v1"
 	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
 	"coreadmin/internal/claims"
-	"coreadmin/internal/repo"
+	"coreadmin/internal/common/repo"
+	"coreadmin/internal/common/store"
 	"coreadmin/internal/sim"
-	"coreadmin/internal/store"
 )
 
 // Today is the date the workbench opens on.

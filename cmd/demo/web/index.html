@@ -4,17 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Core Admin Demos</title>
+<link rel="stylesheet" href="/shared/interfaces.css">
 <style>
 :root {
   --bg: #f4f5f7; --panel: #ffffff; --ink: #1c2330; --muted: #667085; --line: #d9dde5; --edge: #a3abb9;
-  --accent: #3b5bdb; --accent-ink: #ffffff; --accent-soft: #eef2ff; --ext: #f9fafb; --domain: rgba(59,91,219,.035); --oos: #b54708;
+  --accent: #3b5bdb; --accent-ink: #ffffff; --accent-soft: #eef2ff; --ext: #f9fafb; --domain: rgba(59,91,219,.035); --oos: #b54708; --proto: #0e7c86; --proto-soft: #e6f6f7; --code: #f6f7f9;
   --shadow: 0 1px 2px rgba(16,24,40,.06);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #12151b; --panel: #1b1f27; --ink: #e7eaf0; --muted: #98a2b3; --line: #343b47; --edge: #5b6575;
-    --accent: #7c93ff; --accent-ink: #0d1020; --accent-soft: #232b4d; --ext: #161a21; --domain: rgba(124,147,255,.05); --oos: #f79009;
+    --accent: #7c93ff; --accent-ink: #0d1020; --accent-soft: #232b4d; --ext: #161a21; --domain: rgba(124,147,255,.05); --oos: #f79009; --proto: #3cc6d0; --proto-soft: #0f2e31; --code: #14171d;
     --shadow: none;
     color-scheme: dark;
   }
@@ -69,6 +70,24 @@ svg { display: block; width: 100%; min-width: 860px; height: auto; }
 .link.on .edge[marker-end] { marker-end: url(#ah-on); }
 .link.on .edge[marker-start] { marker-start: url(#ah-on); }
 .link.on .edge-label { fill: var(--accent); font-weight: 600; }
+/* Lines with a proto interface: click to inspect it. */
+.link.quiet { pointer-events: none; }
+#arch.all .link.quiet, .link.quiet.on { pointer-events: auto; }
+#arch.all .link.quiet { opacity: 1; }
+#arch.all.focus .link.quiet:not(.on) { opacity: .12; }
+.link.proto { cursor: pointer; }
+.link.proto .edge { stroke: var(--proto); stroke-width: 2; }
+.link.proto .edge[marker-end] { marker-end: url(#ah-proto); }
+.link.proto .edge-label { fill: var(--proto); font-weight: 600; }
+.link.proto:hover .edge, .link.proto.open .edge { stroke-width: 3.2; }
+.arrow.proto { fill: var(--proto); }
+.hit { fill: none; stroke: transparent; stroke-width: 14; }
+
+.tools { display: flex; align-items: center; gap: 18px; padding: 4px 6px 8px; font-size: 13px; color: var(--muted); }
+.tools label { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); cursor: pointer; }
+.tools .l-proto::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 2.5px solid var(--proto); margin-right: 6px; vertical-align: 3px; }
+
+
 
 /* demo cards */
 h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 22px 2px 10px; font-weight: 650; }
@@ -88,10 +107,16 @@ a.demo:hover, .demo.hl { border-color: var(--accent); }
   <div class="legend"><span class="l-live">has a demo</span><span class="l-planned">demo planned</span><span class="l-ext">outside the system</span><span class="l-oos">out of scope for '28</span><span class="l-hint">hover a component for its connections</span></div>
 </header>
 <main>
-  <div class="card diagram"><svg id="arch" viewBox="0 0 1100 1068" role="img" aria-label="System architecture"></svg></div>
+  <div class="card diagram">
+    <div class="tools">
+      <label><input type="checkbox" id="all"> Show all connections</label>
+      <span class="l-proto">proto interface · click to inspect</span>
+    </div>
+    <svg id="arch" viewBox="0 0 1100 1068" role="img" aria-label="System architecture"></svg></div>
   <h2>Demos</h2>
   <div class="demos" id="demos"></div>
 </main>
+<script src="/shared/interfaces.js"></script>
 <script>
 "use strict";
 // Components, grouped by domain: Employer on top, Claims in the middle as
@@ -219,7 +244,9 @@ function draw() {
   let svg = `<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
     <path class="arrow" d="M0,0 L10,5 L0,10 z"/></marker>
     <marker id="ah-on" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-    <path class="arrow on" d="M0,0 L10,5 L0,10 z"/></marker></defs><g transform="translate(0,${TOP})">`;
+    <path class="arrow on" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="ah-proto" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path class="arrow proto" d="M0,0 L10,5 L0,10 z"/></marker></defs><g transform="translate(0,${TOP})">`;
   for (const d of DOMAINS) {
     svg += `<g class="domain${d.oos ? " oos" : ""}"><rect x="${d.x}" y="${d.y}" width="${d.w}" height="${d.h}" rx="14"/>
       <text x="${d.x + 14}" y="${d.y + 24}">${esc(d.t)}</text>
@@ -227,7 +254,9 @@ function draw() {
   }
   for (const [from, to, d, label, lx, ly, ends] of EDGES) {
     const quiet = !alwaysShown(from, to);
-    svg += `<g class="link${quiet ? " quiet" : ""}" data-from="${from}" data-to="${to}">
+    const proto = protoLines.has(from + ">" + to);
+    svg += `<g class="link${quiet ? " quiet" : ""}${proto ? " proto" : ""}" data-from="${from}" data-to="${to}"${proto ? " data-opens-panel" : ""}>
+      ${proto ? `<title>${esc(nameOf(from))} → ${esc(nameOf(to))} · inspect the interface</title><path class="hit" d="${d}"/>` : ""}
       <path class="edge" d="${d}" marker-end="url(#ah)" ${ends === "both" ? `marker-start="url(#ah)"` : ""}/>
       ${label ? `<text class="edge-label" x="${lx}" y="${ly}">${esc(label)}</text>` : ""}</g>`;
   }
@@ -268,6 +297,8 @@ function highlight(components, demoIds) {
   demoIds.forEach((id) => document.querySelector(`.demo[data-demo="${id}"]`)?.classList.add("hl"));
 }
 document.addEventListener("mouseover", (ev) => {
+  // Moving onto a line keeps what's shown, so a line can be clicked.
+  if (ev.target.closest(".link")) return;
   const node = ev.target.closest(".node[data-c]");
   const card = ev.target.closest(".demo[data-demo]");
   focusLinks(node?.dataset.c);
@@ -282,7 +313,41 @@ const follow = (ev) => {
 document.addEventListener("click", follow);
 document.addEventListener("keydown", follow);
 
-fetch("/api/demos").then((r) => r.json()).then((d) => { demos = d; draw(); });
+// ---------- interfaces ----------
+
+// The lines with a proto interface, "from>to".
+let protoLines = new Set();
+const nameOf = (id) => NODES.find((n) => n.id === id)?.t || id;
+
+document.getElementById("all").addEventListener("change", (ev) => {
+  document.getElementById("arch").classList.toggle("all", ev.target.checked);
+  try { localStorage.setItem("showAll", ev.target.checked ? "1" : ""); } catch {}
+});
+
+async function openInterface(from, to) {
+  document.querySelectorAll(".link.open").forEach((l) => l.classList.remove("open"));
+  document.querySelector(`.link[data-from="${from}"][data-to="${to}"]`)?.classList.add("open");
+  const body = InterfacePanel.open(`${nameOf(from)} → ${nameOf(to)}`);
+  const r = await fetch(`/api/interface?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+  if (!r.ok) { body.textContent = await r.text(); return; }
+  const { interface: itf, contract } = await r.json();
+  InterfacePanel.showContract(contract, itf.calls);
+}
+InterfacePanel.onClose = () => document.querySelectorAll(".link.open").forEach((l) => l.classList.remove("open"));
+document.addEventListener("click", (ev) => {
+  const line = ev.target.closest(".link.proto");
+  if (line) openInterface(line.dataset.from, line.dataset.to);
+});
+
+Promise.all([fetch("/api/demos").then((r) => r.json()), fetch("/api/interfaces").then((r) => r.json())]).then(([d, ifs]) => {
+  demos = d;
+  protoLines = new Set(ifs.map((i) => i.from + ">" + i.to));
+  draw();
+  let all = false;
+  try { all = localStorage.getItem("showAll") === "1"; } catch {}
+  document.getElementById("all").checked = all;
+  document.getElementById("arch").classList.toggle("all", all);
+});
 </script>
 </body>
 </html>

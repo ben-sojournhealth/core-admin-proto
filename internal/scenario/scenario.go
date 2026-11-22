@@ -12,11 +12,11 @@ import (
 	"strings"
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
-	"coreadmin/internal/adjudication"
 	"coreadmin/internal/claims"
-	"coreadmin/internal/repo"
+	"coreadmin/internal/claims/adjudication"
+	"coreadmin/internal/common/repo"
+	"coreadmin/internal/common/store"
 	"coreadmin/internal/sim"
-	"coreadmin/internal/store"
 )
 
 type Scenario struct {

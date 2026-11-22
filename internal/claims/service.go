@@ -16,11 +16,11 @@ import (
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	commonv1 "coreadmin/gen/coreadmin/common/v1"
-	"coreadmin/internal/adjudication"
-	"coreadmin/internal/dates"
-	"coreadmin/internal/ids"
-	"coreadmin/internal/repo"
-	"coreadmin/internal/store"
+	"coreadmin/internal/claims/adjudication"
+	"coreadmin/internal/common/dates"
+	"coreadmin/internal/common/ids"
+	"coreadmin/internal/common/repo"
+	"coreadmin/internal/common/store"
 )
 
 // ErrRejected marks a request the service refuses because of the claim's

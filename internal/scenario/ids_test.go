@@ -1,8 +1,8 @@
 package scenario_test
 
 import (
-	"coreadmin/internal/repo"
-	"coreadmin/internal/repo/repotest"
+	"coreadmin/internal/common/repo"
+	"coreadmin/internal/common/repo/repotest"
 	"regexp"
 	"testing"
 

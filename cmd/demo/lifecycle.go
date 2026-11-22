@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"coreadmin/internal/repo"
+	"coreadmin/internal/common/repo"
 	"coreadmin/internal/scenario"
 	"coreadmin/internal/sim"
 )

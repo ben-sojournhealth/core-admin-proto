@@ -9,10 +9,10 @@ import (
 	"sync"
 
 	ingestionv1 "coreadmin/gen/coreadmin/ingestion/v1"
-	"coreadmin/internal/claimsintake"
+	"coreadmin/internal/claims/claimsintake"
+	"coreadmin/internal/common/x12"
 	"coreadmin/internal/journey"
 	"coreadmin/internal/sim"
-	"coreadmin/internal/x12"
 )
 
 // journeyServer backs the Journey workbench with its own sandbox. Claims

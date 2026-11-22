@@ -19,12 +19,12 @@ import (
 	commonv1 "coreadmin/gen/coreadmin/common/v1"
 	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
 	providerv1 "coreadmin/gen/coreadmin/provider/v1"
-	"coreadmin/internal/adjudication"
 	"coreadmin/internal/claims"
-	"coreadmin/internal/dates"
-	"coreadmin/internal/repo"
+	"coreadmin/internal/claims/adjudication"
+	"coreadmin/internal/common/dates"
+	"coreadmin/internal/common/repo"
+	"coreadmin/internal/common/store"
 	"coreadmin/internal/seed"
-	"coreadmin/internal/store"
 	seeddata "coreadmin/seed"
 )
 

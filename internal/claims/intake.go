@@ -6,7 +6,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
-	"coreadmin/internal/ids"
+	"coreadmin/internal/common/ids"
 )
 
 // Receive takes in a claim exactly as submitted, e.g. mapped from an 837.

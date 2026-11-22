@@ -14,8 +14,8 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"coreadmin/internal/repo"
-	"coreadmin/internal/store"
+	"coreadmin/internal/common/repo"
+	"coreadmin/internal/common/store"
 )
 
 // Load reads every known subdirectory of fsys into r. Missing

@@ -8,8 +8,8 @@ import (
 	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
 	employerv1 "coreadmin/gen/coreadmin/employer/v1"
 	planv1 "coreadmin/gen/coreadmin/plan/v1"
+	"coreadmin/internal/common/repo/repotest"
 	"coreadmin/internal/employer"
-	"coreadmin/internal/repo/repotest"
 )
 
 func d(y, m, day int32) *commonv1.Date { return &commonv1.Date{Year: y, Month: m, Day: day} }

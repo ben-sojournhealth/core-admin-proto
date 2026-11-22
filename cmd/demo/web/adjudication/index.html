@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claim Adjudication</title>
+<link rel="stylesheet" href="/shared/interfaces.css">
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --ink: #1c2330; --muted: #667085; --line: #d9dde5; --edge: #a3abb9;
+  --accent: #3b5bdb; --accent-ink: #ffffff; --accent-soft: #eef2ff; --ext: #f9fafb; --domain: rgba(59,91,219,.035);
+  --proto: #0e7c86; --proto-soft: #e6f6f7; --code: #f6f7f9;
+  --pend: #b54708; --pend-soft: #fef0c7; --deny: #c01048; --deny-soft: #fde7ef; --data: #475467; --data-soft: #eef0f3;
+  --shadow: 0 1px 2px rgba(16,24,40,.06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151b; --panel: #1b1f27; --ink: #e7eaf0; --muted: #98a2b3; --line: #343b47; --edge: #5b6575;
+    --accent: #7c93ff; --accent-ink: #0d1020; --accent-soft: #232b4d; --ext: #161a21; --domain: rgba(124,147,255,.05);
+    --proto: #3cc6d0; --proto-soft: #0f2e31; --code: #14171d;
+    --pend: #fdb022; --pend-soft: #3a2a09; --deny: #f97099; --deny-soft: #3b1322; --data: #c0c7d2; --data-soft: #262b34;
+    --shadow: none;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 14px; padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header a { color: var(--muted); text-decoration: none; font-size: 13px; }
+header a:hover { color: var(--accent); }
+header h1 { font-size: 16px; font-weight: 650; margin: 0; }
+.legend { margin-left: auto; display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--muted); align-items: center; }
+.legend i { display: inline-block; min-width: 16px; height: 16px; border-radius: 8px; font: 600 10.5px/16px system-ui; text-align: center; font-style: normal; margin-right: 5px; vertical-align: -3px; }
+.legend .lp i { background: var(--pend-soft); color: var(--pend); }
+.legend .ld i { background: var(--deny-soft); color: var(--deny); }
+.legend .lc::before { content: ""; display: inline-block; width: 18px; border-top: 2.5px solid var(--proto); margin-right: 6px; vertical-align: 3px; }
+main { padding: 16px 18px 28px; max-width: 1240px; margin: 0 auto; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.diagram { overflow-x: auto; padding: 10px; }
+svg { display: block; width: 100%; min-width: 860px; height: auto; }
+
+.group rect { fill: var(--domain); stroke: var(--line); stroke-width: 1.2; }
+.group text { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; fill: var(--muted); }
+.step rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.4; transition: stroke-width .15s; }
+.step { cursor: pointer; }
+.step:hover rect.box, .step.sel rect.box { stroke-width: 2.6; }
+.step .t { font-size: 14px; font-weight: 650; fill: var(--ink); }
+.step .s { font-size: 11.5px; fill: var(--muted); }
+.badge rect { stroke: none; }
+.badge.p rect { fill: var(--pend-soft); }
+.badge.p text { fill: var(--pend); }
+.badge.d rect { fill: var(--deny-soft); }
+.badge.d text { fill: var(--deny); }
+.badge text { font: 700 10.5px system-ui; }
+.node rect { fill: var(--panel); stroke: var(--edge); stroke-width: 1.4; }
+.node.ext rect { fill: var(--ext); stroke: var(--line); }
+.node.svc rect { fill: var(--panel); stroke: var(--proto); stroke-width: 1.6; }
+.node.svc { cursor: pointer; }
+.node.svc:hover rect { stroke-width: 2.6; }
+.node .t { font-size: 14px; font-weight: 650; fill: var(--ink); }
+.node .s { font-size: 11.5px; fill: var(--muted); }
+.node .m { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; fill: var(--proto); }
+.edge { fill: none; stroke: var(--edge); stroke-width: 1.5; }
+.edge.loop { stroke-dasharray: 4 3; }
+.edge-label { font-size: 11px; fill: var(--muted); }
+.arrow { fill: var(--edge); }
+.arrow.proto { fill: var(--proto); }
+.call { cursor: pointer; }
+.call .edge { stroke: var(--proto); stroke-width: 2; }
+.call:hover .edge { stroke-width: 3.2; }
+.hit { fill: none; stroke: transparent; stroke-width: 14; }
+
+.more { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; margin-top: 14px; }
+.more a { display: block; padding: 14px; text-decoration: none; color: inherit; }
+.more a:hover { border-color: var(--accent); }
+.more b { display: block; font-size: 15px; margin-bottom: 3px; }
+.more p { margin: 0; color: var(--muted); font-size: 13px; }
+
+/* step detail, in the shared panel */
+.codes { display: flex; flex-wrap: wrap; gap: 6px; }
+.code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; border-radius: 6px; padding: 1px 7px; }
+.code.p { background: var(--pend-soft); color: var(--pend); }
+.code.d { background: var(--deny-soft); color: var(--deny); }
+.code.data { background: var(--data-soft); color: var(--data); }
+.none { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <a href="/">← Domain map</a>
+  <h1>Claim Adjudication</h1>
+  <div class="legend">
+    <span class="lp"><i>2</i>pends</span><span class="ld"><i>1</i>denials</span>
+    <span class="lc">asks another domain (proto)</span>
+    <span>listed, not ordered</span>
+    <span>click a step or a line for detail</span>
+  </div>
+</header>
+<main>
+  <div class="card diagram"><svg id="map" viewBox="0 0 1100 660" role="img" aria-label="Adjudication steps"></svg></div>
+  <div class="more">
+    <a class="card" href="/claims-lifecycle/"><b>Claims Lifecycle</b><p>Run claims through adjudication: pends, adjustments, voids and payments, scenario by scenario.</p></a>
+    <a class="card" href="/journey/"><b>Journey</b><p>Where pended claims go: examiners work the queues, override, reprocess, adjust and void.</p></a>
+  </div>
+</main>
+<script src="/shared/interfaces.js"></script>
+<script>
+"use strict";
+// Steps come from the engine (adjudication.Steps): titles, pends,
+// denials, calls and data. This page only places them.
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const STEP_W = 280, STEP_H = 56;
+// Steps are listed, not ordered: their order and dependencies are still
+// to be designed. They sit in a grid; the steps that ask Employer and
+// Network are placed beside those services so their calls read cleanly.
+const POS = {
+  "match-member": [230, 110], "eligibility": [230, 188], "plan": [230, 266],
+  "provider": [230, 344], "price": [230, 422], "match-original": [230, 500], "duplicate": [230, 578],
+  "benefit": [580, 110], "auth": [580, 188], "cost-share": [580, 266], "snapshot": [580, 344],
+  "cas": [580, 422], "remarks": [580, 500], "outcome": [580, 578],
+};
+const GROUPS = [
+  { t: "claim adjudication · not in order", x: 215, y: 86, w: 660, h: 562 },
+];
+// The other domains' services, beside the steps that call them. Method
+// names sit level with the call's line.
+const SERVICES = {
+  "coreadmin.employer.v1.EmployerService": { t: "Employer", x: 20, y: 70, w: 180, h: 254 },
+  // Its label goes at the bottom: its first call is level with the top.
+  "coreadmin.network.v1.NetworkService": { t: "Network", x: 20, y: 334, w: 180, h: 166, labelBottom: true },
+};
+const CALL_PATHS = {};
+const OTHER = [
+  { id: "intake", x: 300, y: 14, w: 140, h: 52, t: "Claims Intake", s: "ProcessClaim", href: "/claims-intake/" },
+  { id: "journey", x: 650, y: 14, w: 155, h: 52, t: "Journey", s: "reprocess · adjust · void", href: "/journey/" },
+  { id: "remittance", x: 900, y: 130, w: 180, h: 56, t: "Remittance & EOBs", s: "835 preview", href: "/remittance/" },
+  { id: "settlement", x: 900, y: 240, w: 180, h: 56, t: "Settlement", s: "payment preview" },
+  { id: "queue", x: 900, y: 350, w: 180, h: 56, t: "Pend queue", s: "Journey · examiners", href: "/journey/" },
+  { id: "commit", x: 900, y: 460, w: 180, h: 56, t: "Commit", s: "post accumulators · finalize" },
+];
+// Into and out of adjudication as a whole.
+const FLOW = [
+  ["M370,66 V86"], ["M727,66 V86"],
+  ["M875,158 H900"], ["M875,268 H900"], ["M875,378 H900"], ["M875,488 H900"],
+];
+
+let steps = [];
+const stepByID = (id) => steps.find((s) => s.id === id);
+
+function draw() {
+  let svg = `<defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="ahp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow proto" d="M0,0 L10,5 L0,10 z"/></marker></defs>`;
+  for (const g of GROUPS) {
+    svg += `<g class="group"><rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="14"/><text x="${g.x + g.w - 12}" y="${g.y + 15}" text-anchor="end">${esc(g.t)}</text></g>`;
+  }
+  for (const [d, label, lx, ly, kind, anchor] of FLOW) {
+    svg += `<path class="edge${kind ? " " + kind : ""}" d="${d}" marker-end="url(#ah)"/>`;
+    if (label) svg += `<text class="edge-label" x="${lx}" y="${ly}"${anchor ? ` text-anchor="${anchor}"` : ""}>${esc(label)}</text>`;
+  }
+  // Calls to other domains: one line per step, from the service to it.
+  const methodsAt = {};
+  for (const s of steps) {
+    const [x, y] = POS[s.id] || [];
+    for (const c of s.calls || []) {
+      const box = SERVICES[c.service];
+      if (!box || x === undefined) continue;
+      const cy = y + STEP_H / 2;
+      const d = CALL_PATHS[s.id] || `M${box.x + box.w},${cy} H${x}`;
+      svg += `<g class="call" data-step="${s.id}" data-service="${c.service}" data-opens-panel><title>${esc(c.methods.join(", "))} · inspect</title>
+        <path class="hit" d="${d}"/><path class="edge" d="${d}" marker-end="url(#ahp)"/></g>`;
+      (methodsAt[c.service] ||= []).push({ y: CALL_PATHS[s.id] ? box.y + box.h - 12 : cy, methods: c.methods });
+    }
+  }
+  for (const [svc, b] of Object.entries(SERVICES)) {
+    const short = svc.split(".").pop();
+    svg += `<g class="node svc" data-service="${svc}" data-opens-panel><title>${esc(svc)} · inspect</title>
+      <rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="10"/>
+      <text class="t" x="${b.x + 14}" y="${b.labelBottom ? b.y + b.h - 26 : b.y + 22}">${esc(b.t)}</text><text class="s" x="${b.x + 14}" y="${b.labelBottom ? b.y + b.h - 10 : b.y + 38}">${esc(short)}</text>`;
+    for (const m of methodsAt[svc] || []) {
+      m.methods.forEach((name, i) => {
+        svg += `<text class="m" x="${b.x + b.w - 10}" y="${m.y + 4 + (i - (m.methods.length - 1) / 2) * 14}" text-anchor="end">${esc(name)}</text>`;
+      });
+    }
+    svg += `</g>`;
+  }
+  for (const n of OTHER) {
+    svg += `<g class="node ext"${n.href ? ` style="cursor:pointer" data-href="${n.href}"` : ""}><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10"/>
+      <text class="t" x="${n.x + n.w / 2}" y="${n.y + 23}" text-anchor="middle">${esc(n.t)}</text>
+      <text class="s" x="${n.x + n.w / 2}" y="${n.y + 40}" text-anchor="middle">${esc(n.s)}</text></g>`;
+  }
+  for (const s of steps) {
+    const p = POS[s.id];
+    if (!p) { console.warn("no position for step", s.id); continue; }
+    const [x, y] = p;
+    let badges = "", bx = x + STEP_W - 10;
+    for (const [cls, n] of [["d", (s.denies || []).length], ["p", (s.pends || []).length]]) {
+      if (!n) continue;
+      bx -= 22;
+      badges += `<g class="badge ${cls}"><rect x="${bx}" y="${y + 9}" width="20" height="16" rx="8"/><text x="${bx + 10}" y="${y + 21}" text-anchor="middle">${n}</text></g>`;
+    }
+    svg += `<g class="step" data-step="${s.id}" data-opens-panel tabindex="0" role="button"><title>${esc(s.title)} · detail</title>
+      <rect class="box" x="${x}" y="${y}" width="${STEP_W}" height="${STEP_H}" rx="10"/>
+      <text class="t" x="${x + 14}" y="${y + 23}">${esc(s.title)}</text>
+      <text class="s" x="${x + 14}" y="${y + 41}">${esc(s.sub)}</text>${badges}</g>`;
+  }
+  document.getElementById("map").innerHTML = svg;
+}
+
+const codes = (list, cls) => list?.length ? `<div class="codes">${list.map((c) => `<span class="code ${cls}">${esc(c)}</span>`).join("")}</div>` : `<div class="none">none</div>`;
+
+async function contracts(calls, by) {
+  const parts = await Promise.all(calls.map(async (c) => {
+    const r = await fetch(`/api/contract?service=${encodeURIComponent(c.service)}&methods=${encodeURIComponent(c.methods.join(","))}`);
+    return r.ok ? InterfacePanel.contractHTML(await r.json(), by(c)) : `<div class="none">${esc(await r.text())}</div>`;
+  }));
+  return parts.join("");
+}
+
+function select(id) {
+  document.querySelectorAll(".step.sel").forEach((e) => e.classList.remove("sel"));
+  if (id) document.querySelector(`.step[data-step="${id}"]`)?.classList.add("sel");
+}
+InterfacePanel.onClose = () => select(null);
+
+async function openStep(id) {
+  const s = stepByID(id);
+  select(id);
+  const body = InterfacePanel.open(s.title);
+  body.innerHTML = `<h4>Pends</h4>${codes(s.pends, "p")}<h4>Denials</h4>${codes(s.denies, "d")}
+    <h4>Claims data</h4>${codes(s.data, "data")}${s.calls?.length ? "" : `<h4>Asks other domains</h4><div class="none">nothing</div>`}`;
+  if (s.calls?.length) body.innerHTML += await contracts(s.calls, (c) => [{ by: s.title, methods: c.methods }]);
+}
+
+// A service: every method adjudication calls on it, step by step.
+async function openService(service) {
+  select(null);
+  const byStep = steps.flatMap((s) => (s.calls || []).filter((c) => c.service === service).map((c) => ({ by: s.title, methods: c.methods })));
+  const body = InterfacePanel.open(SERVICES[service].t, service);
+  body.innerHTML = await contracts([{ service, methods: [...new Set(byStep.flatMap((c) => c.methods))] }], () => byStep);
+}
+
+async function openCall(stepID, service) {
+  const s = stepByID(stepID);
+  select(stepID);
+  const call = s.calls.find((c) => c.service === service);
+  const body = InterfacePanel.open(`${SERVICES[service].t} → ${s.title}`, service);
+  body.innerHTML = await contracts([call], (c) => [{ by: s.title, methods: c.methods }]);
+}
+
+document.addEventListener("click", (ev) => {
+  const call = ev.target.closest(".call");
+  if (call) return openCall(call.dataset.step, call.dataset.service);
+  const svc = ev.target.closest(".node.svc");
+  if (svc) return openService(svc.dataset.service);
+  const step = ev.target.closest(".step");
+  if (step) return openStep(step.dataset.step);
+  const link = ev.target.closest("[data-href]");
+  if (link) location.href = link.dataset.href;
+});
+document.addEventListener("keydown", (ev) => {
+  const step = ev.target.closest?.(".step");
+  if (step && ev.key === "Enter") openStep(step.dataset.step);
+});
+
+fetch("/adjudication/api/steps").then((r) => r.json()).then((s) => { steps = s; draw(); });
+</script>
+</body>
+</html>

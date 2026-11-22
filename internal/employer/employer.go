@@ -17,9 +17,9 @@ import (
 	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
 	employerv1 "coreadmin/gen/coreadmin/employer/v1"
 	"coreadmin/gen/coreadmin/employer/v1/employerv1connect"
-	"coreadmin/internal/dates"
-	"coreadmin/internal/repo"
-	"coreadmin/internal/store"
+	"coreadmin/internal/common/dates"
+	"coreadmin/internal/common/repo"
+	"coreadmin/internal/common/store"
 )
 
 // API is how other domains call the Employer domain.

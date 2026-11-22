@@ -1,7 +1,7 @@
 package journey_test
 
 import (
-	"coreadmin/internal/repo/repotest"
+	"coreadmin/internal/common/repo/repotest"
 	"regexp"
 	"testing"
 

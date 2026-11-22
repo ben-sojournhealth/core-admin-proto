@@ -7,12 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"coreadmin/internal/eligibility"
-	"coreadmin/internal/eligibilitydemo"
-	"coreadmin/internal/enrollmentintake"
-	"coreadmin/internal/protodoc"
-	"coreadmin/internal/store"
-	"coreadmin/internal/x12"
+	"coreadmin/internal/common/protodoc"
+	"coreadmin/internal/common/store"
+	"coreadmin/internal/common/x12"
+	"coreadmin/internal/employer/eligibility"
+	"coreadmin/internal/employer/eligibilitydemo"
+	"coreadmin/internal/employer/enrollmentintake"
 )
 
 // enrollmentServer is the Enrollment Intake and Eligibility demos: 834

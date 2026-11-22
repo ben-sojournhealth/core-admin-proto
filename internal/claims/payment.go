@@ -6,10 +6,10 @@ import (
 	"fmt"
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
-	"coreadmin/internal/adjudication"
-	"coreadmin/internal/dates"
-	"coreadmin/internal/ids"
-	"coreadmin/internal/store"
+	"coreadmin/internal/claims/adjudication"
+	"coreadmin/internal/common/dates"
+	"coreadmin/internal/common/ids"
+	"coreadmin/internal/common/store"
 )
 
 // This file stands in for the payment system, which is not modeled yet.

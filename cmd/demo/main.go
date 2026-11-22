@@ -20,10 +20,12 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"strings"
 
+	"coreadmin/internal/common/pgdb"
+	"coreadmin/internal/common/protodoc"
+	"coreadmin/internal/common/repo"
 	"coreadmin/internal/demos"
-	"coreadmin/internal/pgdb"
-	"coreadmin/internal/repo"
 )
 
 //go:embed web
@@ -31,6 +33,7 @@ var webFS embed.FS
 
 // Each demo registers its routes on the mux.
 var registrations = []func(*http.ServeMux) error{
+	registerAdjudication,
 	registerLifecycle,
 	registerJourney,
 	registerEnrollment,
@@ -73,6 +76,28 @@ func main() {
 	mux.HandleFunc("GET /api/demos", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(demos.Catalog())
+	})
+	// The proto services on the map's lines, and one rendered.
+	mux.HandleFunc("GET /api/interfaces", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, demos.Interfaces, nil)
+	})
+	// A service rendered for the methods a caller uses.
+	mux.HandleFunc("GET /api/contract", func(w http.ResponseWriter, r *http.Request) {
+		var methods []string
+		if m := r.URL.Query().Get("methods"); m != "" {
+			methods = strings.Split(m, ",")
+		}
+		c, err := protodoc.Interface(r.URL.Query().Get("service"), methods)
+		writeJSON(w, c, err)
+	})
+	mux.HandleFunc("GET /api/interface", func(w http.ResponseWriter, r *http.Request) {
+		in, ok := demos.InterfaceOn(r.URL.Query().Get("from"), r.URL.Query().Get("to"))
+		if !ok {
+			http.Error(w, "no proto interface on that line", http.StatusNotFound)
+			return
+		}
+		c, err := in.Contract()
+		writeJSON(w, map[string]any{"interface": in, "contract": c}, err)
 	})
 	for _, register := range registrations {
 		if err := register(mux); err != nil {

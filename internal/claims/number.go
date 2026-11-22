@@ -6,7 +6,7 @@ import (
 	"time"
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
-	"coreadmin/internal/store"
+	"coreadmin/internal/common/store"
 )
 
 // DisplayNumber is the claim number as people see it: the bare number for

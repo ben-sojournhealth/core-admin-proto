@@ -5,33 +5,44 @@ A prototype core administration system for a health plan payer and TPA. It cover
 ## Layout
 
 ```
-proto/coreadmin/<pkg>/v1/      Data models (<pkg>.proto), and each domain's service: what other domains may ask it (employer/v1, network/v1, claims/v1 *_service.proto)
-gen/                           Generated Go + Connect code, and descriptors.binpb with the .proto comments (not committed; `make gen`)
-internal/store/                Store[T] and Transactor; the versioned, insert-only Postgres implementation
-internal/repo/                 One store per resource type; Tables: the Postgres tables and their access-pattern indexes
-internal/pgdb/                 The local Postgres everything runs on
-internal/employer/             EmployerService: what other domains may ask the Employer domain
-internal/network/              NetworkService: what other domains may ask the Network domain
-internal/adjudication/         Claims pipeline interfaces (eligibility → pricing → cost share)
-internal/stoploss/             Stop-loss tracking interfaces
-internal/claims/               ClaimsService operations (process, reprocess, adjust, void, holds, flags)
-internal/demos/                Demo catalog and how demos map onto the architecture diagram
-internal/journey/              Journey sandbox: the two-week workload and the claim detail view
-internal/claimsintake/         837P claims intake: maps files to claims, writes the 999, sample files
-internal/enrollmentintake/     834 enrollment intake: maps member loops to EnrollmentTransactions, writes the 999, sample files
-internal/eligibility/          Eligibility derived from an append-only input log; every member version kept; regeneration; Verify
-internal/eligibilitydemo/      Eligibility sandboxes and the walkthrough's live examples
-internal/x12ack/               999 acknowledgments, shared by every X12 intake
-internal/protodoc/             The .proto comments at run time, for field tooltips in the demos
-internal/x12/                  X12 reader/writer (envelopes and segments, no transaction knowledge)
-internal/remittance/           835s from adjudicated claims: build, balance, reverse, render; previews
-internal/remittancedemo/       Remittance demo: samples that adjudicate claims and build their 835
-internal/sim/                  Sandbox: seeded data, fixed clock, event log, one Action type
-internal/scenario/             Scenario library; each scenario is also a test
-internal/seed/                 Loads seed/ fixtures (strict protojson)
-seed/                          Sample self-funded customer, plan, family, providers, fee schedules, policy
-cmd/demo/                      Demo server: architecture page at /, each demo under its own path
+proto/coreadmin/<pkg>/v1/                Data models (<pkg>.proto), and each domain's service: what other domains may ask it (employer/v1, network/v1, claims/v1 *_service.proto)
+gen/                                     Generated Go + Connect code, and descriptors.binpb with the .proto comments (not committed; `make gen`)
+
+internal/employer/                       Employer domain. EmployerService: what other domains may ask it
+internal/employer/enrollmentintake/      834 enrollment intake: maps member loops to EnrollmentTransactions, writes the 999, sample files
+internal/employer/eligibility/           Eligibility derived from an append-only input log; every member version kept; regeneration; Verify
+internal/employer/eligibilitydemo/       Eligibility sandboxes and the walkthrough's live examples
+
+internal/claims/                         Claims domain. ClaimsService operations (process, reprocess, adjust, void, holds, flags)
+internal/claims/claimsintake/            837P claims intake: maps files to claims, writes the 999, sample files
+internal/claims/adjudication/            Claims pipeline (eligibility → pricing → cost share), pends, denials, remark codes
+internal/claims/remittance/              835s from adjudicated claims: build, balance, reverse, render; previews
+internal/claims/remittancedemo/          Remittance demo: samples that adjudicate claims and build their 835
+
+internal/network/                        Network domain. NetworkService: what other domains may ask it
+
+internal/finance/stoploss/               Finance domain: stop-loss tracking interfaces
+
+internal/journey/                        Journey (admin portal) sandbox: the two-week workload and the claim detail view
+internal/sim/                            Sandbox: seeded data, fixed clock, event log, one Action type
+internal/scenario/                       Scenario library; each scenario is also a test
+internal/demos/                          Demo catalog, by domain, and how demos map onto the domain map
+internal/seed/                           Loads seed/ fixtures (strict protojson)
+
+internal/common/                         Shared by every domain:
+internal/common/store/                   Store[T] and Transactor; the versioned, insert-only Postgres implementation
+internal/common/repo/                    One store per resource type; Tables: each domain's Postgres tables and their access-pattern indexes
+internal/common/pgdb/                    The local Postgres everything runs on
+internal/common/x12/                     X12 reader/writer (envelopes and segments, no transaction knowledge)
+internal/common/x12ack/                  999 acknowledgments, shared by every X12 intake
+internal/common/protodoc/                The .proto comments at run time, for field tooltips in the demos
+internal/common/ids/                     UUIDv7 ids
+internal/common/dates/                   Date and date-range helpers
+seed/                                    Sample self-funded customer, plan, family, providers, fee schedules, policy
+cmd/demo/                                Demo server: the domain map at /, each demo under its own path
 ```
+
+Each domain is a folder under `internal/`. A domain's code uses only its own tables and asks other domains through their services; a test enforces it (demos, named `*demo`, are exempt, like Journey and the simulator).
 
 ## Demos
 
@@ -39,7 +50,9 @@ cmd/demo/                      Demo server: architecture page at /, each demo un
 make demo        # then open http://localhost:8080
 ```
 
-The landing page is an architecture diagram. Components with a demo are solid and clickable; dashed ones have a demo planned. Clicking a component opens its demo filtered to the relevant scenarios (e.g. Accumulators opens `/claims-lifecycle/?group=Accumulators`).
+The landing page is an architecture diagram. Components with a demo are solid and clickable; dashed ones have a demo planned. Clicking a component opens its demo filtered to the relevant scenarios (e.g. Accumulators opens `/claims-lifecycle/?group=Accumulators`). Lines between domains appear when a component is hovered, or all at once with *Show all connections*. Lines with a protobuf interface are drawn in teal; clicking one opens the service, which methods each caller uses over that line, and the source of every message those calls carry, grouped by protobuf package (`demos.Interfaces` lists them; a test checks every method exists and every domain-service method is on some line). Lines without one (X12 files, interfaces not defined yet) aren't clickable.
+
+`/adjudication/`: clicking Claim Adjudication on the map opens a map of adjudication itself: everything the engine does, listed without asserting an order (order and dependencies are still to be designed), the pends and denials it can end in, the Claims data it uses, and what it asks the Employer and Network services, with their proto. The steps come from `adjudication.Steps`; tests check every pend and denial the engine uses is on a step and every call is a real method.
 
 To add a demo: add it to `internal/demos/demos.go` with the components it covers (set `Status: Planned` until it exists), serve it under `/<id>/` in `cmd/demo/main.go`, and put its page in `cmd/demo/web/<id>/`. Components are the node ids in `cmd/demo/web/index.html`.
 
@@ -69,15 +82,15 @@ Eligibility is derived, never edited:
 - **Inputs.** Every 834 member loop, and every approval of full-file terminations, is an `EligibilityInput`, recorded in sequence and never changed.
 - **Assertions.** Each input asserts something about a member for a range of dates ("covered on the PPO, family tier, from Apr 1"; "not covered after Jan 31"). For any date, the latest-recorded assertion wins, so a retro term, a reinstatement and a corrected date are a series of assertions, not edits.
 - **Versions.** Whenever a derived member changes, a `MemberVersion` is saved with when it was recorded and the input that caused it. The latest version recorded at or before a time is what we believed then. A full file that only confirms what's on file creates no versions.
-- **Senders.** Each customer has a list of who may send its enrollment and as what (`internal/eligibility/senders.go`): its employer (HR system) and, if it uses one, a COBRA administrator; a customer without one runs COBRA on its own 834s. One COBRA vendor can serve many customers, and customers can use different vendors. A file from a sender that isn't set up is an exception; a COBRA administrator sends only COBRA; an employer can't enroll COBRA when a vendor runs it; and an employer termination doesn't end coverage the COBRA administrator established.
+- **Senders.** Each customer has a list of who may send its enrollment and as what (`internal/employer/eligibility/senders.go`): its employer (HR system) and, if it uses one, a COBRA administrator; a customer without one runs COBRA on its own 834s. One COBRA vendor can serve many customers, and customers can use different vendors. A file from a sender that isn't set up is an exception; a COBRA administrator sends only COBRA; an employer can't enroll COBRA when a vendor runs it; and an employer termination doesn't end coverage the COBRA administrator established.
 - **Full files.** Members a full file leaves out are proposed for termination and change only when someone approves. A full file speaks only for the members its sender established, so the employer's file doesn't reconcile the vendor's continuees, and the vendor's file doesn't touch employees.
 - **Regeneration.** Replaying every input under the current rules reproduces the members; a difference becomes new versions recorded now, never a rewrite of old ones. Member ids and card numbers depend only on the inputs, so replays agree, even into an empty database. `Service.Compare` replays under other rules (e.g. `BeforeSenderAuthority`) to show who a rules change would affect before adopting it.
 
-**Walkthrough** at `/eligibility/how.html`: a slide deck explaining the approach (two kinds of time, assertions, full files, senders, regeneration). Every example in it runs live on real 834 samples in a fresh sandbox (`internal/eligibilitydemo`), and its claims are pinned by a test.
+**Walkthrough** at `/eligibility/how.html`: a slide deck explaining the approach (two kinds of time, assertions, full files, senders, regeneration). Every example in it runs live on real 834 samples in a fresh sandbox (`internal/employer/eligibilitydemo`), and its claims are pinned by a test.
 
 **Checks** (`Service.Verify`): the input log has no gaps; every version names its cause; the latest version is what's on file; replaying every input reproduces the members; and, for every input, replaying only the inputs up to it reproduces exactly the versions recorded at that moment. The test suite runs them after sending every sample in 12 random orders, and checks they catch a member edited behind eligibility's back.
 
-Claims read the current members, as before. Nothing adjusts claims when eligibility changes retroactively; that's decided by people for now. `internal/eligibility/schema.sql` sketches the Postgres tables.
+Claims read the current members, as before. Nothing adjusts claims when eligibility changes retroactively; that's decided by people for now. `internal/employer/eligibility/schema.sql` sketches the Postgres tables.
 
 ### Claims Intake
 
@@ -132,7 +145,7 @@ payment.state:  SELECTED ─► ISSUED ─► CLEARED | RETURNED | VOIDED
 - **Money** is `common.v1.Money{cents}` (int64). Percentages are integer basis points (`2000` = 20%). There is no floating point anywhere.
 - **Dates** use `common.v1.Date`, and every `DateRange` is inclusive at both ends. An unset `end` means open-ended.
 - **Tenancy.** Customer-scoped resources carry `customer_id`. Providers and networks are shared across customers.
-- **Claim identity.** `id` is an internal UUIDv7 (`internal/ids`), assigned at intake and never shown. People see `claim_number`, `YYJJJ-S-NNNNN` (year, day received, source, daily sequence). A replacement or void keeps the original's number with the next version: `26075-E-00012-2`. The Claims Lifecycle sandbox gives originals short ids (`clm_A`) for its scenario scripts and names later versions `clm_A-2`; the sandbox resolves those names to the real ids.
+- **Claim identity.** `id` is an internal UUIDv7 (`internal/common/ids`), assigned at intake and never shown. People see `claim_number`, `YYJJJ-S-NNNNN` (year, day received, source, daily sequence). A replacement or void keeps the original's number with the next version: `26075-E-00012-2`. The Claims Lifecycle sandbox gives originals short ids (`clm_A`) for its scenario scripts and names later versions `clm_A-2`; the sandbox resolves those names to the real ids.
 - **Audit.** Every top-level resource has `audit` (`AuditInfo`). The store stamps it, and `audit.revision` provides optimistic concurrency.
 - **Transactions.** `Repos.InTx` runs work across every store as one transaction: reads see its own writes, and everything commits together or not at all. Each claim operation is one transaction, so receiving, reprocessing, adjusting or voiding a claim saves the claim, its accumulator postings, the original's retirement and any review flags together. Payment run selection and release are one transaction per run. A commit fails with `ErrConflict` if a record it wrote was changed by someone else first; adjudication then recalculates from the start. Activity log lines from a transaction appear only once it commits. `Store.Lock` claims a record for the rest of a transaction without changing it (Postgres's `SELECT … FOR UPDATE`). Adjudication locks a replacement's or void's original before checking it, so two corrections of the same claim in flight at once can't both become its open replacement: the second to commit conflicts, recalculates and sees the first. The in-memory database (`store.MemoryDB`) buffers writes and checks revisions and locks at commit; the Postgres store will do the same with a real transaction.
 - **Remittance.** An 835 (`remittance.v1.Remittance`) covers one payment to one payee from one customer's plan, since a self-funded plan pays from the employer's own account. It is built from each line's adjudication, whose CAS adjustments already balance, and checked against the 835 balancing rules before it exists. It is stored as sent: when a claim is replaced or voided, the reversal (CLP02 22) repeats what the provider was told with the signs flipped, rather than recomputing it, and the payment is the net. A preview is the same build with a placeholder check, for looking at before a claim is finalized; it is never stored. CARCs and remark codes are decided in adjudication, from one table of denial reporting; a CARC that needs a remark code (96 needs N130) without one pends the line (`REMARK_CODE_REQUIRED`) until a rerun gets it right, and the 835 check refuses it too. Not built yet: recoveries that exceed the payment (PLB), and wiring into payment runs.
@@ -140,7 +153,7 @@ payment.state:  SELECTED ─► ISSUED ─► CLEARED | RETURNED | VOIDED
 
 ## Storage
 
-Everything runs on Postgres: the demo, the tests, and the throwaway sandboxes the Remittance demo and the walkthrough build per request. There is no in-memory store. One local Postgres serves them all (`internal/pgdb`): an embedded one, data in `./data/pg`, port 5433. `make pg` starts it, and the demo or a test run starts it if it isn't running; it keeps running until `make pg-stop`. Each domain owns a schema holding its tables, and reads and writes only that schema (`repo.Tables` lists every table by domain):
+Everything runs on Postgres: the demo, the tests, and the throwaway sandboxes the Remittance demo and the walkthrough build per request. There is no in-memory store. One local Postgres serves them all (`internal/common/pgdb`): an embedded one, data in `./data/pg`, port 5433. `make pg` starts it, and the demo or a test run starts it if it isn't running; it keeps running until `make pg-stop`. Each domain owns a schema holding its tables, and reads and writes only that schema (`repo.Tables` lists every table by domain):
 
 - `employer`: customers, groups, plans, members, the 834 ingestion jobs, enrollment transactions, eligibility inputs and member versions
 - `claims`: claims, family accumulators, fee schedules, the 837 ingestion jobs, remittances and claim number blocks

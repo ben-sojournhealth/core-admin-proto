@@ -2,16 +2,16 @@ package claims_test
 
 import (
 	"context"
-	"coreadmin/internal/repo/repotest"
+	"coreadmin/internal/common/repo/repotest"
 	"strings"
 	"testing"
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	commonv1 "coreadmin/gen/coreadmin/common/v1"
 	"coreadmin/internal/claims"
+	"coreadmin/internal/common/store"
 	"coreadmin/internal/journey"
 	"coreadmin/internal/sim"
-	"coreadmin/internal/store"
 )
 
 // These tests cover what happens to a claim after intake hands it over:

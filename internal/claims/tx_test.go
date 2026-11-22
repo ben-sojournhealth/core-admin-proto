@@ -11,7 +11,7 @@ import (
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
 	"coreadmin/internal/claims"
-	"coreadmin/internal/store"
+	"coreadmin/internal/common/store"
 )
 
 // failingUpdates fails any Update of one claim, standing in for a crash or
