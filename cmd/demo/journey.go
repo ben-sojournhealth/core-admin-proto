@@ -89,6 +89,11 @@ func registerJourney(mux *http.ServeMux) error {
 	mux.HandleFunc("GET "+jp+"/api/claim", j.handle(func(r *http.Request) (any, error) {
 		return journey.GetDetail(j.sim, r.URL.Query().Get("id"))
 	}))
+	// The tabs beside Claims: members, employers, network, stop-loss, files.
+	mux.HandleFunc("GET "+jp+"/api/admin", j.handle(func(*http.Request) (any, error) { return journey.GetAdmin(j.sim) }))
+	mux.HandleFunc("GET "+jp+"/api/accumulators", j.handle(func(r *http.Request) (any, error) {
+		return journey.MemberAccumulators(j.sim, r.URL.Query().Get("member"))
+	}))
 	mux.HandleFunc("POST "+jp+"/api/action", j.handle(func(r *http.Request) (any, error) {
 		var a sim.Action
 		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {

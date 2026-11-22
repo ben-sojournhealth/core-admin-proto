@@ -1,7 +1,8 @@
-// Package journey backs the Journey demo: the claims examiner's
-// workbench. It runs its own sandbox, separate from Claims Lifecycle,
-// pre-loaded with two weeks of claims for several families so the work
-// queues start with real work in them.
+// Package journey backs the Journey demo, the admin portal: the claims
+// examiner's workbench, and tabs for members, employers, the network,
+// finance and files (admin.go). It runs its own sandbox, separate from
+// Claims Lifecycle, pre-loaded with two weeks of claims for several
+// families so the work queues start with real work in them.
 package journey
 
 import (

@@ -31,6 +31,9 @@ var enrollmentSenders = map[string][]SenderSetup{
 	"cust_brightline": {{Sender: "BRIGHTHR", Role: Employer}, {Sender: "COBRAVND", Role: COBRAAdministrator}},
 }
 
+// Senders is who may send a customer's enrollment, and as what.
+func Senders(customerID string) []SenderSetup { return enrollmentSenders[customerID] }
+
 // roleOf is what sender is to a customer, if anything.
 func roleOf(customerID, sender string) (Role, bool) {
 	for _, s := range enrollmentSenders[customerID] {
