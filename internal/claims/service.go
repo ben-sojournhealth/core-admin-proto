@@ -32,8 +32,7 @@ func rejectf(format string, args ...any) error {
 }
 
 const (
-	FlagAccumulatorChange = "ACCUMULATOR_CHANGE"
-	maxAttempts           = 5
+	maxAttempts = 5
 )
 
 type Service struct {
@@ -120,12 +119,157 @@ func USD(cents int64) string {
 	return fmt.Sprintf("%s$%s.%02d", sign, dollars, cents%100)
 }
 
-func finalized(st claimsv1.ClaimStatus) bool {
-	return st == claimsv1.ClaimStatus_CLAIM_STATUS_APPROVED || st == claimsv1.ClaimStatus_CLAIM_STATUS_DENIED
+func adjudicated(st claimsv1.ClaimStatus) bool {
+	return st == claimsv1.ClaimStatus_CLAIM_STATUS_ADJUDICATED
+}
+
+// current reports whether a claim is adjudicated and still the version in
+// force: no replacement or void has superseded it. Only a current claim
+// can be adjusted, voided or paid.
+func current(c *claimsv1.Claim) bool {
+	return adjudicated(c.GetStatus()) && c.GetSupersededBy() == nil
+}
+
+// released reports whether a claim's payment run has been released: its
+// result has been reported on an 835, so from here it changes only
+// through a replacement or void. Before that it is reopened in place.
+func released(c *claimsv1.Claim) bool {
+	switch c.GetPayment().GetState() {
+	case claimsv1.PaymentState_PAYMENT_STATE_ISSUED, claimsv1.PaymentState_PAYMENT_STATE_CLEARED,
+		claimsv1.PaymentState_PAYMENT_STATE_RETURNED, claimsv1.PaymentState_PAYMENT_STATE_VOIDED:
+		return true
+	}
+	return false
+}
+
+// standing says where a claim stands, for a refusal: its status, or what
+// superseded it.
+func standing(c *claimsv1.Claim) string {
+	switch c.GetSupersededBy().GetFrequency() {
+	case claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT:
+		return "superseded by a replacement"
+	case claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID:
+		return "superseded by a void"
+	}
+	return statusName(c.GetStatus())
+}
+
+func outcomeName(o claimsv1.ClaimOutcome) string {
+	return o.String()[len("CLAIM_OUTCOME_"):]
+}
+
+// supersede marks orig as superseded by c, a replacement or void that has
+// just been adjudicated. orig's status and outcome stay as they were.
+func (s *Service) supersede(orig, c *claimsv1.Claim) {
+	orig.SupersededBy = &claimsv1.SupersededBy{ClaimId: c.GetId(), Frequency: c.GetFrequency(), Time: c.GetAdjudication().GetAdjudicatedTime()}
 }
 
 func statusName(st claimsv1.ClaimStatus) string {
 	return st.String()[len("CLAIM_STATUS_"):]
+}
+
+// EstimateClaim adjudicates a claim that isn't in the system and saves
+// nothing.
+func (s *Service) EstimateClaim(ctx context.Context, req *claimsv1.EstimateClaimRequest) (*claimsv1.EstimateClaimResponse, error) {
+	c := proto.Clone(req.GetClaim()).(*claimsv1.Claim)
+	if c.GetId() == "" {
+		c.Id = ids.NewV7(s.Now())
+	}
+	s.prepareNew(c)
+	calc, err := s.Engine.Calculate(ctx, c, "")
+	if err != nil {
+		return nil, err
+	}
+	s.logf(ctx, "Estimate: would be %s. Nothing saved.", describe(calc.Claim))
+	return &claimsv1.EstimateClaimResponse{Claim: calc.Claim}, nil
+}
+
+// PreviewReadjudication runs an existing claim whose result has not been
+// reported again, as it would be decided now, and saves nothing.
+func (s *Service) PreviewReadjudication(ctx context.Context, req *claimsv1.PreviewReadjudicationRequest) (*claimsv1.PreviewReadjudicationResponse, error) {
+	c, err := s.get(ctx, req.GetClaimId())
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case c.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_PENDED:
+	case !current(c):
+		return nil, rejectf("%s is %s; there is nothing to run again", s.ref(c), standing(c))
+	case released(c):
+		return nil, rejectf("%s has been released for payment and reported; preview an adjustment instead", s.ref(c))
+	case c.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID || adjudication.ClosedByProvider(c):
+		return nil, rejectf("%s was closed by a void or the provider's correction; there is nothing to run again", s.ref(c))
+	}
+	for _, r := range req.GetResolutions() {
+		c.PendOverrides = append(c.PendOverrides, &claimsv1.PendOverride{Code: r.GetCode(), LineNumber: r.GetLineNumber(), Note: r.GetNote()})
+	}
+	c.AdjudicationHistory = append(c.AdjudicationHistory, c.GetAdjudication())
+	c.Adjudication = nil
+	// The engine leaves the claim's own postings out of the balances it
+	// calculates against, so an adjudicated claim is run as if reopened.
+	calc, err := s.Engine.Calculate(ctx, c, "preview")
+	if err != nil {
+		return nil, err
+	}
+	s.logf(ctx, "Preview of readjudicating %s: would be %s. Nothing saved.", s.ref(c), describe(calc.Claim))
+	return &claimsv1.PreviewReadjudicationResponse{Claim: calc.Claim}, nil
+}
+
+// PreviewAdjustment calculates what AdjustClaim would do to a reported
+// claim and saves nothing.
+func (s *Service) PreviewAdjustment(ctx context.Context, req *claimsv1.PreviewAdjustmentRequest) (*claimsv1.PreviewAdjustmentResponse, error) {
+	orig, err := s.adjustable(ctx, req.GetOriginalClaimId())
+	if err != nil {
+		return nil, err
+	}
+	repl := s.replacementOf(ctx, orig, req.GetCorrectedClaim(), "preview")
+	calc, err := s.Engine.Calculate(ctx, repl, "preview")
+	if err != nil {
+		return nil, err
+	}
+	if err := s.nextVersion(ctx, orig, calc.Claim); err != nil {
+		return nil, err
+	}
+	d := delta(orig, calc.Claim)
+	s.logf(ctx, "Preview of adjusting %s: payee holds %s (%s), replacement pays %s, delta %s. Nothing saved.",
+		s.ref(orig), USD(d.GetOriginalPaid().GetCents()), basisText(d.GetBasis()), USD(d.GetProjectedPaid().GetCents()), USD(d.GetDelta().GetCents()))
+	return &claimsv1.PreviewAdjustmentResponse{Claim: calc.Claim, Delta: d}, nil
+}
+
+// adjustable returns a claim that can be adjusted: adjudicated, not
+// superseded, and reported.
+func (s *Service) adjustable(ctx context.Context, id string) (*claimsv1.Claim, error) {
+	orig, err := s.get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !current(orig) {
+		return nil, rejectf("only an adjudicated claim that has not been superseded can be adjusted; %s is %s", s.ref(orig), standing(orig))
+	}
+	if !released(orig) {
+		return nil, rejectf("%s has not been released for payment, so nothing has been reported to reverse; reopen it instead", s.ref(orig))
+	}
+	return orig, nil
+}
+
+// replacementOf builds the replacement of orig: the corrected claim, or
+// the original's content unchanged to be re-adjudicated against current
+// data. It is a new claim with its own id; its link to the original is
+// original_claim_id and the shared claim number.
+func (s *Service) replacementOf(ctx context.Context, orig, corrected *claimsv1.Claim, reason string) *claimsv1.Claim {
+	src := corrected
+	if src == nil {
+		src = orig
+	}
+	repl := proto.Clone(src).(*claimsv1.Claim)
+	if repl.GetId() == "" || repl.GetId() == orig.GetId() {
+		repl.Id = ids.NewV7(s.Now())
+	}
+	repl.ReceivedTime = nil
+	s.prepareNew(repl)
+	repl.Frequency = claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT
+	repl.OriginalLink = &claimsv1.ClaimLink{ClaimId: orig.GetId(), LinkedBy: store.Actor(ctx), LinkedTime: timestamppb.New(s.Now()), Note: reason}
+	return repl
 }
 
 func (s *Service) ProcessClaim(ctx context.Context, req *claimsv1.ProcessClaimRequest) (*claimsv1.ProcessClaimResponse, error) {
@@ -139,14 +283,6 @@ func (s *Service) ProcessClaim(ctx context.Context, req *claimsv1.ProcessClaimRe
 		c.OriginalLink = &claimsv1.ClaimLink{ClaimId: c.GetOriginalClaimId(), LinkedBy: store.Actor(ctx), LinkedTime: timestamppb.New(s.Now())}
 	}
 	s.prepareNew(c)
-	if req.GetDryRun() {
-		calc, err := s.Engine.Calculate(ctx, c, "")
-		if err != nil {
-			return nil, err
-		}
-		s.logf(ctx, "Dry run of %s: would be %s. Nothing saved.", s.ref(c), describe(calc.Claim))
-		return &claimsv1.ProcessClaimResponse{Claim: calc.Claim}, nil
-	}
 	out, err := s.register(ctx, c, "")
 	if err != nil {
 		return nil, err
@@ -176,6 +312,16 @@ func (s *Service) register(ctx context.Context, c *claimsv1.Claim, reason string
 			}
 			// A retry keeps the number from the first attempt.
 			c.ClaimNumber, c.ClaimVersion = out.GetClaimNumber(), out.GetClaimVersion()
+			// A correction of an original nobody has been told about
+			// closes it, and is then decided as a claim of its own.
+			if closed, err := s.closeUnreported(ctx, out, orig); err != nil {
+				return err
+			} else if closed {
+				if calc, err = s.Engine.Calculate(ctx, c, reason); err != nil {
+					return err
+				}
+				out = calc.Claim
+			}
 			s.logReceived(ctx, out, orig)
 			if out.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID && out.GetStatus() != claimsv1.ClaimStatus_CLAIM_STATUS_PENDED {
 				r, err := s.finishVoid(ctx, orig, out, voidReason(out, reason), true)
@@ -262,7 +408,7 @@ func (s *Service) prepareNew(c *claimsv1.Claim) {
 	}
 	c.Status = claimsv1.ClaimStatus_CLAIM_STATUS_RECEIVED
 	c.Adjudication, c.AdjudicationHistory = nil, nil
-	c.Payment, c.PaymentHold, c.ReviewFlags, c.PendOverrides, c.Audit = nil, nil, nil, nil, nil
+	c.Payment, c.PendOverrides, c.Audit = nil, nil, nil
 	c.ClaimNumber, c.ClaimVersion = "", 0
 	for _, l := range c.GetLines() {
 		l.Adjudication = nil
@@ -291,13 +437,22 @@ func (s *Service) adjudicate(ctx context.Context, c *claimsv1.Claim, reason stri
 			if calc, err = s.Engine.Calculate(ctx, c, reason); err != nil {
 				return err
 			}
-			// A pended void is never priced: once its original can be
-			// voided, this run finalizes it.
-			if v := calc.Claim; v.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID && v.GetStatus() != claimsv1.ClaimStatus_CLAIM_STATUS_PENDED {
-				orig, err := s.get(ctx, v.GetOriginalClaimId())
-				if err != nil {
+			var orig *claimsv1.Claim
+			if id := calc.Claim.GetOriginalClaimId(); id != "" {
+				if orig, err = s.get(ctx, id); err != nil {
 					return err
 				}
+			}
+			if closed, err := s.closeUnreported(ctx, calc.Claim, orig); err != nil {
+				return err
+			} else if closed {
+				if calc, err = s.Engine.Calculate(ctx, c, reason); err != nil {
+					return err
+				}
+			}
+			// A pended void is never priced: once its original can be
+			// voided, this run adjudicates it.
+			if v := calc.Claim; v.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID && v.GetStatus() != claimsv1.ClaimStatus_CLAIM_STATUS_PENDED {
 				r, err := s.finishVoid(ctx, orig, v, voidReason(v, reason), false)
 				out = r.GetVoidClaim()
 				return err
@@ -314,12 +469,12 @@ func (s *Service) adjudicate(ctx context.Context, c *claimsv1.Claim, reason stri
 }
 
 // commit makes a calculation real: posts accumulators if the claim is
-// finalized, saves the claim (creating it on its first run), and for a
+// adjudicated, saves the claim (creating it on its first run), and for a
 // replacement claim retires the original.
 func (s *Service) commit(ctx context.Context, calc *adjudication.Calculation, create bool) (*claimsv1.Claim, error) {
 	c := calc.Claim
 	adj := c.GetAdjudication()
-	final := finalized(c.GetStatus())
+	final := adjudicated(c.GetStatus())
 
 	var orig *claimsv1.Claim
 	if calc.ReverseClaimID != "" {
@@ -370,94 +525,22 @@ func (s *Service) commit(ctx context.Context, calc *adjudication.Calculation, cr
 	}
 	s.logf(ctx, "%s adjudicated (run %d): %s.", s.ref(saved), adj.GetRunNumber(), describe(saved))
 	if final && len(adj.GetAccumulatorPostings()) > 0 {
-		s.logf(ctx, "%s finalized: posted %d accumulator amounts to %s.", s.ref(saved), len(adj.GetAccumulatorPostings()), calc.Family.GetId())
+		s.logf(ctx, "%s posted %d accumulator amounts to %s.", s.ref(saved), len(adj.GetAccumulatorPostings()), calc.Family.GetId())
 	}
 
 	if orig == nil {
 		return saved, nil
 	}
-	if final {
-		orig.Status = claimsv1.ClaimStatus_CLAIM_STATUS_ADJUSTED
-		s.retire(orig, "claim adjusted")
+	// Only a result that was reported is superseded. An original that
+	// wasn't was closed before this claim was calculated (closeUnreported).
+	if final && released(orig) {
+		s.supersede(orig, saved)
 		if _, err := s.Repos.Claims.Update(ctx, orig); err != nil {
 			return nil, err
 		}
-		s.logf(ctx, "%s is now ADJUSTED; its accumulator postings were reversed and replaced by %s.", s.ref(orig), s.ref(saved))
-		if adjudication.PostingsDiffer(orig.GetAdjudication().GetAccumulatorPostings(), adj.GetAccumulatorPostings()) {
-			if _, err := s.flagLaterClaims(ctx, orig, saved.GetId(), true); err != nil {
-				return nil, err
-			}
-		}
-	} else if finalized(orig.GetStatus()) && orig.GetPayment() == nil && orig.GetPaymentHold() == nil {
-		orig.PaymentHold = &claimsv1.PaymentHold{
-			Reason:     fmt.Sprintf("Replacement %s is pended.", s.ref(saved)),
-			PlacedBy:   store.Actor(ctx),
-			PlacedTime: timestamppb.New(s.Now()),
-		}
-		if _, err := s.Repos.Claims.Update(ctx, orig); err != nil {
-			return nil, err
-		}
-		s.logf(ctx, "%s put on payment hold until its replacement %s is resolved.", s.ref(orig), s.ref(saved))
+		s.logf(ctx, "%s is superseded by its replacement %s; its accumulator postings were reversed and the replacement's posted.", s.ref(orig), s.ref(saved))
 	}
 	return saved, nil
-}
-
-// retire clears what no longer applies once a claim is adjusted or voided.
-func (s *Service) retire(c *claimsv1.Claim, note string) {
-	c.PaymentHold = nil
-	for _, f := range c.GetReviewFlags() {
-		if f.GetClearedTime() == nil {
-			f.ClearedTime, f.ClearedBy, f.ClearNote = timestamppb.New(s.Now()), "system", note
-		}
-	}
-}
-
-// laterClaims returns finalized claims for the same family and benefit
-// period that were adjudicated after orig.
-func (s *Service) laterClaims(ctx context.Context, orig *claimsv1.Claim, excludeID string) ([]*claimsv1.Claim, error) {
-	fam := orig.GetAdjudication().GetFamilyAccumulatorsId()
-	if fam == "" {
-		return nil, nil
-	}
-	at := orig.GetAdjudication().GetAdjudicatedTime().AsTime()
-	out, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{
-		PageSize: 10_000,
-		Where:    []store.Cond{store.Eq(fam, "adjudication", "familyAccumulatorsId")},
-		Filter: func(o *claimsv1.Claim) bool {
-			return o.GetId() != orig.GetId() && o.GetId() != excludeID &&
-				finalized(o.GetStatus()) &&
-				o.GetAdjudication().GetFamilyAccumulatorsId() == fam &&
-				o.GetAdjudication().GetAdjudicatedTime().AsTime().After(at)
-		},
-	})
-	return out, err
-}
-
-// flagLaterClaims raises ACCUMULATOR_CHANGE on every later claim for the
-// family. With write false it only reports which claims would be flagged.
-func (s *Service) flagLaterClaims(ctx context.Context, orig *claimsv1.Claim, excludeID string, write bool) ([]string, error) {
-	later, err := s.laterClaims(ctx, orig, excludeID)
-	if err != nil {
-		return nil, err
-	}
-	var ids []string
-	for _, o := range later {
-		ids = append(ids, o.GetId())
-		if !write {
-			continue
-		}
-		o.ReviewFlags = append(o.ReviewFlags, &claimsv1.ReviewFlag{
-			Code:          FlagAccumulatorChange,
-			Message:       fmt.Sprintf("accumulator postings of earlier claim %s changed; this claim's cost sharing may no longer be right", s.ref(orig)),
-			SourceClaimId: orig.GetId(),
-			RaisedTime:    timestamppb.New(s.Now()),
-		})
-		if _, err := s.Repos.Claims.Update(ctx, o); err != nil {
-			return nil, err
-		}
-		s.logf(ctx, "%s flagged for review: an earlier claim's accumulator postings changed.", s.ref(o))
-	}
-	return ids, nil
 }
 
 func (s *Service) ReprocessClaim(ctx context.Context, req *claimsv1.ReprocessClaimRequest) (*claimsv1.ReprocessClaimResponse, error) {
@@ -466,7 +549,7 @@ func (s *Service) ReprocessClaim(ctx context.Context, req *claimsv1.ReprocessCla
 		return nil, err
 	}
 	if c.GetStatus() != claimsv1.ClaimStatus_CLAIM_STATUS_PENDED {
-		return nil, rejectf("only PENDED claims can be reprocessed; %s is %s. Use AdjustClaim or VoidClaim for a finalized claim",
+		return nil, rejectf("only PENDED claims can be reprocessed; %s is %s. Reopen an adjudicated claim whose payment has not been released; adjust or void one that has",
 			c.GetId(), statusName(c.GetStatus()))
 	}
 	if req.GetReason() == "" {
@@ -491,14 +574,6 @@ func (s *Service) ReprocessClaim(ctx context.Context, req *claimsv1.ReprocessCla
 	c.AdjudicationHistory = append(c.AdjudicationHistory, c.GetAdjudication())
 	c.Adjudication = nil
 
-	if req.GetDryRun() {
-		calc, err := s.Engine.Calculate(ctx, c, req.GetReason())
-		if err != nil {
-			return nil, err
-		}
-		s.logf(ctx, "Dry run of reprocessing %s: would be %s. Nothing saved.", s.ref(c), describe(calc.Claim))
-		return &claimsv1.ReprocessClaimResponse{Claim: calc.Claim}, nil
-	}
 	out, err := s.adjudicate(ctx, c, req.GetReason())
 	if err != nil {
 		return nil, err
@@ -507,102 +582,41 @@ func (s *Service) ReprocessClaim(ctx context.Context, req *claimsv1.ReprocessCla
 }
 
 func (s *Service) AdjustClaim(ctx context.Context, req *claimsv1.AdjustClaimRequest) (*claimsv1.AdjustClaimResponse, error) {
-	orig, err := s.get(ctx, req.GetOriginalClaimId())
+	orig, err := s.adjustable(ctx, req.GetOriginalClaimId())
 	if err != nil {
 		return nil, err
-	}
-	if !finalized(orig.GetStatus()) {
-		return nil, rejectf("only finalized claims (APPROVED or DENIED) can be adjusted; %s is %s", s.ref(orig), statusName(orig.GetStatus()))
 	}
 	if req.GetReason() == "" {
 		return nil, rejectf("a reason is required")
 	}
-	if orig.GetPayment().GetState() == claimsv1.PaymentState_PAYMENT_STATE_SELECTED && !req.GetDryRun() {
-		return nil, rejectf("%s is selected for a payment run that has not been released; pull it from the run first", s.ref(orig))
-	}
 	// An early, plain answer for the examiner. What guarantees one open
 	// replacement is the engine locking the original in the transaction.
 	pending, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1, Where: []store.Cond{store.Eq(orig.GetId(), "originalClaimId")}, Filter: func(o *claimsv1.Claim) bool {
-		return o.GetOriginalClaimId() == orig.GetId() && !finalized(o.GetStatus()) &&
+		return o.GetOriginalClaimId() == orig.GetId() && !adjudicated(o.GetStatus()) &&
 			o.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT
 	}})
 	if err != nil {
 		return nil, err
 	}
-	if len(pending) > 0 && !req.GetDryRun() {
+	if len(pending) > 0 {
 		return nil, rejectf("%s already has a replacement in progress (%s)", s.ref(orig), s.ref(pending[0]))
 	}
 
-	// Build the replacement: the corrected claim, or the original's content
-	// unchanged to be re-adjudicated against current data.
-	src := req.GetCorrectedClaim()
-	if src == nil {
-		src = orig
+	// Our adjustment: the next version of the original's number.
+	repl := s.replacementOf(ctx, orig, req.GetCorrectedClaim(), req.GetReason())
+	if err := s.nextVersion(ctx, orig, repl); err != nil {
+		return nil, err
 	}
-	repl := proto.Clone(src).(*claimsv1.Claim)
-	// A replacement is a new claim with its own id; its link to the
-	// original is original_claim_id and the shared claim number.
-	if repl.GetId() == "" || repl.GetId() == orig.GetId() {
-		repl.Id = ids.NewV7(s.Now())
-	}
-	repl.ReceivedTime = nil
-	s.prepareNew(repl)
-	repl.Frequency = claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT
-	repl.OriginalLink = &claimsv1.ClaimLink{ClaimId: orig.GetId(), LinkedBy: store.Actor(ctx), LinkedTime: timestamppb.New(s.Now()), Note: req.GetReason()}
-
 	resp := &claimsv1.AdjustClaimResponse{}
-	if req.GetDryRun() {
-		calc, err := s.Engine.Calculate(adjudication.Projection(ctx), repl, req.GetReason())
-		if err != nil {
-			return nil, err
-		}
-		if err := s.nextVersion(ctx, orig, calc.Claim); err != nil {
-			return nil, err
-		}
-		resp.Claim = calc.Claim
-		if finalized(calc.Claim.GetStatus()) &&
-			adjudication.PostingsDiffer(orig.GetAdjudication().GetAccumulatorPostings(), calc.Claim.GetAdjudication().GetAccumulatorPostings()) {
-			if resp.FlaggedClaimIds, err = s.flagLaterClaims(ctx, orig, repl.GetId(), false); err != nil {
-				return nil, err
-			}
-		}
-	} else {
-		// Our adjustment: the next version of the original's number.
-		if err := s.nextVersion(ctx, orig, repl); err != nil {
-			return nil, err
-		}
-		if resp.Claim, err = s.register(ctx, repl, req.GetReason()); err != nil {
-			return nil, err
-		}
-		s.logf(ctx, "Created replacement %s for %s (%s).", s.ref(resp.Claim), s.ref(orig), req.GetReason())
-		// Flags are raised on the family's later claims (claims_by_family).
-		flagged, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 10_000, Where: []store.Cond{
-			store.Eq(orig.GetAdjudication().GetFamilyAccumulatorsId(), "adjudication", "familyAccumulatorsId"),
-		}, Filter: func(o *claimsv1.Claim) bool {
-			for _, f := range o.GetReviewFlags() {
-				if f.GetSourceClaimId() == orig.GetId() && f.GetClearedTime() == nil {
-					return true
-				}
-			}
-			return false
-		}})
-		if err != nil {
-			return nil, err
-		}
-		for _, f := range flagged {
-			resp.FlaggedClaimIds = append(resp.FlaggedClaimIds, f.GetId())
-		}
+	if resp.Claim, err = s.register(ctx, repl, req.GetReason()); err != nil {
+		return nil, err
 	}
+	s.logf(ctx, "Created replacement %s for %s (%s).", s.ref(resp.Claim), s.ref(orig), req.GetReason())
 	resp.Delta = delta(orig, resp.GetClaim())
 	d := resp.GetDelta()
-	verb := "Adjustment"
-	if req.GetDryRun() {
-		verb = "Dry run of adjusting"
-	}
-	s.logf(ctx, "%s %s: payee holds %s (%s), replacement pays %s, delta %s.%s",
-		verb, s.ref(orig), USD(d.GetOriginalPaid().GetCents()), basisText(d.GetBasis()),
-		USD(d.GetProjectedPaid().GetCents()), USD(d.GetDelta().GetCents()),
-		map[bool]string{true: " Nothing saved.", false: ""}[req.GetDryRun()])
+	s.logf(ctx, "Adjustment %s: payee holds %s (%s), replacement pays %s, delta %s.",
+		s.ref(orig), USD(d.GetOriginalPaid().GetCents()), basisText(d.GetBasis()),
+		USD(d.GetProjectedPaid().GetCents()), USD(d.GetDelta().GetCents()))
 	return resp, nil
 }
 
@@ -610,12 +624,8 @@ func basisText(b claimsv1.DeltaBasis) string {
 	switch b {
 	case claimsv1.DeltaBasis_DELTA_BASIS_PAYMENT:
 		return "payment issued"
-	case claimsv1.DeltaBasis_DELTA_BASIS_APPROVED_UNPAID:
-		return "approved, not yet paid"
 	case claimsv1.DeltaBasis_DELTA_BASIS_PAYMENT_NOT_HELD:
 		return "payment returned or voided"
-	case claimsv1.DeltaBasis_DELTA_BASIS_DENIED:
-		return "denied"
 	}
 	return "unknown"
 }
@@ -630,12 +640,6 @@ func delta(orig, repl *claimsv1.Claim) *claimsv1.AdjustmentDelta {
 		d.Basis, held = claimsv1.DeltaBasis_DELTA_BASIS_PAYMENT, orig.GetPayment().GetPaid().GetCents()
 	case claimsv1.PaymentState_PAYMENT_STATE_RETURNED, claimsv1.PaymentState_PAYMENT_STATE_VOIDED:
 		d.Basis = claimsv1.DeltaBasis_DELTA_BASIS_PAYMENT_NOT_HELD
-	default:
-		if orig.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_DENIED {
-			d.Basis = claimsv1.DeltaBasis_DELTA_BASIS_DENIED
-		} else {
-			d.Basis, held = claimsv1.DeltaBasis_DELTA_BASIS_APPROVED_UNPAID, orig.GetAdjudication().GetTotalPaid().GetCents()
-		}
 	}
 	projected := repl.GetAdjudication().GetTotalPaid().GetCents()
 	d.OriginalPaid, d.ProjectedPaid, d.Delta = cents(held), cents(projected), cents(projected-held)
@@ -670,14 +674,14 @@ func (s *Service) VoidClaim(ctx context.Context, req *claimsv1.VoidClaimRequest)
 	if err != nil {
 		return nil, err
 	}
-	if !finalized(orig.GetStatus()) {
-		return nil, rejectf("only finalized claims (APPROVED or DENIED) can be voided; %s is %s", s.ref(orig), statusName(orig.GetStatus()))
+	if !current(orig) {
+		return nil, rejectf("only an adjudicated claim that has not been superseded can be voided; %s is %s", s.ref(orig), standing(orig))
 	}
 	if req.GetReason() == "" {
 		return nil, rejectf("a reason is required")
 	}
-	if orig.GetPayment().GetState() == claimsv1.PaymentState_PAYMENT_STATE_SELECTED {
-		return nil, rejectf("%s is selected for a payment run that has not been released; pull it from the run first", s.ref(orig))
+	if !released(orig) {
+		return nil, rejectf("%s has not been released for payment, so nothing has been reported to reverse; reopen it instead", s.ref(orig))
 	}
 
 	var resp *claimsv1.VoidClaimResponse
@@ -709,12 +713,12 @@ func (s *Service) newVoid(ctx context.Context, orig *claimsv1.Claim) (*claimsv1.
 	return void, nil
 }
 
-// finishVoid finalizes a void and retires its original. A void is
-// finalized with nothing payable, so the next remittance reports the
-// reversal. create is false when the void was already saved (pended).
+// finishVoid adjudicates a void and supersedes its original. A void's
+// outcome is VOID with nothing payable, so the next remittance reports
+// the reversal. create is false when the void was already saved (pended).
 func (s *Service) finishVoid(ctx context.Context, orig, void *claimsv1.Claim, reason string, create bool) (*claimsv1.VoidClaimResponse, error) {
-	void.Status = claimsv1.ClaimStatus_CLAIM_STATUS_APPROVED
-	// The run that cleared the original is the one that finalizes the
+	void.Status = claimsv1.ClaimStatus_CLAIM_STATUS_ADJUDICATED
+	// The run that cleared the original is the one that adjudicates the
 	// void, keeping what it matched. An examiner's void has no run yet.
 	adj := void.GetAdjudication()
 	if adj == nil {
@@ -728,6 +732,7 @@ func (s *Service) finishVoid(ctx context.Context, orig, void *claimsv1.Claim, re
 		adj.Reason = reason
 	}
 	adj.TotalAllowed, adj.TotalPaid, adj.TotalMemberResponsibility = cents(0), cents(0), cents(0)
+	adj.Outcome = claimsv1.ClaimOutcome_CLAIM_OUTCOME_VOID
 	void.Adjudication = adj
 	for _, l := range void.GetLines() {
 		l.Adjudication = nil
@@ -741,92 +746,141 @@ func (s *Service) finishVoid(ctx context.Context, orig, void *claimsv1.Claim, re
 		return nil, err
 	}
 
+	// An original whose result was never reported was closed before the
+	// void was calculated (closeUnreported): there is nothing to supersede.
+	if !released(orig) {
+		return &claimsv1.VoidClaimResponse{VoidClaim: saved}, nil
+	}
 	if fam := orig.GetAdjudication().GetFamilyAccumulatorsId(); fam != "" {
 		if err := s.Ledger.Reverse(ctx, fam, orig.GetId()); err != nil {
 			return nil, err
 		}
 	}
-	orig.Status = claimsv1.ClaimStatus_CLAIM_STATUS_VOIDED
-	s.retire(orig, "claim voided")
+	s.supersede(orig, saved)
 	if _, err := s.Repos.Claims.Update(ctx, orig); err != nil {
 		return nil, err
 	}
-	s.logf(ctx, "%s is now VOIDED (%s); its accumulator postings were reversed. Void claim %s finalized.", s.ref(orig), reason, s.ref(saved))
+	s.logf(ctx, "%s is superseded by its void %[3]s (%[2]s); its accumulator postings were reversed.", s.ref(orig), reason, s.ref(saved))
 	if held := heldAmount(orig); held > 0 {
 		s.logf(ctx, "%s was paid on %s and is to be recovered on the next remittance.", USD(held), s.ref(orig))
 	}
 
-	resp := &claimsv1.VoidClaimResponse{VoidClaim: saved}
-	if len(orig.GetAdjudication().GetAccumulatorPostings()) > 0 {
-		if resp.FlaggedClaimIds, err = s.flagLaterClaims(ctx, orig, saved.GetId(), true); err != nil {
+	return &claimsv1.VoidClaimResponse{VoidClaim: saved}, nil
+}
+
+// ReopenClaim puts an adjudicated claim whose payment has not been
+// released back to PENDED, to be re-run in place.
+func (s *Service) ReopenClaim(ctx context.Context, req *claimsv1.ReopenClaimRequest) (*claimsv1.ReopenClaimResponse, error) {
+	c, err := s.get(ctx, req.GetClaimId())
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case req.GetReason() == "":
+		return nil, rejectf("a reason is required")
+	case !current(c):
+		return nil, rejectf("only an adjudicated claim that has not been superseded can be reopened; %s is %s", s.ref(c), standing(c))
+	case released(c):
+		return nil, rejectf("%s has been released for payment and reported; adjust or void it instead", s.ref(c))
+	case c.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID:
+		return nil, rejectf("%s is a void; there is nothing to re-run", s.ref(c))
+	case adjudication.ClosedByProvider(c):
+		return nil, rejectf("%s was replaced or voided by the provider; work the claim that took its place", s.ref(c))
+	}
+	var saved *claimsv1.Claim
+	err = s.inTx(ctx, func(ctx context.Context) error {
+		selected := c.GetPayment() != nil
+		prev, err := s.withdraw(ctx, c)
+		if err != nil {
+			return err
+		}
+		c.Status = claimsv1.ClaimStatus_CLAIM_STATUS_PENDED
+		c.Adjudication = &claimsv1.Adjudication{
+			AdjudicatedTime: timestamppb.New(s.Now()), RunNumber: prev.GetRunNumber() + 1, Reason: req.GetReason(), EngineVersion: s.Engine.Version,
+			CustomerId: prev.GetCustomerId(), MemberId: prev.GetMemberId(), OriginalClaimId: prev.GetOriginalClaimId(), OriginalMatch: prev.GetOriginalMatch(),
+			Pends: []*claimsv1.Pend{{Code: adjudication.PendReopened, Message: req.GetReason()}},
+		}
+		for _, l := range c.GetLines() {
+			l.Adjudication = nil
+		}
+		if saved, err = s.Repos.Claims.Update(ctx, c); err != nil {
+			return err
+		}
+		line := fmt.Sprintf("%s reopened (%s): back to PENDED, its accumulator postings reversed.", s.ref(c), req.GetReason())
+		if selected {
+			line += " Taken out of the payment run."
+		}
+		s.logf(ctx, "%s", line)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &claimsv1.ReopenClaimResponse{Claim: saved}, nil
+}
+
+// withdraw takes back an adjudicated result that has not been reported:
+// its accumulator postings are reversed, it leaves any unreleased payment
+// run, and the result moves to the history. It returns that result; the
+// caller sets what the claim is now and saves it.
+func (s *Service) withdraw(ctx context.Context, c *claimsv1.Claim) (*claimsv1.Adjudication, error) {
+	prev := c.GetAdjudication()
+	if fam := prev.GetFamilyAccumulatorsId(); fam != "" {
+		if err := s.Ledger.Reverse(ctx, fam, c.GetId()); err != nil {
 			return nil, err
 		}
 	}
-	return resp, nil
-}
-
-func (s *Service) PullClaimFromPayment(ctx context.Context, req *claimsv1.PullClaimFromPaymentRequest) (*claimsv1.PullClaimFromPaymentResponse, error) {
-	c, err := s.get(ctx, req.GetClaimId())
-	if err != nil {
-		return nil, err
-	}
-	if c.GetPayment().GetState() != claimsv1.PaymentState_PAYMENT_STATE_SELECTED {
-		return nil, rejectf("%s is not in an unreleased payment run", s.ref(c))
-	}
-	if req.GetReason() == "" {
-		return nil, rejectf("a reason is required")
-	}
+	c.AdjudicationHistory = append(c.AdjudicationHistory, prev)
 	c.Payment = nil
-	c.PaymentHold = &claimsv1.PaymentHold{Reason: req.GetReason(), PlacedBy: store.Actor(ctx), PlacedTime: timestamppb.New(s.Now())}
-	saved, err := s.Repos.Claims.Update(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-	s.logf(ctx, "%s pulled from the payment run and put on payment hold (%s).", s.ref(c), req.GetReason())
-	return &claimsv1.PullClaimFromPaymentResponse{Claim: saved}, nil
+	return prev, nil
 }
 
-func (s *Service) ReleasePaymentHold(ctx context.Context, req *claimsv1.ReleasePaymentHoldRequest) (*claimsv1.ReleasePaymentHoldResponse, error) {
-	c, err := s.get(ctx, req.GetClaimId())
-	if err != nil {
-		return nil, err
+// closeUnreported handles a provider's corrected claim or void (by) that
+// matched an original whose result has not been reported. There is nothing
+// to reverse on an 835, so the original is not superseded: it is given an
+// answer of its own, denied because the provider replaced or voided it,
+// and by is then decided as a claim in its own right. It reports whether
+// it closed the original, in which case by must be recalculated: the
+// family's balances have changed.
+func (s *Service) closeUnreported(ctx context.Context, by, orig *claimsv1.Claim) (bool, error) {
+	if orig == nil || !current(orig) || released(orig) || adjudication.ClosedByProvider(orig) {
+		return false, nil
 	}
-	if c.GetPaymentHold() == nil {
-		return nil, rejectf("%s has no payment hold", s.ref(c))
-	}
-	c.PaymentHold = nil
-	saved, err := s.Repos.Claims.Update(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-	s.logf(ctx, "Payment hold on %s released.", s.ref(c))
-	return &claimsv1.ReleasePaymentHoldResponse{Claim: saved}, nil
-}
-
-func (s *Service) ClearReviewFlag(ctx context.Context, req *claimsv1.ClearReviewFlagRequest) (*claimsv1.ClearReviewFlagResponse, error) {
-	c, err := s.get(ctx, req.GetClaimId())
-	if err != nil {
-		return nil, err
-	}
-	n := 0
-	for _, f := range c.GetReviewFlags() {
-		if f.GetClearedTime() != nil ||
-			(req.GetCode() != "" && f.GetCode() != req.GetCode()) ||
-			(req.GetSourceClaimId() != "" && f.GetSourceClaimId() != req.GetSourceClaimId()) {
-			continue
+	// The match has to stand: a correction pended over its original
+	// leaves the original alone.
+	for _, p := range by.GetAdjudication().GetPends() {
+		switch p.GetCode() {
+		case adjudication.PendOriginalNotFound, adjudication.PendOriginalNotFinalized, adjudication.PendOpenReplacement:
+			return false, nil
 		}
-		f.ClearedTime, f.ClearedBy, f.ClearNote = timestamppb.New(s.Now()), store.Actor(ctx), req.GetNote()
-		n++
 	}
-	if n == 0 {
-		return nil, rejectf("%s has no matching open review flag", s.ref(c))
-	}
-	saved, err := s.Repos.Claims.Update(ctx, c)
+	selected := orig.GetPayment() != nil
+	prev, err := s.withdraw(ctx, orig)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	s.logf(ctx, "Cleared %d review flag(s) on %s without adjusting it (%s).", n, s.ref(c), req.GetNote())
-	return &claimsv1.ClearReviewFlagResponse{Claim: saved}, nil
+	code, what := adjudication.DenyReplacedByProvider, "replaced by the provider's corrected claim "
+	if by.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID {
+		code, what = adjudication.DenyVoidedByProvider, "voided by the provider's claim "
+	}
+	what += DisplayNumber(by)
+	adjudication.DenyLines(orig, code, what)
+	orig.Adjudication = &claimsv1.Adjudication{
+		AdjudicatedTime: timestamppb.New(s.Now()), RunNumber: prev.GetRunNumber() + 1, Reason: what, EngineVersion: s.Engine.Version,
+		CustomerId: prev.GetCustomerId(), MemberId: prev.GetMemberId(), OriginalClaimId: prev.GetOriginalClaimId(), OriginalMatch: prev.GetOriginalMatch(),
+		PlanId: prev.GetPlanId(), PlanVersion: prev.GetPlanVersion(), CoverageSpanId: prev.GetCoverageSpanId(), NetworkTierId: prev.GetNetworkTierId(),
+		TotalAllowed: cents(0), TotalPaid: cents(0), TotalMemberResponsibility: cents(0),
+		Outcome: claimsv1.ClaimOutcome_CLAIM_OUTCOME_DENIED,
+	}
+	if _, err := s.Repos.Claims.Update(ctx, orig); err != nil {
+		return false, err
+	}
+	line := fmt.Sprintf("%s was not yet reported, so it is closed as DENIED (%s) rather than superseded; its accumulator postings were reversed.", s.ref(orig), what)
+	if selected {
+		line += " Taken out of the payment run."
+	}
+	s.logf(ctx, "%s", line)
+	return true, nil
 }
 
 func (s *Service) get(ctx context.Context, id string) (*claimsv1.Claim, error) {
@@ -859,7 +913,11 @@ func describe(c *claimsv1.Claim) string {
 			codes += p.GetCode()
 		}
 		return "PENDED (" + codes + ")"
-	case claimsv1.ClaimStatus_CLAIM_STATUS_DENIED:
+	}
+	switch adj.GetOutcome() {
+	case claimsv1.ClaimOutcome_CLAIM_OUTCOME_VOID:
+		return "VOID"
+	case claimsv1.ClaimOutcome_CLAIM_OUTCOME_DENIED:
 		reason := ""
 		for _, l := range c.GetLines() {
 			if d := l.GetAdjudication().GetDenial(); d != nil {
@@ -869,7 +927,7 @@ func describe(c *claimsv1.Claim) string {
 		}
 		return "DENIED" + reason
 	}
-	return fmt.Sprintf("%s, allowed %s, plan pays %s, member owes %s", statusName(c.GetStatus()),
+	return fmt.Sprintf("%s, allowed %s, plan pays %s, member owes %s", outcomeName(adj.GetOutcome()),
 		USD(adj.GetTotalAllowed().GetCents()), USD(adj.GetTotalPaid().GetCents()), USD(adj.GetTotalMemberResponsibility().GetCents()))
 }
 

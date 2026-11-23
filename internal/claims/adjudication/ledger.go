@@ -73,11 +73,11 @@ func (l *StoreLedger) Post(ctx context.Context, req PostRequest) error {
 		return err
 	}
 
-	// Idempotent: a retry after the write succeeded changes nothing.
-	for _, e := range rec.GetEntries() {
-		if e.GetClaimId() == req.ClaimID {
-			return nil
-		}
+	// Idempotent: a retry after the write succeeded changes nothing. A
+	// claim whose postings were reversed (reopened before its result was
+	// reported) nets to nothing, and posts again when it is re-run.
+	if len(netByBalance(rec, req.ClaimID)) > 0 {
+		return nil
 	}
 	if rec.GetAudit().GetRevision() != req.Revision {
 		return fmt.Errorf("%w: %s is at revision %d, calculated against %d",
@@ -214,30 +214,4 @@ func bump(rec *claimsv1.FamilyAccumulators, accumulatorID, ownerID string, amoun
 		Applied:       &commonv1.Money{Cents: amount},
 		Limit:         limit,
 	})
-}
-
-// postingTotals sums postings per balance, for comparing two results.
-func postingTotals(ps []*claimsv1.AccumulatorPosting) map[balanceKey]int64 {
-	t := map[balanceKey]int64{}
-	for _, p := range ps {
-		if c := p.GetAmount().GetCents(); c != 0 {
-			t[balanceKey{p.GetAccumulatorId(), p.GetOwnerId()}] += c
-		}
-	}
-	return t
-}
-
-// PostingsDiffer reports whether two adjudication results post different
-// amounts to any accumulator balance.
-func PostingsDiffer(a, b []*claimsv1.AccumulatorPosting) bool {
-	ta, tb := postingTotals(a), postingTotals(b)
-	if len(ta) != len(tb) {
-		return true
-	}
-	for k, v := range ta {
-		if tb[k] != v {
-			return true
-		}
-	}
-	return false
 }

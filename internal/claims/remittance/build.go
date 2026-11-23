@@ -3,7 +3,7 @@
 // A remittance is a document about claims, separate from the money:
 // payments decide what is paid and when, and this package reports it. The
 // same code builds the 835 sent with a payment and the preview an
-// examiner looks at before a claim is finalized; only the payment
+// examiner looks at before a claim is adjudicated; only the payment
 // differs.
 //
 // What a remittance reports comes from each line's adjudication, which is
@@ -68,7 +68,7 @@ func (b *Builder) employer() employer.API {
 }
 
 // Build makes the remittance for one payment to one payee. Every claim
-// must be finalized, and all must share a customer and billing provider.
+// must be adjudicated, and all must share a customer and billing provider.
 // A replacement brings the reversal of what was reported for the version
 // it replaces, right before it; a void is only that reversal. A version
 // that was never reported has nothing to reverse.
@@ -106,13 +106,22 @@ func (b *Builder) Build(ctx context.Context, claims []*claimsv1.Claim, pay *remi
 			return nil, fmt.Errorf("%w: %s is for %s, billed by %s/%s", ErrMixed, number(c),
 				c.GetCustomerId(), c.GetBillingProvider().GetNpi(), c.GetBillingProvider().GetTin())
 		}
-		if c.GetFrequency() != claimsv1.ClaimFrequency_CLAIM_FREQUENCY_ORIGINAL && c.GetOriginalClaimId() != "" {
-			rev, err := b.reversal(ctx, c.GetOriginalClaimId())
+		// Only a result that was reported is superseded, and only a
+		// superseded result is reversed. A correction of a claim that was
+		// never reported stands alone: that claim got an answer of its own.
+		if id := c.GetOriginalClaimId(); id != "" {
+			orig, err := b.Repos.Claims.Get(ctx, id)
 			if err != nil {
 				return nil, err
 			}
-			if rev != nil {
-				rem.Claims = append(rem.Claims, rev)
+			if orig.GetSupersededBy().GetClaimId() == c.GetId() {
+				rev, err := b.reversal(ctx, id)
+				if err != nil {
+					return nil, err
+				}
+				if rev != nil {
+					rem.Claims = append(rem.Claims, rev)
+				}
 			}
 		}
 		if c.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID {
@@ -145,7 +154,7 @@ func (b *Builder) Build(ctx context.Context, claims []*claimsv1.Claim, pay *remi
 }
 
 // Preview builds the remittance one claim would be reported on if it were
-// paid today, from its current adjudication or a dry run's. It is never
+// paid today, from its current adjudication or an estimate's. It is never
 // stored or sent.
 func (b *Builder) Preview(ctx context.Context, c *claimsv1.Claim) (*remittancev1.Remittance, error) {
 	rem, err := b.Build(ctx, []*claimsv1.Claim{c}, &remittancev1.RemittancePayment{
@@ -173,17 +182,25 @@ func (b *Builder) entry(ctx context.Context, c *claimsv1.Claim) (*remittancev1.R
 		ClaimId: c.GetId(), ClaimNumber: number(c), PatientControlNumber: c.GetPatientControlNumber(),
 		FrequencyCode: frequencyCode(c.GetFrequency()), ReceivedDate: dates.FromTime(c.GetReceivedTime().AsTime()),
 	}
-	switch c.GetStatus() {
-	case claimsv1.ClaimStatus_CLAIM_STATUS_APPROVED:
+	if c.GetStatus() != claimsv1.ClaimStatus_CLAIM_STATUS_ADJUDICATED {
+		return nil, fmt.Errorf("%w: %s is %s", ErrNotReportable, number(c), c.GetStatus())
+	}
+	// CLP02: 4 only when every line is denied. A partial denial is
+	// processed (1), its denied lines carried by their CAS adjustments.
+	switch c.GetAdjudication().GetOutcome() {
+	case claimsv1.ClaimOutcome_CLAIM_OUTCOME_APPROVED, claimsv1.ClaimOutcome_CLAIM_OUTCOME_PARTIALLY_DENIED:
 		e.Status = remittancev1.RemittanceClaimStatus_REMITTANCE_CLAIM_STATUS_PROCESSED
-	case claimsv1.ClaimStatus_CLAIM_STATUS_DENIED:
+	case claimsv1.ClaimOutcome_CLAIM_OUTCOME_DENIED:
 		e.Status = remittancev1.RemittanceClaimStatus_REMITTANCE_CLAIM_STATUS_DENIED
 	default:
-		return nil, fmt.Errorf("%w: %s is %s", ErrNotReportable, number(c), c.GetStatus())
+		return nil, fmt.Errorf("%w: %s has outcome %s", ErrNotReportable, number(c), c.GetAdjudication().GetOutcome())
 	}
 
 	// The patient as we know them, falling back to as sent.
-	e.PatientName, e.PatientMemberId = c.GetSubmittedPatient().GetName(), c.GetMemberCardId()
+	e.PatientName, e.PatientMemberId = c.GetSubmittedSubscriber().GetName(), c.GetMemberCardId()
+	if pt := c.GetSubmittedPatient(); pt != nil {
+		e.PatientName = pt.GetName()
+	}
 	if res, err := b.employer().GetMember(ctx, &employerv1.GetMemberRequest{MemberId: c.GetMemberId()}); err == nil {
 		e.PatientName, e.PatientMemberId = res.GetMember().GetName(), res.GetMember().GetCardId()
 	} else if !employer.NotFound(err) {

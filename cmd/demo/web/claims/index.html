@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Claims Works</title>
+<link rel="stylesheet" href="/shared/interfaces.css">
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #18202b; --muted: #687384; --line: #e2e6ec;
+  --brand: #0f766e; --brand-ink: #ffffff; --brand-soft: #e3f3f1;
+  --amber: #8a5a00; --amber-soft: #fff4d9; --amber-line: #f2d48b;
+  --red: #b42318; --red-soft: #fdecea; --green: #157347; --green-soft: #e2f4ea; --gray-soft: #edf0f3;
+  --blue: #1d4ed8; --blue-soft: #e6edff;
+  --code: #f3f5f8; --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+  /* the shared interface panel's tokens */
+  --accent: var(--blue); --proto: var(--brand); --proto-soft: var(--brand-soft);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101418; --panel: #171c22; --ink: #e6eaef; --muted: #93a0b0; --line: #262e37;
+    --brand: #2dd4bf; --brand-ink: #062320; --brand-soft: #123532;
+    --amber: #f3c969; --amber-soft: #2e2611; --amber-line: #5c4a1c;
+    --red: #ff8f85; --red-soft: #3a1d1b; --green: #6fdc9f; --green-soft: #15301f; --gray-soft: #232a33;
+    --blue: #93b4ff; --blue-soft: #1a2440;
+    --code: #12171c; --shadow: none;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; }
+a { color: inherit; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.top { height: 50px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.top b { font-size: 15px; }
+.top .sub { color: var(--muted); }
+.top .right { margin-left: auto; display: flex; gap: 14px; font-size: 13px; color: var(--muted); }
+.top .right a { text-decoration: none; } .top .right a:hover { color: var(--brand); }
+.stage { flex: 1; overflow: auto; display: flex; justify-content: center; padding: 26px 24px; }
+.slide { width: 100%; max-width: 1160px; }
+.slide h1 { font-size: 30px; letter-spacing: -.02em; margin: 0 0 6px; }
+.slide .lede { color: var(--muted); font-size: 17px; margin: 0 0 20px; max-width: 860px; }
+.kicker { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); margin-bottom: 8px; }
+.kicker.plan { color: var(--amber); }
+.bar { height: 52px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 20px; border-top: 1px solid var(--line); background: var(--panel); }
+.bar button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 5px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+.bar button:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+.bar button:disabled { opacity: .4; cursor: default; }
+.dots { display: flex; gap: 6px; flex-wrap: wrap; }
+.dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); cursor: pointer; }
+.dots i.on { background: var(--brand); }
+.dots i.plan { outline: 1.5px dashed var(--amber); outline-offset: 1px; }
+.count { margin-left: auto; color: var(--muted); font-size: 13px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.cols3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+@media (max-width: 900px) { .grid2, .cols3 { grid-template-columns: 1fr; } }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; box-shadow: var(--shadow); }
+.box h3 { margin: 0 0 6px; font-size: 15px; }
+.box p { margin: 0; color: var(--muted); font-size: 14px; }
+.box.planned { border-style: dashed; border-color: var(--amber-line); box-shadow: none; background: transparent; }
+.big { font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; margin-top: 4px; }
+.note { margin-top: 16px; padding: 11px 16px; border-left: 3px solid var(--brand); background: var(--brand-soft); border-radius: 0 10px 10px 0; font-size: 15px; }
+.note.warn { border-color: var(--amber); background: var(--amber-soft); }
+.chip { display: inline-block; font: 600 12px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; border-radius: 999px; padding: 1px 9px; background: var(--gray-soft); color: var(--muted); white-space: nowrap; }
+.chip.APPROVED, .chip.CLEARED, .chip.PAYABLE, .chip.ok { background: var(--green-soft); color: var(--green); }
+.chip.DENIED, .chip.RETURNED, .chip.bad { background: var(--red-soft); color: var(--red); }
+.chip.PENDED, .chip.SELECTED, .chip.PARTIALLY_DENIED, .chip.warn { background: var(--amber-soft); color: var(--amber); }
+.chip.ISSUED, .chip.ADJUDICATED, .chip.info { background: var(--blue-soft); color: var(--blue); }
+.chip.superseded { background: transparent; border: 1px dashed var(--muted); }
+.chip.dry { background: transparent; border: 1px dashed var(--muted); }
+.live { font-size: 12px; color: var(--green); font-weight: 600; }
+.live::before { content: "●"; margin-right: 5px; }
+
+/* flow */
+.flow { display: flex; align-items: stretch; flex-wrap: wrap; }
+.flow .node { flex: 1; min-width: 150px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.flow .node.hl { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.flow .node.planned { border-style: dashed; border-color: var(--amber-line); background: transparent; }
+.flow .node b { display: block; font-size: 16px; margin-bottom: 4px; }
+.flow .node span { color: var(--muted); font-size: 13.5px; }
+.flow .arrow { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0 8px; color: var(--muted); font-size: 12px; min-width: 62px; text-align: center; }
+.flow .arrow::before { content: "→"; font-size: 24px; color: var(--brand); }
+.flow.plan .arrow::before { color: var(--amber); }
+
+/* state tracks */
+.tracks { display: grid; grid-template-columns: 190px 1fr; gap: 10px 14px; align-items: center; margin-top: 18px; }
+.tracks .lab { font-weight: 650; font-size: 14px; } .tracks .lab small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
+.states { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.states .sep { color: var(--muted); }
+.states .sep.when { font-size: 12.5px; font-style: italic; }
+
+/* endpoints */
+.groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; align-items: start; }
+.group h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ep { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: var(--panel); border: 1.5px solid var(--brand); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; }
+.ep:hover { box-shadow: 0 0 0 3px var(--brand-soft); }
+.ep b { font: 650 13.5px ui-monospace, SFMono-Regular, Menlo, monospace; display: block; }
+.ep span.does { color: var(--muted); font-size: 13px; display: block; margin: 2px 0 6px; }
+.ep.unbuilt { border-style: dashed; border-color: var(--muted); }
+.ep .tags { display: flex; gap: 5px; flex-wrap: wrap; }
+
+/* claim cards */
+.claims { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+.claim { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-width: 200px; flex: 1; max-width: 290px; }
+.claim.gone { opacity: .62; }
+.claim.new { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.claim .num { font: 650 13.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.claim .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.claim .what { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.claim .money { font-size: 13px; margin-top: 6px; } .claim .money b { font-size: 15px; }
+.claim .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; width: 76px; }
+.empty { color: var(--muted); font-size: 13.5px; padding: 12px; border: 1px dashed var(--line); border-radius: 12px; }
+
+/* outcomes */
+.outcomes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+@media (max-width: 900px) { .outcomes { grid-template-columns: 1fr 1fr; } }
+.outcomes .ln { display: grid; grid-template-columns: 60px 1fr auto; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px solid var(--line); font-size: 13px; }
+
+/* player */
+.player { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .player { grid-template-columns: 1fr; } }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.steps button { width: 100%; text-align: left; font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; cursor: pointer; display: grid; grid-template-columns: 20px 1fr; gap: 0 8px; }
+.steps button:hover { border-color: var(--brand); }
+.steps button.on { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.steps .n { color: var(--muted); font-size: 12px; padding-top: 2px; }
+.steps .l { font-size: 13.5px; }
+.steps .e { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin-top: 3px; }
+.kind { font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; border-radius: 6px; padding: 1px 7px; background: var(--brand-soft); color: var(--brand); }
+.kind.standin, .kind.setup { background: transparent; color: var(--muted); border: 1px dashed var(--muted); }
+.kind.remittance { background: var(--blue-soft); color: var(--blue); }
+.after h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.refusal { padding: 10px 14px; border-radius: 10px; background: var(--red-soft); color: var(--red); font-size: 14px; margin-bottom: 10px; }
+.log { margin: 10px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+.log li { padding: 3px 0 3px 14px; position: relative; } .log li::before { content: "·"; position: absolute; left: 3px; }
+details.wire { margin-top: 10px; font-size: 13px; }
+details.wire summary { cursor: pointer; color: var(--muted); }
+details.wire pre { margin: 6px 0 0; padding: 10px 12px; background: var(--code); border: 1px solid var(--line); border-radius: 8px; overflow: auto; max-height: 300px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.deltabox { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-radius: 10px; background: var(--code); margin-bottom: 10px; font-size: 14px; }
+.deltabox b { font-size: 17px; }
+
+/* model */
+.model { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 900px) { .model { grid-template-columns: 1fr; } }
+.record { border: 2px solid var(--ink); border-radius: 16px; padding: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.record > .ttl { grid-column: 1 / -1; font: 700 14px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.fg { border: 1px solid var(--line); border-radius: 12px; padding: 9px 11px; background: var(--panel); }
+.fg.wide { grid-column: 1 / -1; }
+.fg h4 { margin: 0; font-size: 14px; } .fg small { color: var(--muted); font-size: 12px; display: block; margin-bottom: 7px; }
+.fields { display: flex; flex-wrap: wrap; gap: 5px; }
+.f { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--line); background: var(--code); color: var(--ink); border-radius: 6px; padding: 1px 7px; cursor: pointer; }
+.f.msg { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+.f.on { outline: 2px solid var(--brand); }
+.fdoc { margin-top: 10px; min-height: 64px; font-size: 13.5px; color: var(--muted); padding: 10px 14px; border-radius: 10px; background: var(--code); white-space: pre-line; }
+.fdoc b { color: var(--ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+details.tbl { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); margin-bottom: 6px; }
+details.tbl summary { cursor: pointer; padding: 7px 11px; display: flex; gap: 8px; align-items: baseline; }
+details.tbl summary b { font: 650 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+details.tbl summary span { color: var(--muted); font-size: 12.5px; flex: 1; }
+details.tbl .ix { padding: 0 11px 9px; font-size: 12.5px; color: var(--muted); }
+details.tbl .ix div { margin-top: 6px; } details.tbl .ix b { color: var(--ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+.rows { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+.rows div { display: grid; grid-template-columns: 34px 1fr 62px; gap: 6px; align-items: center; font-size: 11.5px; color: var(--muted); }
+.rows i { height: 12px; border-radius: 3px; background: var(--gray-soft); display: block; }
+.rows .cur i { background: var(--brand); } .rows .cur { color: var(--ink); font-weight: 600; }
+
+/* chains */
+.chain { display: flex; align-items: stretch; flex-wrap: wrap; gap: 0; }
+.chain .claim { max-width: 215px; min-width: 170px; }
+.chain .lnk { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0 6px; font-size: 11.5px; color: var(--muted); min-width: 64px; text-align: center; }
+.chain .lnk::before { content: "→"; font-size: 22px; color: var(--brand); line-height: 1; }
+.rules { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.rules span { font-size: 13.5px; padding: 4px 12px; border-radius: 999px; background: var(--gray-soft); }
+button.linkish { border: 0; background: none; color: var(--brand); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; margin-top: 10px; }
+
+/* delta bars */
+.dl { display: grid; grid-template-columns: 220px minmax(0, 1fr) 110px; gap: 12px 16px; align-items: center; }
+.dl .lab b { display: block; font-size: 14.5px; } .dl .lab small { color: var(--muted); font-size: 12.5px; }
+.dl .pair { display: grid; grid-template-columns: 78px 1fr 70px; gap: 4px 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.dl .pair i { display: block; height: 14px; border-radius: 4px; background: var(--muted); min-width: 2px; }
+.dl .pair i.proj { background: var(--brand); }
+.dl .d { font-size: 17px; font-weight: 700; text-align: right; }
+.dl .d.neg { color: var(--red); } .dl .d.pos { color: var(--green); }
+.dl .d small { display: block; font-size: 11.5px; font-weight: 500; color: var(--muted); }
+
+/* 835s */
+.rem { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.rem.fail { border: 1.5px dashed var(--red); background: transparent; }
+.rem h3 { margin: 0 0 2px; font-size: 14.5px; } .rem small { color: var(--muted); font-size: 12.5px; }
+.rem table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+.rem td { padding: 4px 0; border-top: 1px solid var(--line); } .rem td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.rem tr.net td { font-weight: 700; border-top: 2px solid var(--ink); font-size: 14.5px; }
+.rem .neg { color: var(--red); }
+
+/* proposal */
+.lanes { display: grid; grid-template-columns: 92px 1fr; gap: 10px 12px; align-items: stretch; }
+.lanes .lane { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; }
+.ledger { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ledger th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.ledger td { padding: 5px 8px; border-bottom: 1px solid var(--line); } .ledger td.amt { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.ledger tr.net td { border-top: 2px solid var(--ink); font-weight: 700; }
+.ledger .neg { color: var(--red); }
+details.q { border: 1px dashed var(--amber-line); border-radius: 10px; margin-bottom: 6px; }
+details.q summary { cursor: pointer; padding: 7px 12px; font-size: 14px; font-weight: 600; }
+details.q p { margin: 0; padding: 0 12px 10px; color: var(--muted); font-size: 13.5px; }
+.loading { color: var(--muted); padding: 80px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="top"><b>How claims works</b><span class="mono sub">every example below just ran, through the real ClaimsService</span>
+  <div class="right"><a href="/adjudication/">Adjudication</a><a href="/claims-lifecycle/">Lifecycle</a><a href="/remittance/">Remittance</a><a href="/journey/">Journey</a><a href="/">Domain map</a></div></div>
+<div class="stage"><div class="slide" id="slide"><div class="loading">Running the examples…</div></div></div>
+<div class="bar"><button id="prev">← Back</button><button id="next">Next →</button><div class="dots" id="dots"></div><span class="count" id="count"></span></div>
+<script src="/shared/interfaces.js"></script>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const usd = (c) => (c < 0 ? "−" : "") + "$" + (Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 });
+const signed = (c) => (c > 0 ? "+" : "") + usd(c);
+const lower = (s) => String(s || "").toLowerCase().replace(/_/g, " ");
+const SERVICE = "coreadmin.claims.v1.ClaimsService";
+let T = null;
+// Which call of each example is showing; the model field being explained.
+const sel = { decide: 2, reopen: 3 };
+let field = null;
+let chainOpen = null;
+
+const chip = (s, cls = s) => `<span class="chip ${esc(cls)}">${esc(lower(s))}</span>`;
+const last = (ex) => ex.calls[ex.calls.length - 1];
+const byNumber = (ex, n) => last(ex).claims.find((c) => c.number === n);
+
+// ---------- pieces ----------
+
+const KIND = { original: "claim", corrected: "replacement", void: "void" };
+// A claim's state. prev: its state before the call, to mark what's new.
+function claimCard(c, prev) {
+  const gone = !!c.superseded;
+  const changed = prev !== undefined && (!prev || JSON.stringify(prev) !== JSON.stringify(c));
+  const who = c.kind === "original" ? "" : c.version > 1 ? "ours · version " + c.version : "provider's · own number";
+  return `<div class="claim ${gone ? "gone" : ""} ${changed ? "new" : ""}">
+    <div class="num">${esc(c.number)}</div>
+    <div class="what">${esc(KIND[c.kind])} · ${esc(c.procedure)}${who ? " · " + esc(who) : ""}</div>
+    ${c.replaces ? `<div class="what">${c.kind === "void" ? "voids" : "replaces"} <span class="mono">${esc(c.replaces)}</span></div>` : c.quoted ? `<div class="what">quotes <span class="mono">${esc(c.quoted)}</span> · not matched</div>` : ""}
+    <div class="row"><span class="lbl">status</span>${chip(c.status)}${c.pends.map((p) => `<span class="chip warn">${esc(p)}</span>`).join("")}</div>
+    ${c.outcome ? `<div class="row"><span class="lbl">outcome</span>${chip(c.outcome)}${c.denial ? `<span class="chip bad">${esc(lower(c.denial))}</span>` : ""}</div>` : ""}
+    ${c.superseded ? `<div class="row"><span class="lbl">superseded</span><span class="chip superseded">by a ${c.superseded === "VOID" ? "void" : "replacement"}</span></div>` : ""}
+    <div class="row"><span class="lbl">payment</span>${c.payment ? chip(c.payment) : `<span class="chip">none</span>`}</div>
+    ${c.status === "PENDED" || c.outcome === "VOID" ? "" : `<div class="money">plan pays <b>${usd(c.pays)}</b> · member ${usd(c.owes)}</div>`}</div>`;
+}
+
+const KIND_LABEL = { standin: "stand-in", remittance: "835 builder", setup: "setup" };
+// An example, a call at a time: the calls on the left, every claim's
+// state after the chosen one on the right.
+function player(id) {
+  const ex = T.examples[id];
+  const i = sel[id] ?? ex.calls.length - 1;
+  const c = ex.calls[i], before = i > 0 ? ex.calls[i - 1].claims : [];
+  const prev = (x) => before.find((b) => b.id === x.id) || null;
+  const pretty = (j) => esc(JSON.stringify(j, null, 2));
+  return `<div class="player"><ol class="steps">${ex.calls.map((x, n) => `<li><button class="${n === i ? "on" : ""}" data-ex="${id}" data-call="${n}">
+      <span class="n">${n + 1}</span><span><span class="l">${esc(x.label)}</span>
+      <span class="e"><span class="kind ${x.kind}">${esc(x.kind === "rpc" ? x.endpoint : KIND_LABEL[x.kind] + " · " + x.endpoint)}</span>
+      ${x.readOnly ? `<span class="chip dry">saves nothing</span>` : ""}${x.rejected ? `<span class="chip bad">refused</span>` : ""}</span></span></button></li>`).join("")}</ol>
+    <div class="after box">
+      ${c.rejected ? `<div class="refusal"><b>Refused.</b> ${esc(c.rejected)}</div>` : ""}
+      ${c.delta ? `<div class="deltabox"><span>payee holds <b>${usd(c.delta.held)}</b></span><span>→ replacement pays <b>${usd(c.delta.projected)}</b></span>
+        <span>delta <b style="color:var(--${c.delta.delta < 0 ? "red" : "green"})">${signed(c.delta.delta)}</b></span>${chip(c.delta.basis, "info")}${c.readOnly ? `<span class="chip dry">nothing saved</span>` : ""}</div>` : ""}
+      <h4>Claims after this call</h4>
+      <div class="claims">${c.claims.length ? c.claims.map((x) => claimCard(x, c.rejected || c.readOnly ? undefined : prev(x))).join("") : `<div class="empty">none saved</div>`}</div>
+      ${c.log.length ? `<ul class="log">${c.log.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
+      ${c.request ? `<details class="wire"><summary>Request and response</summary><pre>${pretty(c.request)}</pre>${c.response ? `<pre>${pretty(c.response)}</pre>` : ""}</details>` : ""}
+    </div></div>`;
+}
+
+// A claim and what replaced it, left to right.
+function chain(ex, numbers) {
+  return `<div class="chain">${numbers.map((n, i) => {
+    const c = byNumber(ex, n);
+    return (i ? `<div class="lnk">${c.kind === "void" ? "voided by" : "replaced by"}<br>${c.match ? lower(c.match) : ""}</div>` : "") + claimCard(c);
+  }).join("")}</div>`;
+}
+
+function remittance(r, n) {
+  if (r.error) return `<div class="rem fail"><h3>835 #${n}</h3><small>can't be built</small>
+    <p style="margin:8px 0 0;font-size:13.5px">The reversal takes back more than the payment pays. That needs a provider-level adjustment (PLB), which isn't built.</p></div>`;
+  return `<div class="rem"><h3>835 #${n} · check ${esc(r.trace)}</h3><small>${esc(r.payer)} → ${esc(r.payee)}</small>
+    <table>${r.entries.map((e) => `<tr><td class="mono">${esc(e.number)}</td><td>${e.reversal ? `<span class="chip bad">reversal</span>` : `<span class="chip ok">${esc(lower(e.status))}</span>`}</td><td class="${e.paid < 0 ? "neg" : ""}">${usd(e.paid)}</td></tr>`).join("")}
+    <tr class="net"><td colspan="2">Payment</td><td>${usd(r.amount)}</td></tr></table></div>`;
+}
+
+// ---------- slides ----------
+
+const SLIDES = [
+  () => `<div style="padding-top:3vh"><div class="kicker">Claims</div><h1 style="font-size:42px">Decided in place until it's reported, replaced after</h1>
+    <p class="lede">Intake saves each claim exactly as the provider submitted it. Adjudication then runs it. If anything blocks it, the whole claim pends for an examiner to work.</p>
+    <p class="lede">Once nothing blocks it, the claim is adjudicated: every line is decided as payable or denied. Until its payment run is released nothing has been reported, and it can be reopened and re-run. After that, a correction is a new claim that supersedes it, and the next 835 reverses what was reported.</p>
+    <div class="flow" style="margin-top:26px">
+      <div class="node"><b>837</b><span>From the clearinghouse.</span></div><div class="arrow">verbatim<br>999</div>
+      <div class="node"><b>Intake</b><span>Saves every readable claim. Looks nothing up.</span></div><div class="arrow">ProcessClaim</div>
+      <div class="node hl"><b>Adjudication</b><span>Matches, prices, applies benefits. Reruns until final.</span></div><div class="arrow">adjudicated</div>
+      <div class="node"><b>835</b><span>What the provider is told and paid.</span></div></div>
+    <div class="box" style="margin-top:18px"><div class="tracks" style="margin-top:0">
+      <div class="lab">status<small>is it done processing?</small></div><div class="states">${chip("RECEIVED")}<span class="sep">→</span>${chip("PENDED")}<span class="sep">→</span>${chip("ADJUDICATED")}</div>
+      <div class="lab">outcome<small>what was decided?</small></div><div class="states">${chip("APPROVED")}${chip("PARTIALLY_DENIED")}${chip("DENIED")}${chip("VOID")}</div>
+      <div class="lab">superseded<small>still the current version?</small></div><div class="states"><span class="chip">no</span><span class="sep when">→ only once reported →</span><span class="chip superseded">by a replacement</span><span class="chip superseded">by a void</span></div>
+      <div class="lab">payment<small>where is the money?</small></div><div class="states">${chip("SELECTED")}<span class="sep when">→ run released: reported →</span>${chip("ISSUED")}<span class="sep">→</span>${chip("CLEARED")}${chip("RETURNED")}${chip("VOIDED", "bad")}</div></div></div>
+    <p style="color:var(--muted);margin-top:14px">Four separate facts. None of them overwrites another.</p>
+    <p style="color:var(--muted);margin-top:14px">Use ← → to move. Slides with a dashed dot are proposals, not built.</p></div>`,
+
+  () => {
+    const n = T.endpoints.flatMap((g) => g.endpoints);
+    const unbuilt = n.filter((e) => !e.built);
+    return `<div class="kicker">Endpoints</div><h1>ClaimsService: ${n.length} operations</h1>
+    <p class="lede">Read from <span class="mono">claims_service.proto</span>. Click one for its contract.</p>
+    <div class="groups">${T.endpoints.map((g) => `<div class="group"><h4>${esc(g.title)}</h4>${g.endpoints.map((e) => `
+      <button class="ep ${e.built ? "" : "unbuilt"}" data-endpoint="${esc(e.name)}" data-opens-panel><b>${esc(e.name)}</b><span class="does">${esc(e.does)}</span>
+        <span class="tags">${e.built ? (e.examples || []).length ? `<span class="chip ok">called in ${e.examples.length} example${e.examples.length > 1 ? "s" : ""}</span>` : "" : `<span class="chip">declared · not built</span>`}</span></button>`).join("")}</div>`).join("")}</div>
+    <div class="grid2" style="margin-top:8px">
+      <div class="note">Every write is <b>one transaction</b>: the claim, its accumulator postings, and what happens to its original commit together.</div>
+      <div class="note warn">${unbuilt.length ? `<b>${unbuilt.map((e) => esc(e.name)).join(", ")}</b> ${unbuilt.length > 1 ? "are" : "is"} in the proto but not implemented. ` : ""}The service is called in-process; it isn't served over the network yet.</div></div>`;
+  },
+
+  () => `<div class="kicker">Deciding</div><h1>Process, pend, reprocess</h1>
+    <p class="lede">A claim is run through adjudication as it arrives. One open pend holds the whole claim; it is re-run until none is left. Once adjudicated, reprocessing is refused.</p>
+    ${player("decide")}`,
+
+  () => {
+    const cs = last(T.examples.outcomes).claims;
+    const v = last(T.examples.ours).claims.find((c) => c.outcome === "VOID");
+    const card = (c, note) => `<div class="box"><div class="num mono" style="font-weight:650">${esc(c.number)}</div>
+      <div class="row" style="display:flex;gap:6px;margin:8px 0">${chip(c.status)}<span style="color:var(--muted)">→</span>${chip(c.outcome)}</div>
+      ${c.lines.length ? c.lines.map((l) => `<div class="ln"><span class="mono">${esc(l.procedure)}</span>${chip(l.status)}<span>${l.status === "PAYABLE" ? usd(l.paid) : "–"}</span></div>`).join("") : `<div class="ln"><span style="color:var(--muted)">no lines decided</span></div>`}
+      <p style="margin-top:8px">${note}</p></div>`;
+    return `<div class="kicker">Outcome</div><h1>Adjudicated says it's done. Outcome says what was decided.</h1>
+    <p class="lede">The outcome is read off the lines. Denied is kept for claims where every line is denied; one denied line among payable ones is a partial denial.</p>
+    <div class="outcomes">${card(cs[0], "Every line payable.")}${card(cs[1], "On the 835 this is still CLP02 = 1; the denial is in the line's CAS.")}${card(cs[2], "Every line denied: CLP02 = 4.")}${card(v, "A void cancels its original and decides nothing.")}</div>
+    <div class="note"><span class="live">live</span> · the first three arrived through ProcessClaim on a plan set to deny uncovered services; the void is from the adjustment example.</div>`;
+  },
+
+  () => {
+    const m = T.model, wide = new Set(["As submitted"]);
+    const run = last(T.examples.reopen).claims[0];
+    const doc = field ? m.flatMap((g) => g.fields).find((f) => f.name === field) : null;
+    return `<div class="kicker">Data model</div><h1>One record per claim, every version kept</h1>
+    <p class="lede">A claim is one protobuf document. What was submitted and what we decided sit side by side and never mix.</p>
+    <div class="model"><div>
+      <div class="record"><div class="ttl">Claim</div>${m.map((g) => `<div class="fg ${wide.has(g.title) ? "wide" : ""}"><h4>${esc(g.title)}</h4><small>${esc(g.by)}</small>
+        <div class="fields">${g.fields.map((f) => `<button class="f ${f.type ? "msg" : ""} ${field === f.name ? "on" : ""}" data-field="${esc(f.name)}">${esc(f.name)}</button>`).join("")}</div></div>`).join("")}</div>
+      <div class="fdoc">${doc ? `<b>${esc(doc.name)}</b>${doc.type ? ` · ${esc(doc.type)}` : ""}\n${esc(doc.doc)}` : "Click a field for its meaning, from the proto comments."}</div></div>
+      <div><div class="box" style="margin-bottom:12px"><h3>Tables · schema <span class="mono">claims</span></h3>
+        ${T.tables.map((t) => `<details class="tbl"><summary><b>${esc(t.name)}</b><span>${esc(t.holds)}</span>${t.indexes.length ? `<span class="chip" style="flex:none">${t.indexes.length} index${t.indexes.length > 1 ? "es" : ""}</span>` : ""}</summary>
+          ${t.indexes.length ? `<div class="ix">${t.indexes.map((x) => `<div><b>${esc(x.on)}</b> · ${esc(x.why)}</div>`).join("")}</div>` : ""}</details>`).join("")}</div>
+        <div class="box"><h3>Inserts only</h3><p class="mono" style="font-size:12px">id · revision · tx_from · tx_to · recorded_by · data</p>
+          <div class="rows">${Array.from({ length: run.revisions }, (_, i) => `<div class="${i + 1 === run.revisions ? "cur" : ""}"><span>rev ${i + 1}</span><i></i><span>${i + 1 === run.revisions ? "current" : "closed"}</span></div>`).join("")}</div>
+          <p style="margin-top:8px"><span class="live">live</span> · <span class="mono">${esc(run.number)}</span> ended the reopen example as ${run.revisions} rows, with ${run.runs} adjudication runs in its history. A change closes one row and inserts the next.</p></div></div></div>`;
+  },
+
+  () => `<div class="kicker">The dividing line</div><h1>Reported or not: releasing the payment run</h1>
+    <p class="lede">Until the run is released, the provider has been told nothing and paid nothing, so there is nothing to reverse: the claim is reopened and re-run in place. Once released, its result stands as reported.</p>
+    ${player("reopen")}
+    <div class="grid2">
+      <div class="note"><b>Before release:</b> ReopenClaim. Same claim, same number, back to pended; its accumulator postings come off. AdjustClaim and VoidClaim are refused.</div>
+      <div class="note"><b>After release:</b> AdjustClaim or VoidClaim. ReopenClaim is refused. Dashed calls are the stand-in for the payment system.</div></div>`,
+
+  () => {
+    const ex = T.examples.providerBefore, cs = last(ex).claims;
+    const lost = cs.find((c) => c.pends.includes("ORIGINAL_NOT_FOUND"));
+    const r = cs.find((c) => c.replaces), o = cs.find((c) => c.number === r.replaces);
+    return `<div class="kicker">Before it's reported</div><h1>The provider corrects a claim we haven't answered yet</h1>
+    <p class="lede">A corrected claim or void arrives as a new submission with its own number. The original was never reported, so it isn't superseded: it is closed with an answer of its own, and the correction is decided as a claim in its own right.</p>
+    <div class="box"><div class="chain">${claimCard(o)}<div class="lnk">closed by<br>${lower(r.match)}</div>${claimCard(r)}</div>
+      ${lost ? `<p style="margin-top:10px"><span class="mono">${esc(lost.number)}</span> quoted <span class="mono">${esc(lost.quoted)}</span>, which we never issued: it pends <span class="chip warn">ORIGINAL_NOT_FOUND</span> and touches nothing.</p>` : ""}
+      <button class="linkish" data-chain="providerBefore">${chainOpen === "providerBefore" ? "Hide" : "Show"} the calls</button></div>
+    ${chainOpen === "providerBefore" ? `<div style="height:12px"></div>` + player("providerBefore") : ""}
+    <div class="rules"><span>each claim the provider sent gets one answer on an 835</span><span>no reversal: nothing was reported</span><span>the original's accumulator postings come off</span><span>if the original is in an unreleased run, it leaves it</span><span>a void closes the original the same way</span></div>
+    <div class="note warn"><b>Not chosen yet:</b> the reason code (CARC) for "replaced by the provider's corrected claim" and "voided by the provider". Until one is set, an 835 can't be built for the closed original.</div>`;
+  },
+
+  () => {
+    const p = T.examples.providerAfter, o = T.examples.ours;
+    const nums = (ex) => last(ex).claims.map((c) => c.number);
+    return `<div class="kicker">After it's reported</div><h1>Two ways a reported claim is replaced</h1>
+    <p class="lede">The result stands as reported and is marked superseded, with the outcome it was given. A new claim carries the new decision, and the next 835 reverses the old one. The two ways differ in who starts it and how it is numbered.</p>
+    <div class="box" style="margin-bottom:12px"><h3>The provider corrects it <span class="chip info">frequency 7 / 8 on a new 837</span> <span class="chip">its own claim number</span></h3>
+      <div style="margin-top:10px">${chain(p, nums(p))}</div>
+      <button class="linkish" data-chain="providerAfter">${chainOpen === "providerAfter" ? "Hide" : "Show"} the calls</button></div>
+    ${chainOpen === "providerAfter" ? player("providerAfter") + `<div style="height:12px"></div>` : ""}
+    <div class="box"><h3>We adjust or void it <span class="chip info">AdjustClaim / VoidClaim</span> <span class="chip">next version of the same number</span></h3>
+      <div style="margin-top:10px">${chain(o, nums(o))}</div>
+      <button class="linkish" data-chain="ours">${chainOpen === "ours" ? "Hide" : "Show"} the calls</button></div>
+    ${chainOpen === "ours" ? `<div style="height:12px"></div>` + player("ours") : ""}
+    <div class="rules"><span>original → superseded; its status and outcome don't change</span><span>accumulators: reverse and repost in one write</span><span>a void's outcome is void: it decides no lines</span><span>one open replacement at a time</span></div>`;
+  },
+
+  () => {
+    const ex = T.examples.ripple, d = ex.facts.later, n = ex.facts.laterNumber;
+    const cs = last(ex).claims, repl = cs.find((c) => c.kind === "corrected"), orig = cs.find((c) => c.number === repl.replaces);
+    return `<div class="kicker plan">Open · not designed</div><h1>An adjustment can leave a later claim wrong</h1>
+    <p class="lede">A claim's cost share depends on what earlier claims put toward the deductible. Correct an earlier claim, and a later one may have been decided against a balance that is no longer true.</p>
+    <div class="flow">
+      <div class="node"><b>Earlier claim corrected</b><span><span class="mono">${esc(orig.number)}</span> put ${usd(orig.owes)} toward the deductible. Its replacement puts ${usd(repl.owes)} toward a copay instead.</span></div><div class="arrow">balances<br>change</div>
+      <div class="node"><b>Later claim, as it stands</b><span><span class="mono">${esc(n)}</span> still pays</span><div class="big">${usd(d.held)}</div></div><div class="arrow">decided<br>today</div>
+      <div class="node hl"><b>The same claim, decided today</b><span>it would pay</span><div class="big">${usd(d.projected)}</div></div></div>
+    <div class="grid2">
+      <div class="note warn"><b>Today nothing notices.</b> The later claim is not changed, and nothing says it may be wrong. The ${usd(-d.delta)} difference is found only if an examiner knows to look.</div>
+      <div class="note warn"><b>What has to exist.</b> Some way to know which later claims an adjustment may have made wrong, and to see that each one gets looked at and settled. It hasn't been designed.</div></div>
+    <button class="linkish" data-chain="ripple">${chainOpen === "ripple" ? "Hide" : "Show"} the calls</button>
+    ${chainOpen === "ripple" ? `<div style="height:12px"></div>` + player("ripple") : ""}`;
+  },
+
+  () => {
+    const f = T.examples.delta.facts;
+    const rows = [["PAID", "Paid", "issued or cleared: what was paid"], ["RETURNED", "Payment returned", "the payee holds nothing"],
+      ["DENIED", "Denied", "reported with nothing paid"]];
+    const max = Math.max(...rows.flatMap(([k]) => [f[k].held, f[k].projected]), 1);
+    return `<div class="kicker">Adjustments in money</div><h1>The delta: what the payee holds against what's now right</h1>
+    <p class="lede">Each AdjustClaim answers with a delta. An adjusted claim has always been reported, so the delta is measured against what the payee holds from that payment.</p>
+    <div class="box"><div class="dl">${rows.map(([k, t, s]) => `
+      <div class="lab"><b>${esc(t)}</b><small>${esc(s)}</small></div>
+      <div class="pair"><span>payee holds</span><i style="width:${f[k].held / max * 100}%"></i><span>${usd(f[k].held)}</span>
+        <span>replacement</span><i class="proj" style="width:${f[k].projected / max * 100}%"></i><span>${usd(f[k].projected)}</span></div>
+      <div class="d ${f[k].delta < 0 ? "neg" : "pos"}">${signed(f[k].delta)}<small>${f[k].delta < 0 ? "recover" : "pay"}</small></div>`).join("")}</div></div>
+    <div class="note"><span class="live">live</span> · three reported visits, each previewed with PreviewAdjustment against the same replacement (${usd(f.PAID.projected)}). Only a payment the payee still holds produces a recovery.</div>`;
+  },
+
+  () => {
+    const ex = T.examples.remit;
+    return `<div class="kicker">Claims and payments today</div><h1>The 835 nets reversals against new payments</h1>
+    <p class="lede">An 835 covers one payment to one payee from one customer's plan. It reverses what an earlier 835 said, from its own stored copy, and pays the net.</p>
+    <div class="cols3">${ex.remittances.map((r, i) => remittance(r, i + 1)).join("")}</div>
+    <div class="grid2" style="margin-top:6px">
+      <div class="note warn"><b>Not connected yet.</b> Releasing a payment run doesn't build an 835, and building an 835 doesn't mark the claim paid. The example does both by hand; payment state is a stand-in (<span class="mono">internal/claims/payment.go</span>).</div>
+      <div class="note warn"><b>Missing between them:</b> a record of what each claim owes whom, a stored payment run, the payment itself, and recoveries larger than a payment. The next slide proposes them.</div></div>
+    <button class="linkish" data-chain="remit">${chainOpen === "remit" ? "Hide" : "Show"} the calls</button>
+    ${chainOpen === "remit" ? `<div style="height:12px"></div>` + player("remit") : ""}`;
+  },
+
+  () => {
+    const ex = T.examples.remit;
+    const [r1, r2] = ex.remittances;
+    const orig = r1.entries[0], repl = r2.entries.find((e) => !e.reversal);
+    const lines = [
+      [1, orig.number, "claim adjudicated", orig.paid], [2, orig.number, "reversal: replaced", -orig.paid], [2, repl.number, "replacement adjudicated", repl.paid],
+      [3, repl.number, "reversal: voided", -repl.paid],
+    ];
+    const net = (c) => lines.filter((l) => l[0] === c).reduce((a, l) => a + l[3], 0);
+    return `<div class="kicker plan">Proposal · not built</div><h1>Settlement and disbursement</h1>
+    <p class="lede">Claims records what is owed. Finance moves the money. A claim and a payment meet through settlement lines.</p>
+    <div class="lanes">
+      <div class="lane">Claims</div>
+      <div class="flow plan">
+        <div class="node"><b>Claim is adjudicated</b><span>Any outcome, including a void.</span></div><div class="arrow">pure function<br>previewable</div>
+        <div class="node planned"><b>Settlement lines</b><span>Per claim: payee, customer's funds, + or − amount. Insert-only; a replacement or void adds a reversing line.</span></div><div class="arrow">open lines</div>
+        <div class="node planned"><b>Payment cycle</b><span>Nets open lines into one amount per payee per customer. Stored, so "selected" and "released" are facts about the cycle.</span></div></div>
+      <div class="lane">Finance</div>
+      <div class="flow plan">
+        <div class="node planned"><b>Funding</b><span>The cycle's total per customer is requested from the employer, with its claims register.</span></div><div class="arrow">funded</div>
+        <div class="node planned"><b>Payment</b><span>One ACH or check per payee per customer. Issued → cleared, returned or voided; reissue is a new payment.</span></div><div class="arrow">paid</div>
+        <div class="node"><b>835 · stop-loss</b><span>Payment details complete the 835. Paid dates go to stop-loss.</span></div></div></div>
+    <div class="grid2" style="margin-top:16px">
+      <div class="box planned"><h3>The same story as the last slide, as settlement lines</h3>
+        <table class="ledger"><thead><tr><th>Cycle</th><th>Claim</th><th>Line</th><th style="text-align:right">Amount</th></tr></thead><tbody>
+        ${[1, 2, 3].map((c) => lines.filter((l) => l[0] === c).map((l) => `<tr><td>${l[0]}</td><td class="mono">${esc(l[1])}</td><td>${esc(l[2])}</td><td class="amt ${l[3] < 0 ? "neg" : ""}">${signed(l[3])}</td></tr>`).join("") +
+          `<tr class="net"><td colspan="3">Cycle ${c} nets to ${net(c) < 0 ? "a balance the payee owes: no payment" : "one payment"}</td><td class="amt ${net(c) < 0 ? "neg" : ""}">${signed(net(c))}</td></tr>`).join("")}</tbody></table>
+        <p style="margin-top:8px">Amounts are from the live example. Cycles 1 and 2 match 835 #1 and #2; cycle 3 is the one that can't be built today.</p></div>
+      <div><div class="box planned" style="margin-bottom:12px"><h3>What moves</h3>
+          <p><span class="mono">Claim.payment</span> becomes a read of the claim's lines and their payments. Payment state moves to Finance's Payment. "Reported" becomes "a cycle containing the claim's line was released", which is what decides between reopening and replacing. AdjustClaim's delta reads the lines instead of the claim.</p></div>
+        <h3 style="font-size:14px;margin:0 0 8px">Open questions</h3>
+        <details class="q"><summary>Who owns the payment cycle?</summary><p>Proposed: Claims selects and nets (it owns the lines); Finance checks funding, issues and reconciles. The alternative puts the whole cycle in Finance, with Claims only publishing lines.</p></details>
+        <details class="q"><summary>What happens to a negative net?</summary><p>Proposed: no payment; the balance carries forward against the payee's next cycle for that customer and is reported on the 835 as a forwarding balance (PLB). Alternative or fallback: a refund request, with a receivable that ages.</p></details>
+        <details class="q"><summary>Who can be a payee?</summary><p>Proposed for '28: the billing provider's pay-to only. Paying the member (benefits not assigned, member-submitted claims) uses the same line with a different payee, later.</p></details>
+        <details class="q"><summary>Does a returned payment reopen the lines?</summary><p>Proposed: no. What is owed didn't change; Finance reissues, and the lines point at the new payment. "Payee holds nothing" is then read from the payment's state.</p></details>
+        <details class="q"><summary>Funded per cycle, or prefunded?</summary><p>Proposed: per-customer arrangement in Billing & Funding; the cycle asks "is this amount funded?" and doesn't care which. Unfunded customers' payments wait; others in the cycle go.</p></details>
+        <details class="q"><summary>Zero-pay and denied claims</summary><p>Proposed: they get a $0 line, so they ride a cycle onto an 835 like any other claim, as every finalized claim must be reported.</p></details>
+      </div></div>`;
+  },
+];
+const PLANNED = new Set([SLIDES.length - 1]);
+
+// ---------- deck ----------
+
+let at = 0;
+function render() {
+  $("#slide").innerHTML = SLIDES[at]();
+  $("#dots").innerHTML = SLIDES.map((_, i) => `<i class="${i === at ? "on" : ""} ${PLANNED.has(i) ? "plan" : ""}" data-i="${i}"></i>`).join("");
+  $("#count").textContent = `${at + 1} / ${SLIDES.length}`;
+  $("#prev").disabled = at === 0;
+  $("#next").disabled = at === SLIDES.length - 1;
+}
+function go(i) {
+  chainOpen = null;
+  at = Math.min(SLIDES.length - 1, Math.max(0, i));
+  try { history.replaceState(null, "", "#" + (at + 1)); } catch {}
+  render();
+  $(".stage").scrollTop = 0;
+}
+$("#prev").onclick = () => go(at - 1);
+$("#next").onclick = () => go(at + 1);
+document.addEventListener("keydown", (ev) => {
+  if (ev.target.closest("input, textarea")) return;
+  if (ev.key === "ArrowRight") go(at + 1);
+  if (ev.key === "ArrowLeft") go(at - 1);
+});
+
+async function openEndpoint(name) {
+  const e = T.endpoints.flatMap((g) => g.endpoints).find((x) => x.name === name);
+  const body = InterfacePanel.open(name, e.built ? "" : "declared in proto · not implemented");
+  const r = await fetch(`/api/contract?service=${SERVICE}&methods=${encodeURIComponent(name)}`);
+  if (!r.ok) { body.textContent = await r.text(); return; }
+  InterfacePanel.showContract(await r.json());
+}
+
+document.addEventListener("click", (ev) => {
+  const dot = ev.target.closest(".dots i");
+  if (dot) return go(+dot.dataset.i);
+  const call = ev.target.closest("[data-call]");
+  if (call) { sel[call.dataset.ex] = +call.dataset.call; return render(); }
+  const f = ev.target.closest("[data-field]");
+  if (f) { field = f.dataset.field; return render(); }
+  const ch = ev.target.closest("[data-chain]");
+  if (ch) { chainOpen = chainOpen === ch.dataset.chain ? null : ch.dataset.chain; return render(); }
+  const ep = ev.target.closest("[data-endpoint]");
+  if (ep) openEndpoint(ep.dataset.endpoint);
+});
+
+fetch("api/tour").then(async (r) => {
+  if (!r.ok) throw new Error(await r.text());
+  T = await r.json();
+  go((parseInt(location.hash.slice(1), 10) || 1) - 1);
+}).catch((err) => { $("#slide").innerHTML = `<div class="loading">Couldn't run the examples: ${esc(err.message)}</div>`; });
+</script>
+</body>
+</html>

@@ -122,6 +122,7 @@ func TestOpenEnrollmentBuildsMembers(t *testing.T) {
 		"jordan self":       {jordan.GetRelationship(), eligibilityv1.Relationship_RELATIONSHIP_SELF},
 		"jordan subscriber": {jordan.GetSubscriberId(), jordan.GetId()},
 		"jordan card":       {jordan.GetCardId(), "ACM1010101"},
+		"jordan ssn":        {jordan.GetSsn(), "999101001"},
 		"alex card":         {alex.GetCardId(), "ACM1010102"},
 		"riley card":        {riley.GetCardId(), "ACM1010103"},
 		"riley child":       {riley.GetRelationship(), eligibilityv1.Relationship_RELATIONSHIP_CHILD},

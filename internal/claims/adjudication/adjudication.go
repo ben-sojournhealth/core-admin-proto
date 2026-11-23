@@ -46,8 +46,7 @@ import (
 )
 
 // Engine adjudicates a whole claim. It returns the claim with status,
-// adjudication and line adjudications filled in. With DryRun it posts no
-// accumulators and persists nothing.
+// adjudication and line adjudications filled in.
 //
 // The claim must be RECEIVED or PENDED. Finalized claims are never
 // re-adjudicated in place; AdjustClaim adjudicates a replacement claim.
@@ -56,7 +55,6 @@ type Engine interface {
 }
 
 type Options struct {
-	DryRun bool
 	// Reason is recorded on the adjudication run (empty for a first run).
 	Reason string
 }
@@ -155,12 +153,12 @@ type AccumulatorLedger interface {
 	// must be given.
 	Snapshot(ctx context.Context, req SnapshotRequest) (*claimsv1.FamilyAccumulators, error)
 	// Post applies a claim's postings in one conditional write. Called
-	// exactly once per claim, when it is finalized. If the family record
+	// exactly once per claim, when it is adjudicated. If the family record
 	// is no longer at req.Revision, nothing is applied and Post returns
 	// ErrBalancesChanged. Idempotent per claim id, so a retry after a
 	// crash cannot double-post.
 	Post(ctx context.Context, req PostRequest) error
-	// Reverse posts the negation of everything a finalized claim posted,
+	// Reverse posts the negation of everything an adjudicated claim posted,
 	// from the family record's own entries for that claim. Used by
 	// VoidClaim. (AdjustClaim reverses through PostRequest.ReverseClaimID
 	// so the reversal and the replacement's postings are one write.)

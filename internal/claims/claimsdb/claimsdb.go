@@ -26,8 +26,6 @@ var Tables = []store.Table{
 			Why: "A claim's replacements and voids: the replacement-in-progress check on every correction, and lineage."},
 		{Name: "claims_by_member", Path: []string{"memberId"},
 			Why: "The duplicate check on every claim compares it with the member's other claims."},
-		{Name: "claims_by_family", Path: []string{"adjudication", "familyAccumulatorsId"},
-			Why: "When a claim's accumulator postings change, the family's later claims are flagged for review, and found again by the flags they carry."},
 		{Name: "claims_by_payment_state", Path: []string{"payment", "state"},
 			Why: "Releasing the payment run reads the claims selected for it."},
 		{Name: "claims_by_ingestion_job", Path: []string{"sourceRecord", "ingestionJobId"},

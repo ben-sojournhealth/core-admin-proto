@@ -36,12 +36,17 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* top bar */
 .top { height: 54px; display: flex; align-items: center; gap: 16px; padding: 0 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
-.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; text-decoration: none; width: 214px; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; text-decoration: none; margin-right: 6px; }
 .brand svg { width: 24px; height: 24px; }
-.search { flex: 1; max-width: 460px; position: relative; }
+.search { flex: 1; min-width: 150px; max-width: 340px; position: relative; }
 .search input { width: 100%; padding: 7px 12px 7px 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
 .search input:focus { outline: 2px solid var(--brand); outline-offset: -1px; background: var(--panel); }
 .search svg { position: absolute; left: 10px; top: 9px; width: 15px; height: 15px; stroke: var(--muted); }
+.tabs { display: flex; gap: 2px; align-self: stretch; }
+.tab { display: flex; align-items: center; gap: 6px; padding: 0 12px; text-decoration: none; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; border-top: 2px solid transparent; white-space: nowrap; }
+.tab:hover { color: var(--ink); }
+.tab.on { color: var(--brand); border-bottom-color: var(--brand); }
+.tab .n { font-size: 11.5px; font-weight: 650; border-radius: 999px; padding: 0 6px; background: var(--amber-soft); color: var(--amber); }
 .top .right { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--muted); }
 .top .right a { text-decoration: none; }
 .top .right a:hover, .linkbtn:hover { color: var(--brand); }
@@ -58,12 +63,18 @@ nav h4:first-child { margin-top: 2px; }
 .q.kid.on { color: var(--ink); }
 .q .n { margin-left: auto; font-size: 12px; font-weight: 650; min-width: 22px; text-align: center; border-radius: 999px; padding: 0 6px; background: var(--gray-soft); color: var(--muted); }
 .q .n.hot { background: var(--amber-soft); color: var(--amber); }
+.q.off { color: var(--muted); cursor: default; opacity: .75; }
+.q.off:hover { background: none; }
+.q .tag { margin-left: auto; font-size: 11px; color: var(--muted); border: 1px dashed var(--line); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+.q.ext .tag { border: 0; font-size: 13px; }
 main { overflow-y: auto; padding: 20px 26px 40px; }
-@media (max-width: 820px) { .shell { grid-template-columns: 1fr; height: auto; } nav { border-right: 0; border-bottom: 1px solid var(--line); } .brand { width: auto; } }
+@media (max-width: 1000px) { .top { height: auto; flex-wrap: wrap; padding: 8px 14px 0; gap: 8px 14px; } .tabs { order: 5; width: 100%; overflow-x: auto; } .tab { padding: 8px 10px; } .shell { height: auto; } }
+@media (max-width: 820px) { .shell { grid-template-columns: 1fr; height: auto; } nav { border-right: 0; border-bottom: 1px solid var(--line); } }
 
 /* list */
 .head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
 .head h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+.head .tools { margin-left: auto; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
 .tablewrap { overflow-x: auto; }
 table.list { width: 100%; border-collapse: collapse; }
@@ -79,7 +90,8 @@ table.list .r { text-align: right; }
 .chip.todo { background: var(--amber-soft); color: var(--amber); }
 .chip.APPROVED { background: var(--green-soft); color: var(--green); }
 .chip.DENIED { background: var(--red-soft); color: var(--red); }
-.chip.PENDED { background: var(--amber-soft); color: var(--amber); }
+.chip.PENDED, .chip.PARTIALLY_DENIED { background: var(--amber-soft); color: var(--amber); }
+.chip.superseded { background: transparent; border: 1px dashed var(--muted); }
 .age.old { color: var(--red); font-weight: 600; }
 .clear { padding: 56px 20px; text-align: center; color: var(--muted); }
 .clear b { display: block; font-size: 16px; color: var(--ink); margin-bottom: 2px; }
@@ -169,6 +181,57 @@ table.lines .r { text-align: right; }
 .changed { animation: flash 1.6s ease-out; }
 @keyframes flash { from { background: var(--flash); } to { background: transparent; } }
 
+/* the tabs beside Claims */
+table.list.tight td, table.list.tight th { padding: 8px 10px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 16px 0 18px; }
+.tile { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px; text-decoration: none; box-shadow: var(--shadow); }
+.tile small { display: block; font-size: 12px; color: var(--muted); }
+.tile b { font-size: 21px; font-weight: 650; }
+a.tile[href]:hover, a.box:hover { border-color: var(--brand); }
+.tile.on { border-color: var(--brand); background: var(--brand-soft); }
+.boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.boxes.one { grid-template-columns: 1fr; }
+.boxes.wide { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
+.pair span { white-space: nowrap; }
+.box { display: block; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; text-decoration: none; background: var(--panel); }
+.box b { display: block; font-size: 14px; }
+.box small { display: block; font-size: 12px; color: var(--muted); }
+.box .chip { margin-top: 6px; }
+.box.on { border-color: var(--brand); background: var(--brand-soft); }
+.box.dim { opacity: .6; }
+.box.plain { background: var(--bg); }
+.pair { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; margin-top: 6px; }
+.pair > span:first-child { color: var(--muted); }
+.planhead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.planhead b { font-size: 15px; }
+.kv.wide { grid-template-columns: 132px minmax(0, 1fr); }
+summary.more { cursor: pointer; margin-bottom: 8px; }
+.cov { position: relative; height: 8px; border-radius: 4px; background: var(--gray-soft); min-width: 120px; }
+.cov.tall { height: 14px; border-radius: 6px; }
+.cov i { position: absolute; top: 0; bottom: 0; border-radius: inherit; background: var(--brand); }
+.cov i.cobra { background: var(--member); }
+.cov i.paid { background: var(--member); }
+.cov u { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink); border-radius: 1px; }
+.months { display: grid; grid-template-columns: repeat(12, 1fr); font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+.months span { padding-left: 2px; border-left: 1px solid var(--line); }
+.win { display: grid; grid-template-columns: 70px minmax(0, 1fr) 200px; gap: 12px; align-items: center; font-size: 12.5px; margin-bottom: 8px; }
+.win > span:first-child { color: var(--muted); }
+@media (max-width: 700px) { .win { grid-template-columns: 70px minmax(0, 1fr); } .win .sub { grid-column: 2; } }
+.bar.thick { height: 16px; border-radius: 8px; }
+.seg.t0 { background: var(--brand); } .seg.t1 { background: var(--member); } .seg.t2 { background: #7c6fd6; } .seg.t3 { background: #3b82c4; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.legend i { width: 9px; height: 9px; border-radius: 2px; min-width: 0; }
+.legend b { color: var(--ink); }
+.hollow { border: 1px dashed var(--line); border-radius: 10px; padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
+.hollow small { display: block; font-size: 12px; }
+td.dir { font-size: 12px; font-weight: 600; color: var(--muted); }
+td.dir.IN { color: var(--brand); }
+table.list tbody tr:not([data-claim]):not([data-go]):not([data-open]) { cursor: default; }
+table.list tbody tr:not([data-claim]):not([data-go]):not([data-open]):hover td { background: none; }
+.clear a { color: var(--brand); }
+.who a { color: var(--brand); text-decoration: none; }
+
 /* toast + dialog */
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--panel); padding: 10px 16px; border-radius: 10px; font-size: 13.5px; max-width: min(620px, calc(100vw - 32px)); box-shadow: 0 8px 30px rgba(0,0,0,.25); }
 .toast.bad { background: var(--red); color: #fff; }
@@ -191,6 +254,7 @@ dialog input { width: 100%; margin-top: 3px; padding: 6px 9px; font: inherit; co
   <a class="brand" href="#/q/pended">
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="5" cy="17" r="2.6" fill="currentColor" style="color:var(--brand)"/><circle cx="19" cy="7" r="2.6" fill="currentColor" style="color:var(--brand)"/><path d="M7.4 15.6 C 11 13, 13 11, 16.6 8.4" stroke="currentColor" stroke-width="2" stroke-dasharray="2.5 2.5" stroke-linecap="round" style="color:var(--brand)"/></svg>
     Journey</a>
+  <div class="tabs" id="tabs"></div>
   <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     <input id="q" placeholder="Search claims, members, procedures" autocomplete="off"></div>
   <div class="right"><span id="today"></span><a href="../">Architecture</a><button class="linkbtn" id="reset" title="Start over with the two-week workload">Reset</button></div>
@@ -202,19 +266,28 @@ dialog input { width: 100%; margin-top: 3px; padding: 6px 9px; font: inherit; co
 <dialog id="dlg"></dialog>
 <div class="toast" id="toast" hidden></div>
 
+<script src="tabs.js"></script>
 <script>
 "use strict";
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const usd = (c) => (c / 100).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: c % 100 ? 2 : 0 });
 const words = (s) => String(s).toLowerCase().replace(/_/g, " ");
+// A claim carries four separate facts: status (received, pended,
+// adjudicated), outcome (what was decided), superseded (a replacement or
+// void took its place) and payment. decision is the one word for the
+// first two: the status until adjudicated, then the outcome.
+const decision = (c) => c.status === "ADJUDICATED" ? c.outcome : c.status;
+const supersededWord = (c) => c.superseded === "VOID" ? "voided" : c.superseded ? "replaced" : "";
+const OUTCOME_LABEL = { APPROVED: "Approved", PARTIALLY_DENIED: "Partially denied", DENIED: "Denied", VOID: "Void" };
+const decisionChips = (c, style = "") => `<span class="chip ${decision(c)}"${style}>${words(decision(c))}</span>${c.superseded ? ` <span class="chip superseded"${style} title="superseded by ${esc(c.supersededBy || "a later claim")}">${supersededWord(c)}</span>` : ""}`;
 
 const PEND = {
   PRIOR_AUTH_REQUIRED: "Prior authorization", POSSIBLE_DUPLICATE: "Possible duplicate", NO_ELIGIBILITY: "No eligibility",
   NO_BENEFIT_MATCH: "No benefit match", MEMBER_NOT_FOUND: "Member not found", NO_PRICE: "No price",
   COVERAGE_IN_GRACE: "Grace period", NO_TIER: "No network tier", NO_PLAN_VERSION: "No plan version",
   ORIGINAL_NOT_FOUND: "Original not found", ORIGINAL_NOT_FINALIZED: "Original not final",
-  ORIGINAL_IN_PAYMENT_RUN: "Original in payment run", ORIGINAL_HAS_OPEN_REPLACEMENT: "Replacement in progress", REMARK_CODE_REQUIRED: "Remark code missing",
+  REOPENED: "Reopened", ORIGINAL_HAS_OPEN_REPLACEMENT: "Replacement in progress", REMARK_CODE_REQUIRED: "Remark code missing",
 };
 const PEND_HELP = {
   PRIOR_AUTH_REQUIRED: "Confirm the authorization, then override.",
@@ -225,7 +298,7 @@ const PEND_HELP = {
   MEMBER_NOT_FOUND: "Find the member from the patient as sent (see Received). Linking by hand isn't built yet.",
   ORIGINAL_NOT_FOUND: "Find the original with the provider, from the patient control number or the EOP. Linking by hand isn't built yet.",
   ORIGINAL_NOT_FINALIZED: "The claim it corrects hasn't been decided. Resolve that claim first, then reprocess this one.",
-  ORIGINAL_IN_PAYMENT_RUN: "Reprocess after the payment run is released, or pull the original from the run.",
+  REOPENED: "Reopened before anything was reported. Reprocess it when it's ready to be decided again.",
   REMARK_CODE_REQUIRED: "A denial reason needs a remark code on the 835 and doesn't have one. Fix the reporting rules, then reprocess.",
 };
 const pendName = (code) => PEND[code] || words(code);
@@ -235,12 +308,13 @@ let lastQueue = "pended";
 
 const QUEUES = [
   { id: "pended", label: "Pended", work: true, test: (c) => c.status === "PENDED" },
-  { id: "flags", label: "Review flags", work: true, test: (c) => c.flags.some((f) => f.open) },
-  { id: "holds", label: "Payment holds", work: true, test: (c) => !!c.hold },
   { id: "all", label: "All claims", browse: true, test: () => true },
-  { id: "approved", label: "Approved", browse: true, test: (c) => c.status === "APPROVED" },
-  { id: "denied", label: "Denied", browse: true, test: (c) => c.status === "DENIED" },
-  { id: "closed", label: "Adjusted & voided", browse: true, test: (c) => c.status === "ADJUSTED" || c.status === "VOIDED" },
+  // By outcome, for claims still in force; superseded claims and the
+  // voids that cancelled them are together at the end.
+  { id: "approved", label: "Approved", browse: true, test: (c) => c.outcome === "APPROVED" && !c.superseded },
+  { id: "partial", label: "Partially denied", browse: true, test: (c) => c.outcome === "PARTIALLY_DENIED" && !c.superseded },
+  { id: "denied", label: "Denied", browse: true, test: (c) => c.outcome === "DENIED" && !c.superseded },
+  { id: "closed", label: "Replaced & voided", browse: true, test: (c) => !!c.superseded || c.outcome === "VOID" },
 ];
 
 async function get(path) { const r = await fetch(path); if (!r.ok) throw new Error(await r.text()); return r.json(); }
@@ -251,7 +325,8 @@ async function post(path, body) {
 }
 
 async function load() {
-  const st = await get("api/state");
+  const [st, admin] = await Promise.all([get("api/state"), get("api/admin")]);
+  A = admin;
   const next = {};
   fresh = new Set();
   for (const c of st.claims) {
@@ -264,7 +339,9 @@ async function load() {
   await route();
 }
 
-// ---------- routing: #/q/<queue>[/<pend code>], #/claim/<claim number>, #/search/<text> ----------
+// ---------- routing ----------
+// Claims: #/q/<queue>[/<pend code>], #/claim/<claim number>, #/search/<text>.
+// The other tabs' routes are in tabs.js (routeTab).
 // Claim pages are addressed by claim number; the internal id is only used
 // to fetch. An old id link still resolves.
 const claimHref = (c) => "#/claim/" + encodeURIComponent(c.number || c.id);
@@ -274,8 +351,14 @@ function goToClaim(id) {
 }
 async function route() {
   const [, kind, a, b] = location.hash.split("/");
-  renderNav(kind === "q" ? a : null, b);
+  const tab = TAB_OF[kind] || "claims";
+  if (tab !== TAB) { FILTER = ""; $("#q").value = ""; }
+  TAB = tab;
+  renderTabs();
   $("#today").textContent = new Date(S.today).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  D = null;
+  if (await routeTab(kind, a, b)) return;
+  renderNav(kind === "q" ? a : null, b);
   if (kind === "claim") {
     const key = decodeURIComponent(a);
     const c = S.claims.find((x) => x.number === key) || S.claims.find((x) => x.id === key);
@@ -311,6 +394,7 @@ function renderNav(active, code) {
   const kids = Object.keys(codes).sort().map((k) =>
     `<a class="q kid ${active === "pended" && code === k ? "on" : ""}" href="#/q/pended/${k}">${esc(pendName(k))}<span class="n">${codes[k]}</span></a>`).join("");
   $("#nav").innerHTML = `<h4>Work</h4>${link(QUEUES[0])}${kids}${QUEUES.filter((q) => q.work && q.id !== "pended").map(link).join("")}
+    <span class="q off" title="Provider disputes and member appeals aren't built.">Disputes<span class="tag">not built</span></span>
     <h4>Browse</h4>${QUEUES.filter((q) => q.browse).map(link).join("")}`;
 }
 
@@ -319,9 +403,7 @@ function ageDays(c) { return Math.max(0, Math.floor((new Date(S.today) - new Dat
 
 function reasonChip(c, q) {
   if (c.status === "PENDED") return c.pends.map((p) => `<span class="chip todo">${esc(pendName(p.code))}</span>`).join(" ");
-  if (q && q.id === "flags") return `<span class="chip todo">Accumulator change</span>`;
-  if (q && q.id === "holds") return `<span class="chip todo" title="${esc(c.hold)}">Payment hold</span>`;
-  return `<span class="chip ${c.status}">${words(c.status)}</span>`;
+  return decisionChips(c);
 }
 
 function renderList(q, code, isSearch) {
@@ -351,23 +433,23 @@ function renderList(q, code, isSearch) {
 function barHTML(c) {
   const seg = (cls, amount) => amount > 0 ? `<div class="seg ${cls}" style="flex-grow:${amount}"></div>` : "";
   if (c.status === "PENDED" || c.status === "RECEIVED") return `<div class="bar"><div class="seg pended" style="flex-grow:1"></div></div>`;
-  if (c.status === "DENIED") return `<div class="bar"><div class="seg denied" style="flex-grow:1"></div></div>`;
+  if (c.outcome === "DENIED") return `<div class="bar"><div class="seg denied" style="flex-grow:1"></div></div>`;
   return `<div class="bar">${seg("plan", c.paid)}${seg("member", c.memberOwes)}${seg("writeoff", c.charge - c.allowed)}</div>`;
 }
 
 function trackHTML(c) {
   const pay = c.payment ? c.payment.state : "";
   const everPended = c.status === "PENDED" || c.history.some((h) => h.outcome.startsWith("PENDED"));
-  const decided = ["APPROVED", "DENIED", "ADJUSTED", "VOIDED"].includes(c.status);
+  const decided = c.status === "ADJUDICATED";
   const nodes = [["Received", true, ""]];
   if (everPended) nodes.push(["Pended", true, "warn"]);
-  nodes.push([c.status === "DENIED" ? "Denied" : "Approved", decided, c.status === "DENIED" ? "bad" : ""]);
-  if (c.status !== "DENIED") {
+  nodes.push([OUTCOME_LABEL[c.outcome] || "Adjudicated", decided, c.outcome === "DENIED" ? "bad" : c.outcome === "PARTIALLY_DENIED" ? "warn" : ""]);
+  if (c.outcome !== "DENIED" && c.outcome !== "VOID") {
     nodes.push(["Selected", !!pay, ""], ["Paid", ["ISSUED", "CLEARED", "RETURNED", "VOIDED"].includes(pay), ""]);
     nodes.push(pay === "RETURNED" || pay === "VOIDED" ? ["Returned", true, "bad"] : ["Cleared", pay === "CLEARED", ""]);
   }
-  if (c.status === "ADJUSTED") nodes.push(["Adjusted", true, "warn"]);
-  if (c.status === "VOIDED") nodes.push(["Voided", true, "bad"]);
+  if (c.superseded === "REPLACEMENT") nodes.push(["Replaced", true, "warn"]);
+  if (c.superseded === "VOID") nodes.push(["Voided", true, "bad"]);
   return `<div class="track">` + nodes.map(([l, on, cls]) => `<span class="${on ? "on" : ""} ${cls}">${l}</span>`).join("<b></b>") + `</div>`;
 }
 
@@ -381,18 +463,8 @@ function workHTML(c) {
     html += `<div class="work"><h3>${esc(pendName(p.code))}</h3><p>${esc(p.message)}</p>
       <div class="do">${act}</div>${help !== p.message ? `<div class="hint" style="margin-top:8px">${esc(help)}</div>` : ""}</div>`;
   }
-  for (const f of c.flags.filter((f) => f.open)) {
-    html += `<div class="work"><h3>Accumulator change</h3><p>${esc(f.message)}</p>
-      <div class="do"><button class="btn small" data-act="dryadjust">Preview re-adjudication</button>
-        <button class="btn primary small" data-act="adjust">Adjust…</button>
-        <input data-flagnote placeholder="Note"><button class="btn small" data-clearflag>No change needed</button></div></div>`;
-  }
-  if (c.hold) {
-    html += `<div class="work"><h3>Payment hold</h3><p>${esc(c.hold)}</p>
-      <div class="do"><input data-holdnote placeholder="Note"><button class="btn primary small" data-releasehold>Release hold</button></div></div>`;
-  }
-  if (c.status === "ADJUSTED") html += `<div class="note">Replaced by a later claim.</div>`;
-  if (c.status === "VOIDED") html += `<div class="note">Voided.</div>`;
+  if (c.superseded === "REPLACEMENT") html += `<div class="note">Superseded: replaced by ${esc(c.supersededBy || "a later claim")}. Its own decision stands as history.</div>`;
+  if (c.superseded === "VOID") html += `<div class="note">Superseded: voided by ${esc(c.supersededBy || "a later claim")}. Its own decision stands as history.</div>`;
   for (const l of c.lines) if (l.denial) html += `<div class="note red">${esc(l.denial)}</div>`;
   return html;
 }
@@ -467,10 +539,10 @@ function renderClaim() {
   $("#main").innerHTML = `
     <a class="back" href="#/q/${esc(lastQueue)}">← ${esc(backQ ? (lastQueue.includes("/") ? pendName(lastQueue.split("/")[1]) : backQ.label) : "Back")}</a>
     <div class="claimhead">
-      <div><h1 class="num">${esc(c.number)} <span class="chip ${c.frequency === "VOID" ? "" : c.status}" style="vertical-align:4px">${c.frequency === "VOID" ? "void" : words(c.status)}</span></h1>
+      <div><h1 class="num">${esc(c.number)} ${decisionChips(c, ` style="vertical-align:4px"`)}</h1>
         ${corrHTML(c)}
         <div class="who">${[c.member, D.card, c.provider, c.dos].filter(Boolean).map(esc).join(" · ")}</div></div>
-      <div class="tools">${final ? `<button class="btn" data-act="adjust">Adjust…</button><button class="btn" data-act="void">Void…</button>` : ""}</div>
+      <div class="tools">${final ? `<button class="btn" data-act="adjust">Adjust…</button><button class="btn" data-act="void">Void…</button>` : ""}${c.actions.includes("reopen") ? `<button class="btn" data-act="reopen" title="Nothing has been reported yet: back to pended, to be re-run in place">Reopen…</button>` : ""}</div>
     </div>
     <div class="cols">
       <div>
@@ -508,8 +580,8 @@ async function act(a, quiet) {
   let res;
   try { res = await post("api/action", a); } catch (e) { toast(e.message, true); return null; }
   if (!res.ok) { toast(res.error, true); return res; }
-  if (!quiet && !a.dryRun) toast(summary(res));
-  if (!a.dryRun) await load();
+  if (!quiet && !a.preview) toast(summary(res));
+  if (!a.preview) await load();
   return res;
 }
 
@@ -533,25 +605,16 @@ document.addEventListener("click", async (ev) => {
     return act({ type: "reprocess", claimId: c.id, reason: note, resolve: [{ code: p.code, line: p.line }] });
   }
   if (t.closest("[data-recheck]")) return act({ type: "reprocess", claimId: c.id, reason: "Rechecked after data update" });
-  if (t.closest("[data-clearflag]")) {
-    const note = $("[data-flagnote]").value.trim();
-    if (!note) return toast("Add a note saying why no change is needed.", true);
-    return act({ type: "clearFlag", claimId: c.id, reason: note });
-  }
-  if (t.closest("[data-releasehold]")) {
-    const note = $("[data-holdnote]").value.trim();
-    if (!note) return toast("Add a note for the release.", true);
-    return act({ type: "releaseHold", claimId: c.id, reason: note });
-  }
   const a = t.closest("[data-act]");
   if (!a) return;
   if (a.dataset.act === "adjust") return adjustDialog(c);
   if (a.dataset.act === "dryadjust") {
-    const res = await act({ type: "adjust", claimId: c.id, reason: "Preview", dryRun: true });
+    const res = await act({ type: "adjust", claimId: c.id, reason: "Preview", preview: true });
     if (res && res.ok) showDelta(res);
     return;
   }
   if (a.dataset.act === "void") return voidDialog(c);
+  if (a.dataset.act === "reopen") return reopenDialog(c);
 });
 
 const dlg = $("#dlg");
@@ -576,7 +639,7 @@ function showDelta(res) {
   const d = res.delta, p = res.preview;
   dialog(`<form><h3>If re-adjudicated today</h3>
     <div class="money" style="grid-template-columns:repeat(3,1fr)">
-      <div><small>Outcome</small><b style="font-size:15px"><span class="chip ${p.status}">${words(p.status)}</span></b></div>
+      <div><small>Outcome</small><b style="font-size:15px"><span class="chip ${decision(p)}">${words(decision(p))}</span></b></div>
       <div><small>Member owes</small><b class="num">${usd(p.memberOwes)}</b></div>
       <div><small>Plan pays</small><b class="num">${usd(p.paid)}</b></div></div>
     <div class="delta"><b class="num">${usd(d.delta)}</b> <span class="muted">${d.delta < 0 ? "to recover" : d.delta > 0 ? "more to pay" : "no change"} · provider holds ${usd(d.original)} (${words(d.basis)})</span></div>
@@ -604,19 +667,32 @@ function adjustDialog(c) {
       const a = { type: "adjust", claimId: c.id, reason: d.reason };
       if (Object.keys(spec).length) a.claim = spec;
       if (mode === "dry") {
-        a.dryRun = true;
+        a.preview = true;
         const res = await act(a, true);
         if (!res || !res.ok) return res ? res.error : "Request failed.";
         const x = res.delta, p = res.preview;
-        $("#preview").innerHTML = `<div class="delta"><span class="chip ${p.status}">${words(p.status)}</span> plan pays <b class="num">${usd(p.paid)}</b>
-          · <span class="num">${usd(x.delta)}</span> <span class="muted">${x.delta < 0 ? "to recover" : x.delta > 0 ? "more to pay" : "no change"}</span>
-          ${x.flagged.length ? `<div class="sub" style="margin-top:4px">Would flag ${x.flagged.map(esc).join(", ")} for review</div>` : ""}</div>`;
+        $("#preview").innerHTML = `<div class="delta"><span class="chip ${decision(p)}">${words(decision(p))}</span> plan pays <b class="num">${usd(p.paid)}</b>
+          · <span class="num">${usd(x.delta)}</span> <span class="muted">${x.delta < 0 ? "to recover" : x.delta > 0 ? "more to pay" : "no change"}</span></div>`;
         return "keep";
       }
       const res = await act(a);
       if (!res || !res.ok) return res ? res.error : "Request failed.";
       if (res.claimId) goToClaim(res.claimId);
       return "";
+    });
+}
+
+// Before a claim's payment run is released nothing has been reported, so
+// it is reopened and re-run in place: no new version.
+function reopenDialog(c) {
+  dialog(`<form><h3>Reopen ${esc(c.number)}</h3>
+    <p class="sub">Back to pended${c.payment ? ", out of the payment run" : ""}. Its accumulator postings are reversed. Reprocess it to decide it again.</p>
+    <label>Reason<input name="reason" required placeholder="e.g. Visit level in question"></label>
+    <div class="formerr"></div>
+    <div class="actions"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="go">Reopen claim</button></div></form>`,
+    async (d) => {
+      const res = await act({ type: "reopen", claimId: c.id, reason: d.reason });
+      return !res ? "Request failed." : res.ok ? "" : res.error;
     });
 }
 
@@ -634,6 +710,13 @@ function voidDialog(c) {
 
 $("#q").addEventListener("input", (ev) => {
   const v = ev.target.value;
+  // Members and Network filter their own lists; elsewhere it searches claims.
+  if (TAB === "members" || TAB === "network") {
+    FILTER = v;
+    const list = "#/" + TAB, [, kind] = location.hash.split("/");
+    if (kind === "member" || kind === "provider" || (TAB === "network" && location.hash.endsWith("/networks"))) return void (location.hash = list);
+    return void route();
+  }
   location.hash = v ? "#/search/" + encodeURIComponent(v) : "#/q/" + lastQueue;
 });
 $("#reset").onclick = async () => { await post("api/reset"); prevClaims = {}; S = null; location.hash = "#/q/pended"; await load(); toast("Back to Monday morning: two weeks of claims, fresh queues."); };

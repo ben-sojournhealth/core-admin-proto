@@ -17,18 +17,16 @@ import (
 // state back onto claims (Claim.payment). Payment runs, remittance
 // records and netting of recoveries are simplified to log lines.
 
-// SelectForPayment puts finalized, unpaid claims with no payment hold into
+// SelectForPayment puts current, unpaid claims into
 // the (single, unreleased) payment run. With no ids it selects every
 // eligible claim.
 func (s *Service) SelectForPayment(ctx context.Context, ids []string) ([]string, error) {
 	eligible := func(c *claimsv1.Claim) string {
 		switch {
-		case !finalized(c.GetStatus()):
-			return "is " + statusName(c.GetStatus()) + ", not finalized"
+		case !current(c):
+			return "is " + standing(c) + ", not an adjudicated claim in force"
 		case c.GetPayment() != nil:
 			return "already has a payment"
-		case c.GetPaymentHold() != nil:
-			return "is on payment hold: " + c.GetPaymentHold().GetReason()
 		}
 		return ""
 	}
@@ -45,7 +43,6 @@ func (s *Service) SelectForPayment(ctx context.Context, ids []string) ([]string,
 			picked = append(picked, c)
 		}
 	} else {
-		var skipped []*claimsv1.Claim
 		all, _, err := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 10_000})
 		if err != nil {
 			return nil, err
@@ -53,12 +50,7 @@ func (s *Service) SelectForPayment(ctx context.Context, ids []string) ([]string,
 		for _, c := range all {
 			if eligible(c) == "" {
 				picked = append(picked, c)
-			} else if finalized(c.GetStatus()) && c.GetPaymentHold() != nil && c.GetPayment() == nil {
-				skipped = append(skipped, c)
 			}
-		}
-		for _, c := range skipped {
-			s.logf(ctx, "%s skipped: on payment hold (%s).", s.ref(c), c.GetPaymentHold().GetReason())
 		}
 		if len(picked) == 0 {
 			return nil, rejectf("no claims are eligible for payment")
@@ -158,8 +150,8 @@ func (s *Service) RecordPaymentEvent(ctx context.Context, claimID, event string)
 		if state != claimsv1.PaymentState_PAYMENT_STATE_RETURNED && state != claimsv1.PaymentState_PAYMENT_STATE_VOIDED {
 			return nil, rejectf("%s has no returned or voided payment to reissue", s.ref(c))
 		}
-		if !finalized(c.GetStatus()) {
-			return nil, rejectf("%s is %s; its payment is not reissued", s.ref(c), statusName(c.GetStatus()))
+		if !current(c) {
+			return nil, rejectf("%s is %s; its payment is not reissued", s.ref(c), standing(c))
 		}
 		s.remittances++
 		c.Payment.State = issued

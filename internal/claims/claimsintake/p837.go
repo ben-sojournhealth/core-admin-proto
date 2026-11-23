@@ -37,18 +37,6 @@ type ParsedClaim struct {
 	First, Last int
 }
 
-// subscriber is the 2000B loop, with the 2000C patient if one was sent.
-type subscriber struct {
-	card        string
-	name        *commonv1.PersonName
-	born        *commonv1.Date
-	gender      string
-	patient     *commonv1.PersonName
-	patientBorn *commonv1.Date
-	patientSex  string
-	dependent   bool
-}
-
 // Map837P maps one transaction set. It returns the claims and the errors
 // that make the set unreadable; with any errors the set is rejected and
 // the claims are discarded.
@@ -59,16 +47,18 @@ func Map837P(d x12.Delims, set *x12.Set) ([]ParsedClaim, []x12ack.Error) {
 		cur  *ParsedClaim
 		line *claimsv1.ClaimLine
 		// Loop state.
-		level            string // HL03 of the current HL: 20, 22 or 23
-		billing          *claimsv1.ProviderRef
-		sub              subscriber
+		level   string // HL03 of the current HL: 20, 22 or 23
+		billing *claimsv1.ProviderRef
+		// The 2010BA subscriber, and the 2010CA patient when the claims
+		// are under a 2000C patient loop.
+		sub, patient     *claimsv1.SubmittedPerson
 		chReceived       *timestamppb.Timestamp
 		lastNM1          string
 		claimPOS         string
 		claimDOS         *commonv1.DateRange
 		lastClaimSegment int
 	)
-	billing = &claimsv1.ProviderRef{}
+	billing, sub = &claimsv1.ProviderRef{}, &claimsv1.SubmittedPerson{}
 	bad := func(s x12.Segment, el int, code, format string, args ...any) {
 		errs = append(errs, x12ack.Bad(s, el, code, format, args...))
 	}
@@ -135,10 +125,9 @@ func Map837P(d x12.Delims, set *x12.Set) ([]ParsedClaim, []x12ack.Error) {
 			case "20":
 				billing = &claimsv1.ProviderRef{}
 			case "22":
-				sub = subscriber{}
+				sub, patient = &claimsv1.SubmittedPerson{}, nil
 			case "23":
-				sub.dependent = true
-				sub.patient, sub.patientBorn, sub.patientSex = nil, nil, ""
+				patient = &claimsv1.SubmittedPerson{}
 			default:
 				bad(s, 3, "7", "HL03 %q is not a hierarchical level of the 837P", s.E(3))
 			}
@@ -154,12 +143,14 @@ func Map837P(d x12.Delims, set *x12.Set) ([]ParsedClaim, []x12ack.Error) {
 					bad(s, 9, "7", "billing provider NPI %q is not a 10-digit NPI", s.E(9))
 				}
 			case "IL": // 2010BA subscriber
-				sub.card, sub.name = s.E(9), name
+				sub.MemberNumber, sub.Name = s.E(9), name
 				if s.E(9) == "" {
 					bad(s, 9, "1", "subscriber has no member id")
 				}
 			case "QC": // 2010CA patient
-				sub.patient = name
+				if patient != nil {
+					patient.Name = name
+				}
 			case "82": // 2310B rendering provider (claim level only)
 				if cur != nil && line == nil {
 					cur.Claim.RenderingProvider = &claimsv1.ProviderRef{Npi: s.E(9), Name: strings.TrimSpace(s.E(4) + " " + s.E(3))}
@@ -177,15 +168,21 @@ func Map837P(d x12.Delims, set *x12.Set) ([]ParsedClaim, []x12ack.Error) {
 			}
 			switch lastNM1 {
 			case "IL":
-				sub.born, sub.gender = born, s.E(3)
+				sub.BirthDate, sub.GenderCode = born, s.E(3)
 			case "QC":
-				sub.patientBorn, sub.patientSex = born, s.E(3)
+				if patient != nil {
+					patient.BirthDate, patient.GenderCode = born, s.E(3)
+				}
 			}
 
 		case "REF":
 			switch {
 			case level == "20" && cur == nil && s.E(1) == "EI":
 				billing.Tin = s.E(2)
+			case cur == nil && s.E(1) == "SY" && lastNM1 == "IL": // 2010BA
+				sub.Ssn = s.E(2)
+			case cur == nil && s.E(1) == "SY" && lastNM1 == "QC" && patient != nil: // 2010CA
+				patient.Ssn = s.E(2)
 			case cur != nil && line == nil && s.E(1) == "F8":
 				cur.Claim.PayerClaimControlNumber = s.E(2)
 			case cur != nil && line == nil && s.E(1) == "D9":
@@ -212,16 +209,13 @@ func Map837P(d x12.Delims, set *x12.Set) ([]ParsedClaim, []x12ack.Error) {
 				Type:                      claimsv1.ClaimType_CLAIM_TYPE_PROFESSIONAL,
 				Source:                    claimsv1.ClaimSource_CLAIM_SOURCE_EDI_837,
 				PatientControlNumber:      s.E(1),
-				MemberCardId:              sub.card,
+				MemberCardId:              sub.GetMemberNumber(),
 				BillingProvider:           b,
 				ClearinghouseReceivedTime: chReceived,
-				SubmittedPatient: &claimsv1.SubmittedPatient{
-					CardId: sub.card, Name: sub.name, BirthDate: sub.born, GenderCode: sub.gender,
-				},
+				SubmittedSubscriber:       proto.Clone(sub).(*claimsv1.SubmittedPerson),
 			}
-			if sub.dependent {
-				c.SubmittedPatient.Name, c.SubmittedPatient.BirthDate, c.SubmittedPatient.GenderCode = sub.patient, sub.patientBorn, sub.patientSex
-				c.SubmittedPatient.DependentLoop = true
+			if patient != nil {
+				c.SubmittedPatient = proto.Clone(patient).(*claimsv1.SubmittedPerson)
 			}
 			cur.Claim = c
 			if s.E(1) == "" {

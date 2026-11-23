@@ -64,7 +64,8 @@ go run ./cmd/demo -addr localhost:8081   # a second demo, e.g. from another work
 
 ## Open, decided later with the user
 
-- **Claim workflow:** holds, pend queues, routing, review flags. The existing review flags weren't designed with the user.
+- **Claim workflow:** pend queues, routing. There is no claim-level payment hold: a claim not yet reported is reopened (`ReopenClaim`); withholding money for reasons about the payee or funding belongs with settlement.
+- **Later claims after an adjustment.** When an adjustment or void changes a family's accumulators, claims adjudicated after it may be wrong. Nothing detects or tracks that today, on purpose: an earlier attempt was removed. The user will design it; don't add a mechanism, a field on the claim, or a name for it.
 - **Per-table business keys.**
 - **Duplicate detection.**
 - **Adjudication step order and dependencies:** the adjudication map lists steps without an order.

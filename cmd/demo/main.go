@@ -33,6 +33,7 @@ var webFS embed.FS
 
 // Each demo registers its routes on the mux.
 var registrations = []func(*http.ServeMux) error{
+	registerClaims,
 	registerAdjudication,
 	registerLifecycle,
 	registerJourney,

@@ -203,10 +203,10 @@ func TestList(t *testing.T) {
 	for i := range 450 {
 		c := &claimsv1.Claim{
 			Id: fmt.Sprintf("clm_%04d", i), ClaimNumber: fmt.Sprintf("2607%d-E-%05d", i%3, i), MemberId: fmt.Sprintf("mem_%d", i%7),
-			Status: claimsv1.ClaimStatus(1 + i%4),
+			Status: claimsv1.ClaimStatus(1 + i%3),
 		}
 		if i%5 == 0 {
-			c.ReviewFlags = []*claimsv1.ReviewFlag{{Code: "X", SourceClaimId: fmt.Sprintf("src_%d", i%2)}}
+			c.PendOverrides = []*claimsv1.PendOverride{{Code: "X", ResolvedBy: fmt.Sprintf("src_%d", i%2)}}
 		}
 		saved, err := repos.Claims.Create(ctx, c)
 		if err != nil {
@@ -242,8 +242,8 @@ func TestList(t *testing.T) {
 		"eq":       {store.ListOptions[*claimsv1.Claim]{Where: []store.Cond{store.Eq("mem_3", "memberId")}}, 63},
 		"moved":    {store.ListOptions[*claimsv1.Claim]{Where: []store.Cond{store.Eq("mem_moved", "memberId")}}, 1},
 		"prefix":   {store.ListOptions[*claimsv1.Claim]{Where: []store.Cond{store.Prefix("26071-", "claimNumber")}}, 150},
-		"contains": {store.ListOptions[*claimsv1.Claim]{Where: []store.Cond{store.Contains(`{"reviewFlags":[{"sourceClaimId":"src_1"}]}`)}}, 45},
-		"enum":     {store.ListOptions[*claimsv1.Claim]{Where: []store.Cond{store.Eq("CLAIM_STATUS_DENIED", "status")}}, 112},
+		"contains": {store.ListOptions[*claimsv1.Claim]{Where: []store.Cond{store.Contains(`{"pendOverrides":[{"resolvedBy":"src_1"}]}`)}}, 45},
+		"enum":     {store.ListOptions[*claimsv1.Claim]{Where: []store.Cond{store.Eq("CLAIM_STATUS_ADJUDICATED", "status")}}, 150},
 		"filtered": {store.ListOptions[*claimsv1.Claim]{PageSize: 30, Filter: func(c *claimsv1.Claim) bool { return strings.HasSuffix(c.GetId(), "3") }}, 45},
 		"all":      {store.ListOptions[*claimsv1.Claim]{PageSize: 1000}, 450},
 	} {

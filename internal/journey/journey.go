@@ -1,7 +1,8 @@
-// Package journey backs the Journey demo: the claims examiner's
-// workbench. It runs its own sandbox, separate from Claims Lifecycle,
-// pre-loaded with two weeks of claims for several families so the work
-// queues start with real work in them.
+// Package journey backs the Journey demo, the admin portal: the claims
+// examiner's workbench, and tabs for members, employers, the network,
+// finance and files (admin.go). It runs its own sandbox, separate from
+// Claims Lifecycle, pre-loaded with two weeks of claims for several
+// families so the work queues start with real work in them.
 package journey
 
 import (
@@ -145,7 +146,7 @@ var workload = []struct {
 		{Type: "release"},
 	}},
 	{6, []sim.Action{
-		with(claim("mem_1001", "70551", 900, "2026-03-05"), func(c *sim.ClaimSpec) { c.Auth = "PA-1001" }), // 26065-A-00001 flagged on the 12th
+		with(claim("mem_1001", "70551", 900, "2026-03-05"), func(c *sim.ClaimSpec) { c.Auth = "PA-1001" }), // 26065-A-00001: decided against the deductible the surgery met, before the surgery was adjusted on the 12th
 	}},
 	{9, []sim.Action{
 		claim("mem_1002", "70551", 900, "2026-03-06"), // 26068-A-00001 pend: prior auth
@@ -163,9 +164,9 @@ var workload = []struct {
 	}},
 	{13, []sim.Action{
 		with(claim("mem_3001", "29881", 2500, "2026-03-11"), func(c *sim.ClaimSpec) { c.Provider = ortiz }), // 26072-A-00001 out-of-network
-		claim("mem_1003", "99214", 250, "2026-03-12"),                                                       // 26072-A-00002 pulled from payment, on hold
+		claim("mem_1003", "99214", 250, "2026-03-12"),                                                       // 26072-A-00002 reopened out of the payment run
 		{Type: "select", ClaimID: "26072-A-00002"},
-		{Type: "pull", ClaimID: "26072-A-00002", Reason: "Billing provider's TIN is under review"},
+		{Type: "reopen", ClaimID: "26072-A-00002", Reason: "Visit level in question"},
 	}},
 	{16, []sim.Action{
 		claim("mem_2001", "70551", 900, "2026-03-13"), // 26075-A-00001 pend: prior auth

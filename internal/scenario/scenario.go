@@ -127,6 +127,28 @@ func status(id, st string) Check {
 	})
 }
 
+// outcome checks what an adjudicated claim decided: APPROVED,
+// PARTIALLY_DENIED, DENIED or VOID.
+func outcome(id, o string) Check {
+	return onClaim(fmt.Sprintf("%s is adjudicated: %s", id, o), id, func(c *claimsv1.Claim) error {
+		if err := want(strings.TrimPrefix(c.GetStatus().String(), "CLAIM_STATUS_"), "ADJUDICATED"); err != nil {
+			return err
+		}
+		return want(strings.TrimPrefix(c.GetAdjudication().GetOutcome().String(), "CLAIM_OUTCOME_"), o)
+	})
+}
+
+// superseded checks that a claim was superseded by a REPLACEMENT or a
+// VOID.
+func superseded(id, by string) Check {
+	return onClaim(fmt.Sprintf("%s is superseded by a %s", id, strings.ToLower(by)), id, func(c *claimsv1.Claim) error {
+		if c.GetSupersededBy() == nil {
+			return errors.New("not superseded")
+		}
+		return want(strings.TrimPrefix(c.GetSupersededBy().GetFrequency().String(), "CLAIM_FREQUENCY_"), by)
+	})
+}
+
 func pays(id string, cents int64) Check {
 	return onClaim(fmt.Sprintf("%s: plan pays %s", id, claims.USD(cents)), id, func(c *claimsv1.Claim) error {
 		return wantUSD(c.GetAdjudication().GetTotalPaid().GetCents(), cents)
@@ -194,32 +216,6 @@ func noPayment(id string) Check {
 	})
 }
 
-func hold(id string, on bool) Check {
-	text := id + " is on payment hold"
-	if !on {
-		text = id + " is not on payment hold"
-	}
-	return onClaim(text, id, func(c *claimsv1.Claim) error {
-		return want(c.GetPaymentHold() != nil, on)
-	})
-}
-
-func openFlags(id string, n int) Check {
-	text := fmt.Sprintf("%s has %d open review flag(s)", id, n)
-	if n == 0 {
-		text = id + " has no open review flags"
-	}
-	return onClaim(text, id, func(c *claimsv1.Claim) error {
-		got := 0
-		for _, f := range c.GetReviewFlags() {
-			if f.GetClearedTime() == nil {
-				got++
-			}
-		}
-		return want(got, n)
-	})
-}
-
 func noClaim(id string) Check {
 	return Check{Text: id + " was not saved", fn: func(s *sim.Sim, _ *sim.Result) error {
 		if _, err := s.Repos.Claims.Get(context.Background(), id); !errors.Is(err, store.ErrNotFound) {
@@ -278,8 +274,8 @@ func preview(st string, paid, member int64) Check {
 			if r.Preview == nil {
 				return errors.New("no projection returned")
 			}
-			if r.Preview.Status != st || r.Preview.Paid != paid || r.Preview.Member_ != member {
-				return fmt.Errorf("got %s, pays %s, owes %s", r.Preview.Status, claims.USD(r.Preview.Paid), claims.USD(r.Preview.Member_))
+			if r.Preview.Outcome != st || r.Preview.Paid != paid || r.Preview.Member_ != member {
+				return fmt.Errorf("got %s, pays %s, owes %s", r.Preview.Outcome, claims.USD(r.Preview.Paid), claims.USD(r.Preview.Member_))
 			}
 			return nil
 		},

@@ -120,7 +120,8 @@ table.ledger td:last-child, table.ledger th:last-child { text-align: right; }
 .figs div b { font-weight: 600; }
 .badge { display: inline-block; font-size: 11.5px; font-weight: 650; padding: 1px 7px; border-radius: 999px; background: var(--gray-soft); color: var(--muted); margin-left: 5px; vertical-align: 1px; white-space: nowrap; }
 .badge.APPROVED { background: var(--green-soft); color: var(--green); }
-.badge.PENDED, .badge.hold, .badge.flag { background: var(--amber-soft); color: var(--amber); }
+.badge.PENDED, .badge.PARTIALLY_DENIED { background: var(--amber-soft); color: var(--amber); }
+.badge.superseded { background: transparent; border: 1px dashed var(--muted); }
 .badge.DENIED { background: var(--red-soft); color: var(--red); }
 .badge.RECEIVED, .badge.pay { background: var(--blue-soft); color: var(--blue); }
 .body { padding: 2px 14px 14px; }
@@ -192,7 +193,7 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px solid var(--accent)
 <header>
   <h1><a class="crumb" href="../">Architecture</a> <span class="sep">/</span> Claims Lifecycle</h1>
   <button class="btn primary" id="b-new">New claim</button>
-  <button class="btn" id="b-select" title="Select every finalized, unpaid claim into the payment run">Run payment selection</button>
+  <button class="btn" id="b-select" title="Select every adjudicated, unpaid claim still in force into the payment run">Run payment selection</button>
   <button class="btn" id="b-release" title="Issue payment for every selected claim">Release payment run</button>
   <button class="btn" id="b-data">Change data</button>
   <button class="btn danger" id="b-reset">Reset</button>
@@ -226,6 +227,13 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 // Whole dollars drop the cents: $1,200 not $1,200.00.
 const usd = (c) => (c / 100).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: c % 100 ? 2 : 0 });
 const words = (s) => String(s).toLowerCase().replace(/_/g, " ");
+// A claim carries four separate facts: status (received, pended,
+// adjudicated), outcome (what was decided), superseded (a replacement or
+// void took its place) and payment. decision is the one word for the
+// first two: the status until adjudicated, then the outcome.
+const decision = (c) => c.status === "ADJUDICATED" ? c.outcome : c.status;
+const supersededWord = (c) => c.superseded === "VOID" ? "voided" : c.superseded ? "replaced" : "";
+const OUTCOME_LABEL = { APPROVED: "Approved", PARTIALLY_DENIED: "Partially denied", DENIED: "Denied", VOID: "Void" };
 
 async function api(path, body) {
   const r = await fetch(path, { method: body === undefined && path === "api/state" ? "GET" : "POST",
@@ -336,11 +344,9 @@ function renderCenter() {
 
 function badges(c) {
   let b = "";
-  if (c.hold) b += `<span class="badge hold">payment hold</span>`;
-  const flags = c.flags.filter((f) => f.open).length;
-  if (flags) b += `<span class="badge flag">review flag</span>`;
   if (c.frequency === "REPLACEMENT") b += `<span class="badge">replaces ${esc(c.originalLabel)}</span>`;
   if (c.frequency === "VOID") b += `<span class="badge">voids ${esc(c.originalLabel)}</span>`;
+  if (c.superseded) b += `<span class="badge superseded">${supersededWord(c)} by ${esc(c.supersededBy)}</span>`;
   return b;
 }
 
@@ -350,7 +356,7 @@ function barHTML(c) {
   const seg = (cls, amount, label) => amount > 0
     ? `<div class="seg ${cls}" style="flex-grow:${amount}" title="${label} ${usd(amount)}">${amount / c.charge > 0.12 ? usd(amount) : ""}</div>` : "";
   if (c.status === "PENDED" || c.status === "RECEIVED") return `<div class="bar"><div class="seg pended" style="flex-grow:1">${c.pends.map((p) => words(p.code)).join(", ")}</div></div>`;
-  if (c.status === "DENIED") return `<div class="bar"><div class="seg denied" style="flex-grow:1">denied</div></div>`;
+  if (c.outcome === "DENIED") return `<div class="bar"><div class="seg denied" style="flex-grow:1">denied</div></div>`;
   if (c.frequency === "VOID") return "";
   const shares = {};
   for (const l of c.lines) for (const s of l.shares) shares[s.type] = (shares[s.type] || 0) + s.amount;
@@ -361,19 +367,19 @@ function barHTML(c) {
 function trackHTML(c) {
   const pay = c.payment ? c.payment.state : "";
   const everPended = c.status === "PENDED" || c.history.some((h) => h.outcome.startsWith("PENDED"));
-  const decided = ["APPROVED", "DENIED", "ADJUSTED", "VOIDED"].includes(c.status);
+  const decided = c.status === "ADJUDICATED";
   const nodes = [["Received", true, ""]];
   if (everPended) nodes.push(["Pended", true, "warn"]);
-  nodes.push([c.status === "DENIED" ? "Denied" : "Approved", decided, c.status === "DENIED" ? "bad" : ""]);
+  nodes.push([OUTCOME_LABEL[c.outcome] || "Adjudicated", decided, c.outcome === "DENIED" ? "bad" : c.outcome === "PARTIALLY_DENIED" ? "warn" : ""]);
   nodes.push(["Selected", !!pay, ""], ["Paid", ["ISSUED", "CLEARED", "RETURNED", "VOIDED"].includes(pay), ""]);
   nodes.push(pay === "RETURNED" || pay === "VOIDED" ? ["Returned", true, "bad"] : ["Cleared", pay === "CLEARED", ""]);
-  if (c.status === "ADJUSTED") nodes.push(["Adjusted", true, "warn"]);
-  if (c.status === "VOIDED") nodes.push(["Voided", true, "bad"]);
+  if (c.superseded === "REPLACEMENT") nodes.push(["Replaced", true, "warn"]);
+  if (c.superseded === "VOID") nodes.push(["Voided", true, "bad"]);
   return `<div class="track">` + nodes.map(([label, on, cls]) => `<span class="${on ? "on" : ""} ${cls}">${label}</span>`).join("<b></b>") + `</div>`;
 }
 
 function claimHTML(c) {
-  const retired = c.status === "ADJUSTED" || c.status === "VOIDED";
+  const retired = !!c.superseded;
   const decided = c.status !== "PENDED" && c.status !== "RECEIVED";
   const fig = (label, v) => `<div><small>${label}</small><b class="num">${v}</b></div>`;
   let html = `<div class="claim ${retired ? "retired" : ""} ${fresh.claims.has(c.id) ? "changed" : ""}">
@@ -387,12 +393,8 @@ function claimHTML(c) {
 
   html += `<div class="body">`;
   for (const p of c.pends) html += `<div class="note amber"><b>Pended: ${esc(p.code)}</b>. ${esc(p.message)}${p.overridable ? "" : " <i>(caused by data; an examiner cannot override it)</i>"}</div>`;
-  if (c.hold) html += `<div class="note amber"><b>Payment hold.</b> ${esc(c.hold)}</div>`;
-  for (const f of c.flags) html += f.open
-    ? `<div class="note amber"><b>Review flag.</b> ${esc(f.message)}</div>`
-    : `<div class="note gray">Review flag cleared: ${esc(f.note)}</div>`;
-  if (c.status === "ADJUSTED") html += `<div class="note gray">Replaced by a later claim. Its accumulator postings were reversed.</div>`;
-  if (c.status === "VOIDED") html += `<div class="note gray">Voided. Its accumulator postings were reversed.</div>`;
+  if (c.superseded === "REPLACEMENT") html += `<div class="note gray">Superseded: replaced by ${esc(c.supersededBy)}. Its accumulator postings were reversed; its own decision stands as history.</div>`;
+  if (c.superseded === "VOID") html += `<div class="note gray">Superseded: voided by ${esc(c.supersededBy)}. Its accumulator postings were reversed; its own decision stands as history.</div>`;
 
   for (const l of c.lines) {
     html += `<h4>Line ${l.number} · ${esc(l.procedure)} · place of service ${esc(l.pos)}</h4>`;
@@ -413,13 +415,13 @@ function claimHTML(c) {
   if (c.history.length || c.reason) {
     html += `<h4>Adjudication runs</h4><div style="font-size:13px">` +
       c.history.map((h) => `<div class="muted">Run ${h.run}: ${esc(h.outcome)}</div>`).join("") +
-      `<div>Run ${c.run} (current): ${words(c.status)}${c.reason ? ` <span class="muted">· ${esc(c.reason)}</span>` : ""}</div></div>`;
+      `<div>Run ${c.run} (current): ${words(decision(c))}${c.reason ? ` <span class="muted">· ${esc(c.reason)}</span>` : ""}</div></div>`;
   }
 
   const B = (key, label, cls = "") => c.actions.includes(key) ? `<button class="btn small ${cls}" data-act="${key}" data-id="${esc(c.id)}">${label}</button>` : "";
   html += `<div class="row" style="margin-top:14px">
     ${B("reprocess", "Reprocess…", "primary")}${B("adjust", "Adjust…", "primary")}${B("void", "Void…")}
-    ${B("select", "Select for payment")}${B("pull", "Pull from payment run…")}${B("releaseHold", "Release hold…")}${B("clearFlag", "Clear review flag…")}
+    ${B("reopen", "Reopen…")}${B("select", "Select for payment")}
     ${B("clear", "Bank: payment cleared")}${B("return", "Bank: payment returned")}${B("reissue", "Reissue payment")}
     <button class="btn small quiet" data-raw="${esc(c.id)}" style="margin-left:auto">${rawOpen.has(c.id) ? "Hide" : "Show"} stored protojson</button></div>`;
   if (rawOpen.has(c.id)) html += `<pre>${esc(JSON.stringify(c.raw, null, 2))}</pre>`;
@@ -453,12 +455,12 @@ function show(html, onSubmit) {
 }
 const buttons = (main, dry) => `<div class="formerr"></div><div class="actions">
   <button class="btn quiet" value="cancel" formnovalidate>Cancel</button>
-  ${dry ? `<button class="btn" value="dry">Dry run</button>` : ""}<button class="btn primary" value="go">${main}</button></div>`;
+  ${dry ? `<button class="btn" value="dry">Preview</button>` : ""}<button class="btn primary" value="go">${main}</button></div>`;
 
-// Run an action from a dialog. Refusals stay in the dialog; dry runs show
+// Run an action from a dialog. Refusals stay in the dialog; previews show
 // the projection.
 async function submit(a, mode) {
-  if (mode === "dry") a.dryRun = true;
+  if (mode === "dry") a.preview = true;
   const res = await act(a);
   if (!res) return "Request failed.";
   if (!res.ok) return res.error;
@@ -470,13 +472,13 @@ function showResult(res) {
   const p = res.preview, d = res.delta;
   let body = `<ul style="padding-left:18px;margin:8px 0">${res.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`;
   if (p) body += `<div class="kv" style="margin-top:10px">
-      <span class="k">Outcome</span><span></span><span class="v"><span class="badge ${p.status}">${words(p.status)}</span></span>
+      <span class="k">Outcome</span><span></span><span class="v"><span class="badge ${decision(p)}">${words(decision(p))}</span></span>
       <span class="k">Allowed</span><span></span><span class="v num">${usd(p.allowed)}</span>
       <span class="k">Member owes</span><span></span><span class="v num">${usd(p.memberOwes)}</span>
       <span class="k total">Plan pays</span><span class="total"></span><span class="v num total">${usd(p.paid)}</span></div>` +
     p.pends.map((x) => `<div class="note amber"><b>Would pend: ${esc(x.code)}</b>. ${esc(x.message)}</div>`).join("");
   if (d) body += `<div class="note ${d.delta < 0 ? "blue" : "gray"}"><b>Delta ${usd(d.delta)}</b>${d.delta < 0 ? " (recovery)" : ""}. Payee holds ${usd(d.original)} (${words(d.basis)}); the replacement pays ${usd(d.projected)}.</div>`;
-  show(`<h3>Dry run: nothing was saved</h3><div class="sub">${esc(res.title)}</div>
+  show(`<h3>Preview: nothing was saved</h3><div class="sub">${esc(res.title)}</div>
     <form>${body}<div class="actions"><button class="btn primary" value="cancel">Close</button></div></form>`, async () => "");
 }
 
@@ -550,7 +552,7 @@ function reason(title, sub, main, build) {
 }
 
 function changeData() {
-  show(`<h3>Change data</h3><div class="sub">Stands in for an enrollment file or a fee schedule load. Neither changes existing claims: pended claims pick it up when reprocessed, finalized claims when adjusted.</div>
+  show(`<h3>Change data</h3><div class="sub">Stands in for an enrollment file or a fee schedule load. Neither changes existing claims: pended claims pick it up when reprocessed, adjudicated claims when adjusted.</div>
     <form><div class="grid2">
       <label class="wide">What changes<select name="kind"><option value="cov">A member's coverage dates</option><option value="fee">A contracted rate</option></select></label>
       <label class="wide cov">Member<select name="member">${memberOptions()}</select></label>
@@ -598,9 +600,7 @@ document.addEventListener("click", (ev) => {
     case "reprocess": return reprocess(c);
     case "adjust": return adjust(c);
     case "void": return reason("Void " + c.label, "Cancels the claim with a void claim and reverses its accumulator postings.", "Void claim", (r) => ({ type: "void", claimId: c.id, reason: r }));
-    case "pull": return reason("Pull " + c.label + " from the payment run", "The claim goes back to unpaid, on payment hold.", "Pull claim", (r) => ({ type: "pull", claimId: c.id, reason: r }));
-    case "releaseHold": return reason("Release the payment hold on " + c.label, "The next payment run will be able to select it.", "Release hold", (r) => ({ type: "releaseHold", claimId: c.id, reason: r }));
-    case "clearFlag": return reason("Clear the review flag on " + c.label, "Use when the claim needs no adjustment.", "Clear flag", (r) => ({ type: "clearFlag", claimId: c.id, reason: r }));
+    case "reopen": return reason("Reopen " + c.label, "Nothing has been reported yet: back to pended, out of any payment run, to be re-run in place.", "Reopen claim", (r) => ({ type: "reopen", claimId: c.id, reason: r }));
     case "select": return act({ type: "select", claimId: c.id });
     case "clear": case "return": case "reissue": return act({ type: "payment", claimId: c.id, event: d.act });
   }

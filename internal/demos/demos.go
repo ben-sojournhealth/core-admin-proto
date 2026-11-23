@@ -38,7 +38,7 @@ type Demo struct {
 var platformDemos = []Demo{
 	{
 		ID: "journey", Title: "Journey", Status: Live, Path: "/journey/",
-		Summary: "The admin portal: examiners work pend queues, review flags and holds, and adjust claims.",
+		Summary: "The admin portal, a tab per area: claims queues and adjustments, members, employers, network, finance and files.",
 		Links:   []Link{{Component: Journey}},
 	},
 }

@@ -39,17 +39,21 @@ const (
 
 // Action is one thing that can happen to the system.
 type Action struct {
-	// process, race, reprocess, adjust, void, select, release, pull,
-	// releaseHold, clearFlag, payment, setCoverage, setFee.
+	// process, race, reprocess, reopen, adjust, void, corrected,
+	// providerVoid, select, release, payment, setCoverage, setFee.
 	Type string `json:"type"`
 
-	// process / adjust (the corrected fields; empty keeps the original).
+	// process / adjust / corrected (the corrected fields; empty keeps the
+	// original).
 	Claim *ClaimSpec `json:"claim,omitempty"`
 	// race.
 	Claims []*ClaimSpec `json:"claims,omitempty"`
 
 	ClaimID string `json:"claimId,omitempty"`
-	DryRun  bool   `json:"dryRun,omitempty"`
+	// Ask what the action would do, without doing it: process becomes
+	// EstimateClaim, reprocess PreviewReadjudication, adjust
+	// PreviewAdjustment.
+	Preview bool   `json:"preview,omitempty"`
 	Reason  string `json:"reason,omitempty"`
 	// reprocess: pends the examiner clears.
 	Resolve []Resolve `json:"resolve,omitempty"`
@@ -90,7 +94,7 @@ type Result struct {
 	Error string   `json:"error,omitempty"`
 	Title string   `json:"title"`
 	Lines []string `json:"lines"`
-	// Set for dry runs: the projected claim.
+	// Set for estimates and previews: the projected claim.
 	Preview *ClaimView `json:"preview,omitempty"`
 	// Set for adjustments.
 	Delta *DeltaView `json:"delta,omitempty"`
@@ -273,7 +277,6 @@ func (s *Sim) Do(actor, title string, f func(ctx context.Context) error) *Result
 }
 
 func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result) error {
-	dry := map[bool]string{true: " (dry run)", false: ""}[a.DryRun]
 	if a.ClaimID != "" {
 		a.ClaimID = s.Resolve(a.ClaimID)
 	}
@@ -284,18 +287,22 @@ func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result)
 			entry.Title = "Process claim"
 			return err
 		}
-		entry.Title = "Process " + s.claimLabel(c) + dry
-		r, err := s.Claims.ProcessClaim(ctx, &claimsv1.ProcessClaimRequest{Claim: c, DryRun: a.DryRun})
+		if a.Preview {
+			entry.Title = "Estimate " + s.claimLabel(c)
+			r, err := s.Claims.EstimateClaim(ctx, &claimsv1.EstimateClaimRequest{Claim: c})
+			if err != nil {
+				return err
+			}
+			res.Preview = s.claimView(r.GetClaim())
+			return nil
+		}
+		entry.Title = "Process " + s.claimLabel(c)
+		r, err := s.Claims.ProcessClaim(ctx, &claimsv1.ProcessClaimRequest{Claim: c})
 		if err != nil {
 			return err
 		}
-		if !a.DryRun {
-			entry.Title = "Process " + s.claimLabel(r.GetClaim())
-			res.ClaimID = r.GetClaim().GetId()
-		}
-		if a.DryRun {
-			res.Preview = s.claimView(r.GetClaim())
-		}
+		entry.Title = "Process " + s.claimLabel(r.GetClaim())
+		res.ClaimID = r.GetClaim().GetId()
 
 	case "race":
 		entry.Title = fmt.Sprintf("Process %d claims at once", len(a.Claims))
@@ -311,23 +318,27 @@ func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result)
 		return err
 
 	case "reprocess":
-		entry.Title = "Reprocess " + s.label(a.ClaimID) + dry
 		res.ClaimID = a.ClaimID
-		req := &claimsv1.ReprocessClaimRequest{ClaimId: a.ClaimID, Reason: a.Reason, DryRun: a.DryRun}
+		var resolutions []*claimsv1.PendResolution
 		for _, r := range a.Resolve {
-			req.Resolutions = append(req.Resolutions, &claimsv1.PendResolution{Code: r.Code, LineNumber: r.Line, Note: a.Reason})
+			resolutions = append(resolutions, &claimsv1.PendResolution{Code: r.Code, LineNumber: r.Line, Note: a.Reason})
 		}
-		r, err := s.Claims.ReprocessClaim(ctx, req)
-		if err != nil {
-			return err
-		}
-		if a.DryRun {
+		if a.Preview {
+			entry.Title = "Preview readjudicating " + s.label(a.ClaimID)
+			r, err := s.Claims.PreviewReadjudication(ctx, &claimsv1.PreviewReadjudicationRequest{ClaimId: a.ClaimID, Resolutions: resolutions})
+			if err != nil {
+				return err
+			}
 			res.Preview = s.claimView(r.GetClaim())
+			return nil
+		}
+		entry.Title = "Reprocess " + s.label(a.ClaimID)
+		if _, err := s.Claims.ReprocessClaim(ctx, &claimsv1.ReprocessClaimRequest{ClaimId: a.ClaimID, Reason: a.Reason, Resolutions: resolutions}); err != nil {
+			return err
 		}
 
 	case "adjust":
-		entry.Title = "Adjust " + s.label(a.ClaimID) + dry
-		req := &claimsv1.AdjustClaimRequest{OriginalClaimId: a.ClaimID, Reason: a.Reason, DryRun: a.DryRun}
+		var corrected *claimsv1.Claim
 		if a.Claim != nil {
 			orig, err := s.Repos.Claims.Get(ctx, a.ClaimID)
 			if errors.Is(err, store.ErrNotFound) {
@@ -335,24 +346,25 @@ func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result)
 			} else if err != nil {
 				return err
 			}
-			if req.CorrectedClaim, err = s.correct(ctx, orig, a.Claim); err != nil {
+			if corrected, err = s.correct(ctx, orig, a.Claim); err != nil {
 				return err
 			}
 		}
-		r, err := s.Claims.AdjustClaim(ctx, req)
+		if a.Preview {
+			entry.Title = "Preview adjusting " + s.label(a.ClaimID)
+			r, err := s.Claims.PreviewAdjustment(ctx, &claimsv1.PreviewAdjustmentRequest{OriginalClaimId: a.ClaimID, CorrectedClaim: corrected})
+			if err != nil {
+				return err
+			}
+			res.Delta, res.Preview = s.deltaOf(r.GetDelta()), s.claimView(r.GetClaim())
+			return nil
+		}
+		entry.Title = "Adjust " + s.label(a.ClaimID)
+		r, err := s.Claims.AdjustClaim(ctx, &claimsv1.AdjustClaimRequest{OriginalClaimId: a.ClaimID, Reason: a.Reason, CorrectedClaim: corrected})
 		if err != nil {
 			return err
 		}
-		res.Delta = s.deltaView(r)
-		if !a.DryRun {
-			res.ClaimID = r.GetClaim().GetId()
-		}
-		if a.DryRun {
-			res.Preview = s.claimView(r.GetClaim())
-			if n := len(r.GetFlaggedClaimIds()); n > 0 {
-				s.logf("Would flag %d later claim(s) for review: %s.", n, strings.Join(s.labels(r.GetFlaggedClaimIds()), ", "))
-			}
-		}
+		res.Delta, res.ClaimID = s.deltaOf(r.GetDelta()), r.GetClaim().GetId()
 
 	case "void":
 		entry.Title = "Void " + s.label(a.ClaimID)
@@ -377,20 +389,38 @@ func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result)
 		_, err := s.Claims.ReleasePaymentRun(ctx)
 		return err
 
-	case "pull":
-		entry.Title = "Pull " + s.label(a.ClaimID) + " from payment"
-		_, err := s.Claims.PullClaimFromPayment(ctx, &claimsv1.PullClaimFromPaymentRequest{ClaimId: a.ClaimID, Reason: a.Reason})
+	case "reopen":
+		entry.Title = "Reopen " + s.label(a.ClaimID)
+		_, err := s.Claims.ReopenClaim(ctx, &claimsv1.ReopenClaimRequest{ClaimId: a.ClaimID, Reason: a.Reason})
 		return err
 
-	case "releaseHold":
-		entry.Title = "Release hold on " + s.label(a.ClaimID)
-		_, err := s.Claims.ReleasePaymentHold(ctx, &claimsv1.ReleasePaymentHoldRequest{ClaimId: a.ClaimID, Note: a.Reason})
-		return err
-
-	case "clearFlag":
-		entry.Title = "Clear flag on " + s.label(a.ClaimID)
-		_, err := s.Claims.ClearReviewFlag(ctx, &claimsv1.ClearReviewFlagRequest{ClaimId: a.ClaimID, Note: a.Reason})
-		return err
+	// The provider's own corrected claim (frequency 7) or void (frequency
+	// 8) of a claim: a new submission quoting the original's number.
+	case "corrected", "providerVoid":
+		orig, err := s.Repos.Claims.Get(ctx, a.ClaimID)
+		if errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("%w: no claim %s", claims.ErrRejected, a.ClaimID)
+		} else if err != nil {
+			return err
+		}
+		spec := a.Claim
+		if spec == nil {
+			spec = &ClaimSpec{}
+		}
+		c, err := s.correct(ctx, orig, spec)
+		if err != nil {
+			return err
+		}
+		c.Frequency, entry.Title = claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT, "Provider's corrected claim for "+s.label(a.ClaimID)
+		if a.Type == "providerVoid" {
+			c.Frequency, entry.Title = claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID, "Provider's void of "+s.label(a.ClaimID)
+		}
+		c.PayerClaimControlNumber, c.OriginalClaimId, c.OriginalLink = claims.DisplayNumber(orig), "", nil
+		r, err := s.Claims.ProcessClaim(ctx, &claimsv1.ProcessClaimRequest{Claim: c})
+		if err != nil {
+			return err
+		}
+		res.ClaimID = r.GetClaim().GetId()
 
 	case "payment":
 		entry.Title = fmt.Sprintf("Bank: %s %s", s.label(a.ClaimID), a.Event)

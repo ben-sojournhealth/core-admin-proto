@@ -30,6 +30,9 @@ func Check(r *remittancev1.Remittance) error {
 				return fmt.Errorf("remittance: %s line %d: %w", e.GetClaimNumber(), l.GetLineNumber(), err)
 			}
 			for _, a := range l.GetAdjustments() {
+				if a.GetReasonCode() == "" {
+					return fmt.Errorf("remittance: %s line %d: an adjustment has no reason code (CARC): none has been chosen for this denial", e.GetClaimNumber(), l.GetLineNumber())
+				}
 				cas += a.GetAmount().GetCents()
 				if a.GetGroup() == claimsv1.CasGroup_CAS_GROUP_PATIENT_RESPONSIBILITY {
 					pr += a.GetAmount().GetCents()

@@ -580,8 +580,18 @@ func (s *PG[T]) Lock(ctx context.Context, id string) error {
 	if inTx {
 		sql += " FOR UPDATE"
 	}
+	// A lock that waited on a version another transaction then replaced
+	// finds no current row: that statement's snapshot predates the next
+	// version. Asking again sees it, so try once more before concluding
+	// the record is gone.
 	var one int
-	err = q.QueryRow(ctx, sql, id).Scan(&one)
+	for attempt := 0; ; attempt++ {
+		err = q.QueryRow(ctx, sql, id).Scan(&one)
+		if errors.Is(err, pgx.ErrNoRows) && inTx && attempt == 0 {
+			continue
+		}
+		break
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("%w: %s", ErrNotFound, id)
 	}

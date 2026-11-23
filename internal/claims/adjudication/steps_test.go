@@ -24,7 +24,7 @@ func TestEveryOutcomeIsOnAStep(t *testing.T) {
 	src = append(src, more...)
 	for _, code := range []string{
 		adjudication.PendMemberNotFound, adjudication.PendNoPlanVersion, adjudication.PendNoTier, adjudication.PendPossibleDuplicate,
-		adjudication.PendOriginalNotFound, adjudication.PendOriginalNotFinalized, adjudication.PendOriginalInPaymentRun, adjudication.PendOpenReplacement,
+		adjudication.PendOriginalNotFound, adjudication.PendOriginalNotFinalized, adjudication.PendOpenReplacement,
 		adjudication.PendRemarkCodeRequired, adjudication.PendNoEligibility, adjudication.PendCoverageInGrace, adjudication.PendNoBenefitMatch,
 		adjudication.PendPriorAuthRequired, adjudication.PendNoPrice,
 		adjudication.DenyCoverageTerminated, adjudication.DenyProviderSanctioned, adjudication.DenyNotCovered,

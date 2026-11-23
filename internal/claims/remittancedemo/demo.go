@@ -79,8 +79,20 @@ func (e *env) receive(ctx context.Context, pcn, card string, auth string, lines 
 	return e.s.Claims.Receive(ctx, c)
 }
 
-// report sends an earlier 835 for claims, so a later one can reverse it.
+// report pays claims and sends the 835 for them, so a later one can
+// reverse it. Releasing the payment run is what makes a claim's result
+// reported: from there it is adjusted or voided, not reopened.
 func (e *env) report(ctx context.Context, cs ...*claimsv1.Claim) error {
+	var ids []string
+	for _, c := range cs {
+		ids = append(ids, c.GetId())
+	}
+	if _, err := e.s.Claims.SelectForPayment(ctx, ids); err != nil {
+		return err
+	}
+	if _, err := e.s.Claims.ReleasePaymentRun(ctx); err != nil {
+		return err
+	}
 	r, err := e.b.Build(ctx, cs, payment(e.method, e.nextTrace(), e.b.Now()))
 	if err != nil {
 		return err
@@ -266,7 +278,12 @@ type ClaimView struct {
 	Number  string `json:"number"`
 	PCN     string `json:"pcn"`
 	Patient string `json:"patient"`
-	Status  string `json:"status"`
+	// RECEIVED, PENDED or ADJUDICATED.
+	Status string `json:"status"`
+	// What was decided: APPROVED, PARTIALLY_DENIED, DENIED or VOID.
+	Outcome string `json:"outcome"`
+	// What took its place, if anything: REPLACEMENT or VOID.
+	Superseded string `json:"superseded,omitempty"`
 	// "original", "corrected" or "void".
 	Kind string `json:"kind"`
 	// Reported on an earlier 835, and reversed on this one.
@@ -420,13 +437,17 @@ func claimView(ctx context.Context, s *sim.Sim, c *claimsv1.Claim) ClaimView {
 	adj := c.GetAdjudication()
 	cv := ClaimView{
 		Key: c.GetId(), Number: claims.DisplayNumber(c), PCN: c.GetPatientControlNumber(),
-		Status: strings.TrimPrefix(c.GetStatus().String(), "CLAIM_STATUS_"),
-		Kind:   map[claimsv1.ClaimFrequency]string{7: "corrected", 8: "void"}[c.GetFrequency()],
-		Charge: c.GetTotalCharge().GetCents(), Paid: adj.GetTotalPaid().GetCents(), Member: adj.GetTotalMemberResponsibility().GetCents(),
+		Status:  strings.TrimPrefix(c.GetStatus().String(), "CLAIM_STATUS_"),
+		Outcome: strings.TrimPrefix(adj.GetOutcome().String(), "CLAIM_OUTCOME_"),
+		Kind:    map[claimsv1.ClaimFrequency]string{7: "corrected", 8: "void"}[c.GetFrequency()],
+		Charge:  c.GetTotalCharge().GetCents(), Paid: adj.GetTotalPaid().GetCents(), Member: adj.GetTotalMemberResponsibility().GetCents(),
 		Lines: []LineView{},
 	}
 	if cv.Kind == "" {
 		cv.Kind = "original"
+	}
+	if by := c.GetSupersededBy(); by != nil {
+		cv.Superseded = strings.TrimPrefix(by.GetFrequency().String(), "CLAIM_FREQUENCY_")
 	}
 	if m, err := s.Repos.Members.Get(ctx, c.GetMemberId()); err == nil {
 		cv.Patient = m.GetName().GetFirst() + " " + m.GetName().GetLast()

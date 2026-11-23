@@ -110,3 +110,55 @@ func TestPlanVersionInForce(t *testing.T) {
 		t.Errorf("unknown plan: %v", err)
 	}
 }
+
+// A claim's member is matched from what the claim submitted: the
+// subscriber's member number, and for a patient sent apart, first name and
+// birth date within that household.
+func TestMatchClaimMember(t *testing.T) {
+	r := repotest.New(t)
+	ctx := context.Background()
+	var api employer.API = employer.New(r)
+	for _, m := range []*eligibilityv1.Member{
+		{Id: "m1", CustomerId: "c1", SubscriberId: "m1", CardId: "ACM1", Name: &commonv1.PersonName{First: "Jordan", Last: "Rivera"}, BirthDate: d(1985, 4, 12)},
+		{Id: "m2", CustomerId: "c1", SubscriberId: "m1", CardId: "ACM2", Name: &commonv1.PersonName{First: "Riley", Last: "Rivera"}, BirthDate: d(2015, 6, 21)},
+		// The same member number at two customers.
+		{Id: "m3", CustomerId: "c1", SubscriberId: "m3", CardId: "DUP1"},
+		{Id: "m4", CustomerId: "c2", SubscriberId: "m4", CardId: "DUP1"},
+	} {
+		if _, err := r.Members.Create(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const (
+		matched   = employerv1.MemberMatchOutcome_MEMBER_MATCH_OUTCOME_MATCHED
+		notFound  = employerv1.MemberMatchOutcome_MEMBER_MATCH_OUTCOME_NOT_FOUND
+		ambiguous = employerv1.MemberMatchOutcome_MEMBER_MATCH_OUTCOME_AMBIGUOUS
+	)
+	sub := func(number string) *employerv1.ClaimPerson { return &employerv1.ClaimPerson{MemberNumber: number} }
+	patient := func(first string, born *commonv1.Date) *employerv1.ClaimPerson {
+		return &employerv1.ClaimPerson{Name: &commonv1.PersonName{First: first, Last: "RIVERA"}, BirthDate: born}
+	}
+	for _, tc := range []struct {
+		name    string
+		sub, pt *employerv1.ClaimPerson
+		outcome employerv1.MemberMatchOutcome
+		member  string
+	}{
+		{"the subscriber is the patient", sub("ACM1"), nil, matched, "m1"},
+		{"a dependent's own member number", sub("ACM2"), nil, matched, "m2"},
+		{"a dependent in the patient loop", sub("ACM1"), patient("RILEY", d(2015, 6, 21)), matched, "m2"},
+		{"a patient with another birth date", sub("ACM1"), patient("RILEY", d(2015, 6, 22)), notFound, ""},
+		{"a patient not in the household", sub("ACM1"), patient("NOAH", d(2015, 6, 21)), notFound, ""},
+		{"an unknown member number", sub("ACM9"), nil, notFound, ""},
+		{"no member number", sub(""), nil, notFound, ""},
+		{"a member number at two customers", sub("DUP1"), nil, ambiguous, ""},
+	} {
+		res, err := api.MatchClaimMember(ctx, &employerv1.MatchClaimMemberRequest{Subscriber: tc.sub, Patient: tc.pt})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if res.GetOutcome() != tc.outcome || res.GetMember().GetId() != tc.member {
+			t.Errorf("%s: %s %q, want %s %q", tc.name, res.GetOutcome(), res.GetMember().GetId(), tc.outcome, tc.member)
+		}
+	}
+}
