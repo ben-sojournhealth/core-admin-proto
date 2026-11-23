@@ -113,7 +113,7 @@ a.demo:hover, .demo.hl { border-color: var(--accent); }
 <main>
   <div class="card diagram">
     <div class="tools">
-      <label><input type="checkbox" id="all"> Show all connections</label>
+      <label><input type="checkbox" id="all" checked> Show all connections</label>
       <span class="l-proto">proto interface · click to inspect</span>
     </div>
     <svg id="arch" viewBox="0 0 1100 1068" role="img" aria-label="System architecture"></svg></div>
@@ -327,7 +327,7 @@ const nameOf = (id) => NODES.find((n) => n.id === id)?.t || id;
 
 document.getElementById("all").addEventListener("change", (ev) => {
   document.getElementById("arch").classList.toggle("all", ev.target.checked);
-  try { localStorage.setItem("showAll", ev.target.checked ? "1" : ""); } catch {}
+  try { localStorage.setItem("showAll", ev.target.checked ? "1" : "0"); } catch {}
 });
 
 async function openInterface(from, to) {
@@ -349,8 +349,8 @@ Promise.all([fetch("/api/demos").then((r) => r.json()), fetch("/api/interfaces")
   demos = d;
   protoLines = new Set(ifs.map((i) => i.from + ">" + i.to));
   draw();
-  let all = false;
-  try { all = localStorage.getItem("showAll") === "1"; } catch {}
+  let all = true;
+  try { all = localStorage.getItem("showAll") !== "0"; } catch {}
   document.getElementById("all").checked = all;
   document.getElementById("arch").classList.toggle("all", all);
 });

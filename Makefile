@@ -1,4 +1,4 @@
-.PHONY: gen lint breaking test check demo pg pg-stop
+.PHONY: gen lint breaking test check demo screenshot pg pg-stop
 
 # Go code, plus a descriptor set that keeps the .proto comments (the Go
 # code drops them) for field explanations in the demos. gen/ isn't
@@ -25,6 +25,17 @@ check: gen lint test
 # started if needed (go run ./cmd/pg url prints how to connect).
 demo: gen
 	go run ./cmd/demo
+
+# docs/domain-map.png, the domain map embedded in the README. Run it after
+# changing the map (cmd/demo/web/index.html) and commit the image with it.
+# Screenshots the demo running at SHOT_URL (start one with `make demo`)
+# with headless Chrome.
+CHROME ?= /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+SHOT_URL ?= http://localhost:8080/
+screenshot:
+	"$(CHROME)" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
+		--window-size=1200,1250 --virtual-time-budget=3000 \
+		--screenshot=docs/domain-map.png $(SHOT_URL) 2>/dev/null
 
 # The local Postgres (embedded, port 5433; data outside every checkout, see
 # internal/common/pgdb). Tests and the demo start it if it isn't running;
