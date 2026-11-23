@@ -14,9 +14,11 @@ import (
 
 	"connectrpc.com/connect"
 
+	commonv1 "coreadmin/gen/coreadmin/common/v1"
 	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
 	employerv1 "coreadmin/gen/coreadmin/employer/v1"
 	"coreadmin/gen/coreadmin/employer/v1/employerv1connect"
+	planv1 "coreadmin/gen/coreadmin/plan/v1"
 	"coreadmin/internal/common/dates"
 	"coreadmin/internal/common/repo"
 	"coreadmin/internal/common/store"
@@ -104,7 +106,31 @@ func (s *Service) GetMedicalCoverage(ctx context.Context, req *employerv1.GetMed
 			res.StartedBefore = true
 		}
 	}
+	if res.Span == nil {
+		return res, nil
+	}
+	// The member's network is the one their plan uses on the date.
+	plan, err := s.r.Plans.Get(ctx, res.Span.GetPlanId())
+	if errors.Is(err, store.ErrNotFound) {
+		return res, nil
+	} else if err != nil {
+		return nil, err
+	}
+	if v := versionOn(plan, on); v != nil {
+		res.NetworkId = v.GetNetworkId()
+	}
 	return res, nil
+}
+
+// versionOn is the plan's version in force on a date, nil if none is.
+func versionOn(plan *planv1.Plan, on *commonv1.Date) *planv1.PlanVersion {
+	var in *planv1.PlanVersion
+	for _, v := range plan.GetVersions() {
+		if dates.In(on, v.GetEffective()) {
+			in = v
+		}
+	}
+	return in
 }
 
 func (s *Service) GetPlanVersion(ctx context.Context, req *employerv1.GetPlanVersionRequest) (*employerv1.GetPlanVersionResponse, error) {
@@ -112,11 +138,5 @@ func (s *Service) GetPlanVersion(ctx context.Context, req *employerv1.GetPlanVer
 	if err != nil {
 		return nil, status(fmt.Errorf("plan %s: %w", req.GetPlanId(), err))
 	}
-	res := &employerv1.GetPlanVersionResponse{Plan: plan}
-	for _, v := range plan.GetVersions() {
-		if dates.In(req.GetOn(), v.GetEffective()) {
-			res.Version = v
-		}
-	}
-	return res, nil
+	return &employerv1.GetPlanVersionResponse{Plan: plan, Version: versionOn(plan, req.GetOn())}, nil
 }

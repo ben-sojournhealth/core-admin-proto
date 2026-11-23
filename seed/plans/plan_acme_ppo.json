@@ -30,20 +30,16 @@
           "day": 31
         }
       },
+      "networkId": "net_mainline",
       "networkTiers": [
         {
           "id": "INN",
-          "name": "In-network",
-          "networkIds": [
-            "net_ppo"
-          ],
-          "priority": 1
+          "name": "In-network"
         },
         {
           "id": "OON",
           "name": "Out-of-network",
           "isOutOfNetwork": true,
-          "priority": 2,
           "nonContractedBasis": {
             "method": "REIMBURSEMENT_METHOD_PERCENT_OF_MEDICARE",
             "percentBps": 14000

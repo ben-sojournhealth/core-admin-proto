@@ -6,14 +6,16 @@ import "coreadmin/common/v1/common.proto";
 import "coreadmin/provider/v1/provider.proto";
 
 // NetworkService is what other domains may ask the Network domain:
-// providers, their network participation and contracts. Other domains go
-// through it, never the Network domain's tables.
+// providers, where they stand in a network, and contracts. Other domains
+// go through it, never the Network domain's tables.
 //
 // Answers use the latest data we have; a question about a date is
 // answered from what we know now about that date.
 service NetworkService {
-  // The provider with an NPI and its network participations in force on a
-  // date. An unknown NPI is an empty response, not an error.
+  // The provider with an NPI and its participations in force on a date.
+  // Given a network, also where the provider stands in it: the tier and
+  // the participation that put them there. An unknown NPI is an empty
+  // response, not an error; an unknown network is NOT_FOUND.
   rpc GetProvider(GetProviderRequest) returns (GetProviderResponse);
   // A contract's terms. An unknown contract is NOT_FOUND.
   rpc GetContract(GetContractRequest) returns (GetContractResponse);
@@ -24,13 +26,26 @@ message GetProviderRequest {
   // Only participations under this TIN; every TIN when empty.
   string tin = 2;
   common.v1.Date on = 3;
+  // The network to place the provider in, e.g. the one a member's plan
+  // uses. Empty asks for no placement.
+  string network_id = 4;
 }
 
 message GetProviderResponse {
   // Absent for an unknown NPI.
   provider.v1.Provider provider = 1;
-  // Participations under the TIN in force on the date.
+  // Participations under the TIN in force on the date, in any underlying
+  // network.
   repeated provider.v1.NetworkParticipation participations = 2;
+  // The provider's tier in the network asked about, on the date. Empty
+  // if no network was asked about or the provider is not in it
+  // (out-of-network).
+  string tier_id = 3;
+  // The participation that put the provider in that tier: the one in the
+  // first of the network's underlying networks, in the network's order,
+  // that the provider participates in. Its contract prices the claim.
+  // Absent when tier_id is empty.
+  provider.v1.NetworkParticipation participation = 4;
 }
 
 message GetContractRequest {

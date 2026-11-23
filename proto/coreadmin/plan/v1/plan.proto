@@ -26,8 +26,13 @@ message PlanVersion {
   // The range this version is in force. Within the plan's benefit_period.
   common.v1.DateRange effective = 2;
 
-  // Tiers define how providers map to cost sharing (e.g. "INN", "OON",
-  // or a narrow "TIER1" network).
+  // The provider network this plan uses (network domain's Network.id).
+  // The network decides which tier a provider falls in. Empty means the
+  // plan has no network: every provider is out-of-network.
+  string network_id = 8;
+  // The plan's side of the network's tiers (e.g. "INN", or a narrow
+  // "TIER1"), plus the out-of-network tier: what each one costs the
+  // member. Which providers fall in a tier is the network's to say.
   repeated NetworkTier network_tiers = 3;
   // Accumulator ids must stay stable across versions so balances carry
   // over within a benefit period.
@@ -58,20 +63,20 @@ enum DefaultBenefitBehavior {
 }
 
 message NetworkTier {
+  reserved 3, 6;
+  reserved "network_ids", "priority";
+
   // Stable id referenced by CostShare.tier_id and Accumulator.tier_ids,
-  // e.g. "INN".
+  // e.g. "INN". For an in-network tier it is the tier id the plan's
+  // network places providers in (NetworkComponent.tier_id).
   string id = 1;
   string name = 2;
-  // Provider networks whose participating providers fall in this tier.
-  // A tier with no networks and `is_out_of_network` set catches everyone
-  // else.
-  repeated string network_ids = 3;
+  // The tier for providers the plan's network places in no tier. A plan
+  // version has at most one.
   bool is_out_of_network = 4;
   // How allowed amounts are determined when the provider has no contract
-  // with any of this tier's networks (typically OON).
+  // (typically OON).
   ReimbursementBasis non_contracted_basis = 5;
-  // Lower number wins when a provider matches several tiers.
-  int32 priority = 6;
 }
 
 // ReimbursementBasis describes how to price a service absent a contract.

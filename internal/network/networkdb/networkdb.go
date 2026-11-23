@@ -19,21 +19,26 @@ var Tables = []store.Table{
 			Why: "Adjudication resolves the billing and rendering provider by NPI on every claim."},
 	}},
 	{Schema: Schema, Name: "networks"},
+	{Schema: Schema, Name: "underlying_networks"},
 	{Schema: Schema, Name: "contracts"},
 }
 
 // NetworkStores are the stores over the Network domain's tables.
 type NetworkStores struct {
 	Providers store.Store[*providerv1.Provider]
-	Networks  store.Store[*providerv1.Network]
-	Contracts store.Store[*providerv1.Contract]
+	// Networks are what plans opt into; UnderlyingNetworks are what
+	// providers participate in.
+	Networks           store.Store[*providerv1.Network]
+	UnderlyingNetworks store.Store[*providerv1.UnderlyingNetwork]
+	Contracts          store.Store[*providerv1.Contract]
 }
 
 // New returns the stores in db, which must have Tables (store.PGDB.Migrate).
 func New(db *store.PGDB) NetworkStores {
 	return NetworkStores{
-		Providers: store.NewPG[*providerv1.Provider](db, Schema, "providers"),
-		Networks:  store.NewPG[*providerv1.Network](db, Schema, "networks"),
-		Contracts: store.NewPG[*providerv1.Contract](db, Schema, "contracts"),
+		Providers:          store.NewPG[*providerv1.Provider](db, Schema, "providers"),
+		Networks:           store.NewPG[*providerv1.Network](db, Schema, "networks"),
+		UnderlyingNetworks: store.NewPG[*providerv1.UnderlyingNetwork](db, Schema, "underlying_networks"),
+		Contracts:          store.NewPG[*providerv1.Contract](db, Schema, "contracts"),
 	}
 }

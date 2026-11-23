@@ -25,8 +25,9 @@ service EmployerService {
   rpc ListMembersByCard(ListMembersByCardRequest) returns (ListMembersByCardResponse);
   // The members of one subscriber's family at a customer.
   rpc GetHousehold(GetHouseholdRequest) returns (GetHouseholdResponse);
-  // A member's medical coverage on a date. It states facts; what they
-  // mean for a claim is the asker's rule.
+  // A member's medical coverage on a date, and the provider network that
+  // coverage uses. It states facts; what they mean for a claim is the
+  // asker's rule.
   rpc GetMedicalCoverage(GetMedicalCoverageRequest) returns (GetMedicalCoverageResponse);
   // A plan and its version in force on a date.
   rpc GetPlanVersion(GetPlanVersionRequest) returns (GetPlanVersionResponse);
@@ -83,6 +84,11 @@ message GetMedicalCoverageResponse {
   // Some medical coverage started on or before the date. With no span, it
   // means coverage ended before the date rather than not having begun.
   bool started_before = 3;
+  // The provider network the member is in on the date: the network of
+  // the span's plan version in force on that date. Empty if no span
+  // includes the date, no plan version is in force, or the plan has no
+  // network.
+  string network_id = 4;
 }
 
 message GetPlanVersionRequest {

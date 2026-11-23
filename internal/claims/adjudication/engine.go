@@ -290,16 +290,20 @@ func (e *DefaultEngine) run(ctx context.Context, calc *Calculation) error {
 	}
 
 	// 3. Provider and 4. network tier.
-	prov, parts, err := e.resolveProvider(ctx, c.GetBillingProvider(), dos)
-	if err != nil {
+	prov, tierID, part, err := e.resolveProvider(ctx, c.GetBillingProvider(), version.GetNetworkId(), dos)
+	if network.NotFound(err) {
+		return Pend(PendNoTier, "plan %s uses network %s, which is not found", plan.GetId(), version.GetNetworkId())
+	} else if err != nil {
 		return err
 	}
 	if prov != nil {
 		c.BillingProvider.ProviderId = prov.GetId()
 	}
-	tier, part := selectTier(version, parts)
-	if tier == nil {
-		return Pend(PendNoTier, "provider matches no network tier on plan %s", plan.GetId())
+	tier := selectTier(version, tierID)
+	if tier == nil && tierID != "" {
+		return Pend(PendNoTier, "plan %s has no tier %s of network %s", plan.GetId(), tierID, version.GetNetworkId())
+	} else if tier == nil {
+		return Pend(PendNoTier, "plan %s has no out-of-network tier", plan.GetId())
 	}
 	adj.NetworkTierId = tier.GetId()
 
@@ -585,37 +589,33 @@ func (e *DefaultEngine) findDuplicate(ctx context.Context, c *claimsv1.Claim) (s
 	return dups[0].GetId(), nil
 }
 
-// resolveProvider returns the provider for an NPI and its participations
-// for the billed TIN on dos. An unknown provider is not an error: it is
-// treated as non-contracted.
-func (e *DefaultEngine) resolveProvider(ctx context.Context, ref *claimsv1.ProviderRef, dos *commonv1.Date) (*providerv1.Provider, []*providerv1.NetworkParticipation, error) {
-	res, err := e.network().GetProvider(ctx, &networkv1.GetProviderRequest{Npi: ref.GetNpi(), Tin: ref.GetTin(), On: dos})
+// resolveProvider returns the provider for an NPI and, for the billed TIN
+// on dos, where Network places them in the plan's network: the tier and
+// the participation that put them there (neither when out-of-network, or
+// when the plan has no network). An unknown provider is not an error: it
+// is treated as non-contracted.
+func (e *DefaultEngine) resolveProvider(ctx context.Context, ref *claimsv1.ProviderRef, networkID string, dos *commonv1.Date) (*providerv1.Provider, string, *providerv1.NetworkParticipation, error) {
+	res, err := e.network().GetProvider(ctx, &networkv1.GetProviderRequest{Npi: ref.GetNpi(), Tin: ref.GetTin(), On: dos, NetworkId: networkID})
 	if err != nil || res.GetProvider() == nil {
-		return nil, nil, err
+		return nil, "", nil, err
 	}
-	p, parts := res.GetProvider(), res.GetParticipations()
+	p := res.GetProvider()
 	if p.GetStatus() == providerv1.ProviderStatus_PROVIDER_STATUS_SANCTIONED {
-		return nil, nil, &DenyError{Code: DenyProviderSanctioned, Message: "provider is excluded from payment"}
+		return nil, "", nil, &DenyError{Code: DenyProviderSanctioned, Message: "provider is excluded from payment"}
 	}
-	return p, parts, nil
+	return p, res.GetTierId(), res.GetParticipation(), nil
 }
 
-// selectTier picks the lowest-priority-number tier the provider qualifies
-// for, and the participation that qualified them (nil for out-of-network).
-func selectTier(v *planv1.PlanVersion, parts []*providerv1.NetworkParticipation) (*planv1.NetworkTier, *providerv1.NetworkParticipation) {
-	tiers := slices.Clone(v.GetNetworkTiers())
-	sort.SliceStable(tiers, func(i, j int) bool { return tiers[i].GetPriority() < tiers[j].GetPriority() })
-	for _, t := range tiers {
-		if t.GetIsOutOfNetwork() {
-			return t, nil
-		}
-		for _, np := range parts {
-			if slices.Contains(t.GetNetworkIds(), np.GetNetworkId()) {
-				return t, np
-			}
+// selectTier is the plan's tier for the network tier a provider falls in:
+// the tier with that id, or the plan's out-of-network tier when the
+// provider is in none. Nil if the plan has no such tier.
+func selectTier(v *planv1.PlanVersion, tierID string) *planv1.NetworkTier {
+	for _, t := range v.GetNetworkTiers() {
+		if tierID == "" && t.GetIsOutOfNetwork() || tierID != "" && !t.GetIsOutOfNetwork() && t.GetId() == tierID {
+			return t
 		}
 	}
-	return nil, nil
+	return nil
 }
 
 func inRanges(code string, ranges []*planv1.CodeRange) bool {

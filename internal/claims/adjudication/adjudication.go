@@ -5,9 +5,9 @@
 //  1. EligibilityResolver: who is the member, and what coverage applies
 //     on the date of service?
 //  2. PlanResolver: which plan version is in force?
-//  3. ProviderResolver: who is the billing/rendering provider, and which
-//     networks are they in for this TIN on this date?
-//  4. TierSelector: which of the plan's network tiers applies?
+//  3. ProviderResolver: who is the billing/rendering provider, and where
+//     does the plan's network place them for this TIN on this date?
+//  4. TierSelector: which of the plan's tiers is that?
 //  5. per line:
 //     a. BenefitMatcher: which service category / benefit covers it?
 //     b. Pricer: what is the allowed amount?
@@ -74,20 +74,25 @@ type PlanResolver interface {
 
 // ProviderResolver resolves a provider reference from a claim.
 type ProviderResolver interface {
-	ResolveProvider(ctx context.Context, ref *claimsv1.ProviderRef, serviceDate *commonv1.Date) (*ProviderMatch, error)
+	ResolveProvider(ctx context.Context, ref *claimsv1.ProviderRef, networkID string, serviceDate *commonv1.Date) (*ProviderMatch, error)
 }
 
-// ProviderMatch is a resolved provider with the participations in force
-// for the billed TIN on the service date.
+// ProviderMatch is a resolved provider and where the plan's network
+// places them for the billed TIN on the service date.
 type ProviderMatch struct {
-	Provider       *providerv1.Provider
-	Participations []*providerv1.NetworkParticipation
+	Provider *providerv1.Provider
+	// TierID is the network's tier for the provider; empty when
+	// out-of-network.
+	TierID string
+	// Participation is the one that put the provider in the tier; nil
+	// when out-of-network.
+	Participation *providerv1.NetworkParticipation
 }
 
-// TierSelector picks the network tier (and the participation, if any,
-// that put the provider in it).
+// TierSelector picks the plan's tier for the provider: the one matching
+// the network's tier, or the plan's out-of-network tier.
 type TierSelector interface {
-	SelectTier(version *planv1.PlanVersion, provider *ProviderMatch) (*planv1.NetworkTier, *providerv1.NetworkParticipation, error)
+	SelectTier(version *planv1.PlanVersion, provider *ProviderMatch) (*planv1.NetworkTier, error)
 }
 
 // BenefitMatcher maps a claim line to a service category and its benefit.

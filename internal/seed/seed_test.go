@@ -33,7 +33,7 @@ func TestSeedLoadsAndLinks(t *testing.T) {
 	plan := func(ctx context.Context, id string) error { _, err := r.Plans.Get(ctx, id); return err }
 	group := func(ctx context.Context, id string) error { _, err := r.Groups.Get(ctx, id); return err }
 	member := func(ctx context.Context, id string) error { _, err := r.Members.Get(ctx, id); return err }
-	network := func(ctx context.Context, id string) error { _, err := r.Networks.Get(ctx, id); return err }
+	underlying := func(ctx context.Context, id string) error { _, err := r.UnderlyingNetworks.Get(ctx, id); return err }
 	contract := func(ctx context.Context, id string) error { _, err := r.Contracts.Get(ctx, id); return err }
 	feeSchedule := func(ctx context.Context, id string) error { _, err := r.FeeSchedules.Get(ctx, id); return err }
 
@@ -44,10 +44,27 @@ func TestSeedLoadsAndLinks(t *testing.T) {
 			accs := map[string]bool{}
 			tiers := map[string]bool{}
 			cats := map[string]bool{}
+			oon := 0
 			for _, t := range v.GetNetworkTiers() {
 				tiers[t.GetId()] = true
-				for _, n := range t.GetNetworkIds() {
-					mustExist("tier network", n, network)
+				if t.GetIsOutOfNetwork() {
+					oon++
+				}
+			}
+			if oon > 1 {
+				t.Errorf("plan %s v%d: %d out-of-network tiers", p.GetId(), v.GetVersion(), oon)
+			}
+			// A plan on a network sets cost sharing for each of the
+			// network's tiers.
+			if id := v.GetNetworkId(); id != "" {
+				n, err := r.Networks.Get(ctx, id)
+				if err != nil {
+					t.Errorf("plan %s v%d network %q: %v", p.GetId(), v.GetVersion(), id, err)
+				}
+				for _, c := range n.GetComponents() {
+					if !tiers[c.GetTierId()] {
+						t.Errorf("plan %s v%d: no tier %s of network %s", p.GetId(), v.GetVersion(), c.GetTierId(), id)
+					}
 				}
 			}
 			for _, a := range v.GetAccumulators() {
@@ -89,16 +106,26 @@ func TestSeedLoadsAndLinks(t *testing.T) {
 		}
 	}
 
+	for _, n := range listAll(t, r.Networks) {
+		for _, c := range n.GetComponents() {
+			mustExist("network component", c.GetUnderlyingNetworkId(), underlying)
+			if c.GetTierId() == "" {
+				t.Errorf("network %s: component %s has no tier", n.GetId(), c.GetUnderlyingNetworkId())
+			}
+		}
+	}
+
 	providers := listAll(t, r.Providers)
 	for _, p := range providers {
 		for _, np := range p.GetParticipations() {
-			mustExist("participation network", np.GetNetworkId(), network)
+			mustExist("participation network", np.GetUnderlyingNetworkId(), underlying)
 			mustExist("participation contract", np.GetContractId(), contract)
 		}
 	}
 
 	contracts := listAll(t, r.Contracts)
 	for _, c := range contracts {
+		mustExist("contract network", c.GetUnderlyingNetworkId(), underlying)
 		for _, term := range c.GetTerms() {
 			if id := term.GetFeeScheduleId(); id != "" {
 				mustExist("contract fee schedule", id, feeSchedule)

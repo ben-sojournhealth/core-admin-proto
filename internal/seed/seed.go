@@ -28,6 +28,7 @@ func Load(ctx context.Context, r *repo.Repos, fsys fs.FS) (int, error) {
 		{"customers", loader(r.Customers)},
 		{"groups", loader(r.Groups)},
 		{"plans", loader(r.Plans)},
+		{"underlying_networks", loader(r.UnderlyingNetworks)},
 		{"networks", loader(r.Networks)},
 		{"fee_schedules", loader(r.FeeSchedules)},
 		{"contracts", loader(r.Contracts)},

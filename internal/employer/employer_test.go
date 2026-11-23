@@ -45,6 +45,29 @@ func TestMedicalCoverageOnADate(t *testing.T) {
 	if c := coverage(jan10); c.GetSpan().GetId() != "s1" || !c.GetStartedBefore() {
 		t.Fatalf("covered on Jan 10: %v", c)
 	}
+	if c := coverage(jan10); c.GetNetworkId() != "" {
+		t.Errorf("network before the plan is known: %v", c)
+	}
+
+	// The member's network is the one their plan uses on the date asked.
+	if _, err := r.Plans.Create(ctx, &planv1.Plan{Id: "plan_x", Versions: []*planv1.PlanVersion{
+		{Version: 1, Effective: &commonv1.DateRange{Start: d(2026, 1, 1), End: d(2026, 6, 30)}, NetworkId: "net_a"},
+		{Version: 2, Effective: &commonv1.DateRange{Start: d(2026, 7, 1), End: d(2026, 12, 31)}, NetworkId: "net_b"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if c := coverage(jan10); c.GetNetworkId() != "net_a" {
+		t.Errorf("network on Jan 10: %v", c)
+	}
+	if c := coverage(d(2026, 8, 1)); c.GetNetworkId() != "net_b" {
+		t.Errorf("network after the mid-year amendment: %v", c)
+	}
+	if c := coverage(d(2027, 2, 1)); c.GetSpan() == nil || c.GetNetworkId() != "" {
+		t.Errorf("covered, but no plan version in force: %v", c)
+	}
+	if c := coverage(d(2025, 12, 31)); c.GetNetworkId() != "" {
+		t.Errorf("network without coverage: %v", c)
+	}
 	if c := coverage(d(2025, 12, 31)); c.GetSpan() != nil || c.GetStartedBefore() {
 		t.Errorf("before coverage began: %v", c)
 	}

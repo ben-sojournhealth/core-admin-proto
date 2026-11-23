@@ -1,0 +1,8 @@
+{
+  "id": "net_mainline",
+  "name": "Mainline",
+  "components": [
+    {"underlyingNetworkId": "net_direct", "tierId": "INN"},
+    {"underlyingNetworkId": "net_ppo", "tierId": "INN"}
+  ]
+}

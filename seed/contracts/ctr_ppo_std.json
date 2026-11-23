@@ -1,6 +1,6 @@
 {
   "id": "ctr_ppo_std",
-  "networkId": "net_ppo",
+  "underlyingNetworkId": "net_ppo",
   "name": "PPO standard professional",
   "effective": {"start": {"year": 2026, "month": 1, "day": 1}},
   "terms": [

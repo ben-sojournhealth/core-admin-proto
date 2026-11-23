@@ -46,7 +46,7 @@ var Steps = []Step{
 	{ID: "duplicate", Title: "Duplicate check", Sub: "member · provider · date · services",
 		Pends: []string{PendPossibleDuplicate},
 		Data:  []string{"claims"}},
-	{ID: "provider", Title: "Provider & tier", Sub: "participation on the date of service",
+	{ID: "provider", Title: "Provider & tier", Sub: "place in the plan's network on the date of service",
 		Pends:  []string{PendNoTier},
 		Denies: []string{DenyProviderSanctioned},
 		Calls:  []StepCall{{Service: networkService, Methods: []string{"GetProvider"}}}},

@@ -55,37 +55,76 @@ message TinAffiliation {
   common.v1.DateRange effective = 3;
 }
 
-// NetworkParticipation says a provider, billing under a TIN, is in a
-// network for a period, paid under a contract.
+// NetworkParticipation says a provider, billing under a TIN, is in an
+// underlying network for a period, paid under a contract.
 message NetworkParticipation {
-  string network_id = 1;
+  // The underlying network the provider participates in.
+  string underlying_network_id = 1;
   string tin = 2;
   string contract_id = 3;
   common.v1.DateRange effective = 4;
 }
 
-// Network is a set of contracted providers (owned, rented, or a
-// customer-specific direct contract).
+// Network is what a customer's plan opts into (PlanVersion.network_id):
+// an ordered list of underlying networks, each placed in one of the
+// network's tiers. The placement is the same for every customer on the
+// network; a customer who needs a different one gets a network of its
+// own.
 message Network {
+  // Stable id, referenced by PlanVersion.network_id.
   string id = 1;
+  // Display name, e.g. "Mainline".
   string name = 2;
-  NetworkKind kind = 3;
-  // For rented networks, the vendor (e.g. a national PPO).
-  string vendor = 4;
+  // The underlying networks that make up this network, in order of
+  // precedence: when a provider participates in several, the first one
+  // listed wins, and its tier and contract apply.
+  repeated NetworkComponent components = 3;
+  // Who recorded this version and when.
   common.v1.AuditInfo audit = 15;
 }
 
-enum NetworkKind {
-  NETWORK_KIND_UNSPECIFIED = 0;
-  NETWORK_KIND_OWNED = 1;
-  NETWORK_KIND_RENTED = 2;
-  NETWORK_KIND_DIRECT_CONTRACT = 3;
+// NetworkComponent places one underlying network in a network.
+message NetworkComponent {
+  // The underlying network whose participating providers this brings in.
+  string underlying_network_id = 1;
+  // The tier of the network its providers fall in, e.g. "INN". Several
+  // components may share a tier. A plan on the network sets cost sharing
+  // for the tier under the same id (plan NetworkTier.id).
+  string tier_id = 2;
+  // When this underlying network is part of the network. An open range
+  // means always.
+  common.v1.DateRange effective = 3;
+}
+
+// UnderlyingNetwork is a set of contracted providers (owned, rented, or
+// a direct contract). Providers participate in underlying networks;
+// plans never refer to them directly, only to a Network built from them.
+message UnderlyingNetwork {
+  // Stable id, referenced by participations, contracts and network
+  // components.
+  string id = 1;
+  // Display name.
+  string name = 2;
+  // How we come to have these providers under contract.
+  UnderlyingNetworkKind kind = 3;
+  // For rented networks, the vendor (e.g. a national PPO).
+  string vendor = 4;
+  // Who recorded this version and when.
+  common.v1.AuditInfo audit = 15;
+}
+
+enum UnderlyingNetworkKind {
+  UNDERLYING_NETWORK_KIND_UNSPECIFIED = 0;
+  UNDERLYING_NETWORK_KIND_OWNED = 1;
+  UNDERLYING_NETWORK_KIND_RENTED = 2;
+  UNDERLYING_NETWORK_KIND_DIRECT_CONTRACT = 3;
 }
 
 // Contract defines how a participating provider is reimbursed.
 message Contract {
   string id = 1;
-  string network_id = 2;
+  // The underlying network this contract belongs to.
+  string underlying_network_id = 2;
   string name = 3;
   common.v1.DateRange effective = 4;
   // Evaluated in order; the first term whose criteria match a line prices

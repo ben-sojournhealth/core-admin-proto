@@ -1,6 +1,6 @@
 // Package network implements the Network domain's service
 // (proto/coreadmin/network/v1/network_service.proto): what other domains
-// may ask it about providers, network participation and contracts. Other
+// may ask it about providers, where they stand in a network, and contracts. Other
 // domains go through the service, never the Network domain's tables.
 package network
 
@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	commonv1 "coreadmin/gen/coreadmin/common/v1"
 	networkv1 "coreadmin/gen/coreadmin/network/v1"
 	"coreadmin/gen/coreadmin/network/v1/networkv1connect"
 	providerv1 "coreadmin/gen/coreadmin/provider/v1"
@@ -50,7 +51,35 @@ func (s *Service) GetProvider(ctx context.Context, req *networkv1.GetProviderReq
 			res.Participations = append(res.Participations, np)
 		}
 	}
+	if req.GetNetworkId() == "" {
+		return res, nil
+	}
+	n, err := s.r.Networks.Get(ctx, req.GetNetworkId())
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	} else if err != nil {
+		return nil, err
+	}
+	res.TierId, res.Participation = place(n, res.Participations, req.GetOn())
 	return res, nil
+}
+
+// place says where a provider with these participations stands in a
+// network on a date: the network's components are tried in order, and the
+// first one the provider participates in gives the tier and the
+// participation. Neither if the provider is in none of them.
+func place(n *providerv1.Network, parts []*providerv1.NetworkParticipation, on *commonv1.Date) (string, *providerv1.NetworkParticipation) {
+	for _, c := range n.GetComponents() {
+		if !dates.In(on, c.GetEffective()) {
+			continue
+		}
+		for _, np := range parts {
+			if np.GetUnderlyingNetworkId() == c.GetUnderlyingNetworkId() {
+				return c.GetTierId(), np
+			}
+		}
+	}
+	return "", nil
 }
 
 func (s *Service) GetContract(ctx context.Context, req *networkv1.GetContractRequest) (*networkv1.GetContractResponse, error) {
