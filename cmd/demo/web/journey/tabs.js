@@ -22,7 +22,7 @@ let FILTER = "";   // the search box, on the Members and Network tabs
 function renderTabs() {
   // What's waiting on someone, per tab.
   const work = {
-    claims: S.claims.filter((c) => c.status === "PENDED" || c.hold || c.flags.some((f) => f.open)).length,
+    claims: S.claims.filter((c) => c.status === "PENDED").length,
     finance: S.claims.filter((c) => c.actions.includes("select") || (c.payment && c.payment.state === "SELECTED")).length,
   };
   $("#tabs").innerHTML = TABS.map((t) =>
@@ -77,7 +77,7 @@ function claimsTable(rows) {
     rows.slice().reverse().map((c) => `<tr data-claim="${esc(c.id)}"><td><span class="id num">${esc(c.number)}</span></td>
       <td>${esc(c.procedure)} <span class="sub">· ${esc(c.dos.slice(5).replace("-", "/"))}</span></td><td>${esc(c.provider)}</td>
       <td class="r num">${usd(c.charge)}</td><td class="r num">${["PENDED", "RECEIVED"].includes(c.status) ? "–" : usd(c.paid)}</td>
-      <td><span class="chip ${c.status}">${words(c.status)}</span></td></tr>`).join("") + `</tbody></table></div>`;
+      <td>${decisionChips(c)}</td></tr>`).join("") + `</tbody></table></div>`;
 }
 
 // ---------- routing ----------
@@ -283,7 +283,6 @@ const PAY_VIEWS = [
   { id: "issued", label: "Issued", test: (c) => c.payment && c.payment.state === "ISSUED" },
   { id: "cleared", label: "Cleared", test: (c) => c.payment && c.payment.state === "CLEARED" },
   { id: "returned", label: "Returned & voided", test: (c) => c.payment && (c.payment.state === "RETURNED" || c.payment.state === "VOIDED") },
-  { id: "holds", label: "On hold", hot: true, test: (c) => !!c.hold },
 ];
 const payAmount = (c) => c.payment ? c.payment.paid : c.paid;
 const PAY_CHIP = { SELECTED: "todo", ISSUED: "APPROVED", CLEARED: "APPROVED", RETURNED: "DENIED", VOIDED: "DENIED" };
@@ -312,8 +311,8 @@ function financePage(view) {
   const body = rows.length ? `<div class="tablewrap"><table class="list"><thead><tr><th>Claim</th><th>Payee</th><th>Member</th><th>Paid</th><th>Trace</th><th>Remittance</th><th class="r">Amount</th><th>Payment</th></tr></thead><tbody>` +
     rows.slice().reverse().map((c) => {
       const p = c.payment || {};
-      const state = c.hold ? `<span class="chip todo" title="${esc(c.hold)}">On hold</span>` : p.state ? `<span class="chip ${PAY_CHIP[p.state] || ""}">${words(p.state)}</span>` : `<span class="chip">Not selected</span>`;
-      return `<tr data-claim="${esc(c.id)}"><td><span class="id num">${esc(c.number)}</span>${c.status === "DENIED" ? ` <span class="chip DENIED">denied</span>` : ""}</td>
+      const state = p.state ? `<span class="chip ${PAY_CHIP[p.state] || ""}">${words(p.state)}</span>` : `<span class="chip">Not selected</span>`;
+      return `<tr data-claim="${esc(c.id)}"><td><span class="id num">${esc(c.number)}</span>${c.outcome === "DENIED" ? ` <span class="chip DENIED">denied</span>` : ""}</td>
         <td>${esc(c.provider)}</td><td>${esc(c.member)}</td><td>${p.date ? esc(day(p.date)) : `<span class="sub">–</span>`}</td>
         <td class="mono">${esc(p.trace || "")}</td><td class="mono">${esc(p.remit || "")}</td><td class="r num">${usd(payAmount(c))}</td><td>${state}</td></tr>`;
     }).join("") + `</tbody></table></div>` : empty("Nothing here", "");

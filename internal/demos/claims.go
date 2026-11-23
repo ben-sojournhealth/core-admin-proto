@@ -11,11 +11,11 @@ const (
 	ServiceDefinitions = "service-definitions"
 	Adjudication       = "adjudication" // pricing, cost share, accumulators, pends, adjustments, voids
 	// 835s, provider EOPs and member EOBs: built from the adjudication,
-	// viewable before the claim is finalized; payment details fill in once
+	// viewable before the claim is adjudicated; payment details fill in once
 	// it pays.
 	Remittance = "remittance"
 	// What each claim pays, to whom and from whose money: a pure function of
-	// the claim, previewable before it finalizes; the payment cycle nets
+	// the claim, previewable before it is adjudicated; the payment cycle nets
 	// recorded lines across claims.
 	Settlement = "settlement"
 	// Providers dispute claim decisions (reconsiderations, appeals) from the
@@ -51,7 +51,7 @@ func claimsDemos() []Demo {
 		},
 		{
 			ID: "settlement", Title: "Settlement", Status: Planned,
-			Summary: "What each claim will pay, to whom and from whose funds, before it finalizes; payment cycles net recoveries across claims.",
+			Summary: "What each claim will pay, to whom and from whose funds, before it is adjudicated; payment cycles net recoveries across claims.",
 			Links:   []Link{{Component: Settlement}},
 		},
 	}

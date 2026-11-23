@@ -33,7 +33,7 @@ func TestCheckRemarks(t *testing.T) {
 }
 
 // A line whose CARC lacks a required remark code pends instead of
-// finalizing, and finalizes once a rerun gets the codes right.
+// adjudicating, and adjudicates once a rerun gets the codes right.
 func TestMissingRemarkCodePends(t *testing.T) {
 	ctx := context.Background()
 	s, err := sim.NewIn(repotest.New(t))
@@ -80,14 +80,14 @@ func TestMissingRemarkCodePends(t *testing.T) {
 		t.Error("an examiner can override a missing remark code")
 	}
 
-	// The reporting is fixed; the rerun finalizes.
+	// The reporting is fixed; the rerun is adjudicated.
 	undo()
 	out, err := s.Claims.ReprocessClaim(ctx, &claimsv1.ReprocessClaimRequest{ClaimId: c.GetId(), Reason: "remark codes fixed"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	rc := out.GetClaim()
-	if rc.GetStatus() != claimsv1.ClaimStatus_CLAIM_STATUS_APPROVED || rc.GetLines()[1].GetAdjudication().GetStatus() != claimsv1.LineStatus_LINE_STATUS_DENIED ||
+	if rc.GetAdjudication().GetOutcome() != claimsv1.ClaimOutcome_CLAIM_OUTCOME_PARTIALLY_DENIED || rc.GetLines()[1].GetAdjudication().GetStatus() != claimsv1.LineStatus_LINE_STATUS_DENIED ||
 		rc.GetLines()[1].GetAdjudication().GetRemarkCodes()[0] != "N130" {
 		t.Errorf("after rerun: %s, line 2 %v", rc.GetStatus(), rc.GetLines()[1].GetAdjudication())
 	}

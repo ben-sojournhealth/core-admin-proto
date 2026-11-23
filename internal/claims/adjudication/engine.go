@@ -43,7 +43,6 @@ const (
 	// A replacement or void whose original cannot be used yet.
 	PendOriginalNotFound     = "ORIGINAL_NOT_FOUND"
 	PendOriginalNotFinalized = "ORIGINAL_NOT_FINALIZED"
-	PendOriginalInPaymentRun = "ORIGINAL_IN_PAYMENT_RUN"
 	PendOpenReplacement      = "ORIGINAL_HAS_OPEN_REPLACEMENT"
 	// A line's CARC lacks a remark code it requires (see remarkRules).
 	// Caused by our rules, not the claim: no examiner override clears it.
@@ -182,13 +181,11 @@ func (e *DefaultEngine) Calculate(ctx context.Context, in *claimsv1.Claim, reaso
 
 	// Totals and status.
 	var allowed, paid, member int64
-	payable := false
 	for _, l := range c.GetLines() {
 		la := l.GetAdjudication()
 		if la.GetStatus() != claimsv1.LineStatus_LINE_STATUS_PAYABLE {
 			continue
 		}
-		payable = true
 		allowed += la.GetPricing().GetAllowed().GetCents()
 		paid += la.GetPaid().GetCents()
 		member += la.GetMemberResponsibility().GetCents()
@@ -199,10 +196,10 @@ func (e *DefaultEngine) Calculate(ctx context.Context, in *claimsv1.Claim, reaso
 		c.Status = claimsv1.ClaimStatus_CLAIM_STATUS_PENDED
 		// Nothing posts for a pended claim.
 		adj.AccumulatorPostings = nil
-	case payable:
-		c.Status = claimsv1.ClaimStatus_CLAIM_STATUS_APPROVED
 	default:
-		c.Status = claimsv1.ClaimStatus_CLAIM_STATUS_DENIED
+		// No open pends and every line decided.
+		c.Status = claimsv1.ClaimStatus_CLAIM_STATUS_ADJUDICATED
+		adj.Outcome = Outcome(c)
 	}
 	return calc, nil
 }
@@ -249,7 +246,7 @@ func (e *DefaultEngine) run(ctx context.Context, calc *Calculation) error {
 			return err
 		}
 		if c.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID {
-			// A void is not priced; the claims service finalizes it.
+			// A void is not priced; the claims service adjudicates it.
 			return nil
 		}
 		calc.ReverseClaimID = orig.GetId()
@@ -305,7 +302,14 @@ func (e *DefaultEngine) run(ctx context.Context, calc *Calculation) error {
 
 	// Accumulator snapshot. This is the working copy: line cost sharing is
 	// added to it so later lines see earlier lines.
-	work, err := e.Ledger.Snapshot(ctx, SnapshotRequest{Plan: plan, Member: member, AsOf: dos, ExcludeClaimID: calc.ReverseClaimID})
+	// Balances as if the claim this one replaces had never posted, or, with
+	// none, as if this claim itself hadn't: a claim is never decided
+	// against its own cost share (a preview of one already adjudicated).
+	exclude := calc.ReverseClaimID
+	if exclude == "" {
+		exclude = c.GetId()
+	}
+	work, err := e.Ledger.Snapshot(ctx, SnapshotRequest{Plan: plan, Member: member, AsOf: dos, ExcludeClaimID: exclude})
 	if err != nil {
 		return err
 	}
@@ -379,20 +383,36 @@ func (e *DefaultEngine) run(ctx context.Context, calc *Calculation) error {
 	return nil
 }
 
-type projectionKey struct{}
-
-// Projection marks a dry run: the result is projected as if the original's
-// payment run had been released, since that block is temporary.
-func Projection(ctx context.Context) context.Context {
-	return context.WithValue(ctx, projectionKey{}, true)
+// Outcome is what an adjudicated claim's lines add up to: approved when
+// every line is payable, denied when none is, partially denied between. A
+// void decides no lines.
+func Outcome(c *claimsv1.Claim) claimsv1.ClaimOutcome {
+	if c.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID {
+		return claimsv1.ClaimOutcome_CLAIM_OUTCOME_VOID
+	}
+	payable, denied := false, false
+	for _, l := range c.GetLines() {
+		if l.GetAdjudication().GetStatus() == claimsv1.LineStatus_LINE_STATUS_PAYABLE {
+			payable = true
+		} else {
+			denied = true
+		}
+	}
+	switch {
+	case payable && denied:
+		return claimsv1.ClaimOutcome_CLAIM_OUTCOME_PARTIALLY_DENIED
+	case payable:
+		return claimsv1.ClaimOutcome_CLAIM_OUTCOME_APPROVED
+	}
+	return claimsv1.ClaimOutcome_CLAIM_OUTCOME_DENIED
 }
 
 // MatchOriginal finds the original a replacement or void (frequency 7 or
 // 8) refers to: the linked claim if original_link is set, otherwise the
 // claim number the provider quoted (REF*F8), with or without a version
 // suffix, resolved to that claim's latest version before this one that is
-// not a void. A voided claim resolves to itself, VOIDED, so checkOriginal
-// pends what references it. It returns a PendError when nothing matches.
+// not a void. A voided claim resolves to itself, superseded by its void,
+// so checkOriginal pends what references it. It returns a PendError when nothing matches.
 func (e *DefaultEngine) MatchOriginal(ctx context.Context, c *claimsv1.Claim) (*claimsv1.Claim, claimsv1.OriginalMatch, error) {
 	if link := c.GetOriginalLink(); link != nil {
 		orig, err := e.Repos.Claims.Get(ctx, link.GetClaimId())
@@ -437,13 +457,14 @@ func (e *DefaultEngine) MatchOriginal(ctx context.Context, c *claimsv1.Claim) (*
 var quotedNumber = regexp.MustCompile(`^\s*(\d{5}-[A-Z]-\d{5})(?:-(\d+))?\s*$`)
 
 // checkOriginal pends a replacement or void until its original can be
-// replaced: finalized, out of any unreleased payment run, and not already
-// being replaced by another claim. These are data pends: they clear on
+// replaced: adjudicated, not already superseded or closed by the provider,
+// and not already being replaced by another claim. These are data pends: they clear on
 // reprocessing once the original settles.
 // lockOriginal locks a claim for the rest of the transaction and returns
 // its current version. Every replacement or void runs it, pended or not,
 // so the check for a replacement already in progress can't be passed by
-// two at once. A dry run has no transaction, and nothing to protect.
+// two at once. An estimate or preview has no transaction, and nothing to
+// protect.
 func (e *DefaultEngine) lockOriginal(ctx context.Context, id string) (*claimsv1.Claim, error) {
 	if err := e.Repos.Claims.Lock(ctx, id); err != nil {
 		return nil, err
@@ -453,20 +474,30 @@ func (e *DefaultEngine) lockOriginal(ctx context.Context, id string) (*claimsv1.
 
 func (e *DefaultEngine) checkOriginal(ctx context.Context, c, orig *claimsv1.Claim) error {
 	name := displayNumber(orig)
-	switch orig.GetStatus() {
-	case claimsv1.ClaimStatus_CLAIM_STATUS_APPROVED, claimsv1.ClaimStatus_CLAIM_STATUS_DENIED:
-	default:
+	if orig.GetStatus() != claimsv1.ClaimStatus_CLAIM_STATUS_ADJUDICATED {
 		return Pend(PendOriginalNotFinalized, "original %s is %s", name, strings.TrimPrefix(orig.GetStatus().String(), "CLAIM_STATUS_"))
 	}
-	if orig.GetPayment().GetState() == claimsv1.PaymentState_PAYMENT_STATE_SELECTED && ctx.Value(projectionKey{}) == nil {
-		return Pend(PendOriginalInPaymentRun, "original %s is in a payment run that has not been released", name)
+	// A claim that superseded it is this one only on a rerun that never
+	// gets here: an adjudicated claim is not re-adjudicated.
+	if by := orig.GetSupersededBy(); by != nil && by.GetClaimId() != c.GetId() {
+		how := "replaced"
+		if by.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID {
+			how = "voided"
+		}
+		return Pend(PendOriginalNotFinalized, "original %s has already been %s", name, how)
 	}
+	// An original closed by the provider's correction was closed for one
+	// claim. That claim passes; any other correction of it pends.
+	closed := ClosedByProvider(orig)
 	open, _, err := e.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{PageSize: 1, Where: []store.Cond{store.Eq(orig.GetId(), "originalClaimId")}, Filter: func(o *claimsv1.Claim) bool {
 		return o.GetId() != c.GetId() && o.GetOriginalClaimId() == orig.GetId() &&
-			(o.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_PENDED || o.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_RECEIVED)
+			(closed || o.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_PENDED || o.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_RECEIVED)
 	}})
 	if err != nil {
 		return err
+	}
+	if len(open) > 0 && closed {
+		return Pend(PendOriginalNotFinalized, "original %s was already replaced or voided by the provider (%s)", name, displayNumber(open[0]))
 	}
 	if len(open) > 0 {
 		return Pend(PendOpenReplacement, "original %s already has a replacement in progress (%s)", name, displayNumber(open[0]))
@@ -572,8 +603,7 @@ func (e *DefaultEngine) findDuplicate(ctx context.Context, c *claimsv1.Claim) (s
 			if o.GetId() == c.GetId() || o.GetId() == c.GetOriginalClaimId() || o.GetOriginalClaimId() == c.GetId() {
 				return false
 			}
-			switch o.GetStatus() {
-			case claimsv1.ClaimStatus_CLAIM_STATUS_ADJUSTED, claimsv1.ClaimStatus_CLAIM_STATUS_VOIDED:
+			if o.GetSupersededBy() != nil {
 				return false
 			}
 			if o.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID {

@@ -63,7 +63,7 @@ var Library = []Scenario{
 			Why:    "The contract allows $95, so $85 is written off (CO-45). The member pays the $30 copay (PR-3) and the plan pays $65. The copay counts toward the out-of-pocket maximum but not the deductible.",
 			Action: process(office("clm_A", jordan, "")),
 			Checks: []Check{
-				status("clm_A", "APPROVED"), allowed("clm_A", 9500), pays("clm_A", 6500), owes("clm_A", 3000),
+				outcome("clm_A", "APPROVED"), allowed("clm_A", 9500), pays("clm_A", 6500), owes("clm_A", 3000),
 				accum("OOP_INN_IND", jordan, 3000), accum("OOP_INN_FAM", jordan, 3000), accum("DED_INN_IND", jordan, 0),
 			},
 		}},
@@ -106,12 +106,12 @@ var Library = []Scenario{
 	},
 	{
 		ID: "estimate", Group: "Basics",
-		Title:   "Cost estimate (dry run)",
+		Title:   "Cost estimate",
 		Summary: "Run a claim through adjudication without saving it or touching accumulators.",
 		Steps: []Step{{
 			Label:  "Estimate an MRI for Jordan",
-			Why:    "A dry run returns the full decision but saves nothing: no claim, no accumulator postings.",
-			Action: sim.Action{Type: "process", DryRun: true, Claim: &sim.ClaimSpec{ID: "clm_EST", Member: jordan, Procedure: "70551", Charge: 90000, Auth: "PA-1001"}},
+			Why:    "An estimate returns the full decision but saves nothing: no claim, no accumulator postings.",
+			Action: sim.Action{Type: "process", Preview: true, Claim: &sim.ClaimSpec{ID: "clm_EST", Member: jordan, Procedure: "70551", Charge: 90000, Auth: "PA-1001"}},
 			Checks: []Check{preview("APPROVED", 0, 42000), noClaim("clm_EST"), accum("DED_INN_IND", jordan, 0)},
 		}},
 	},
@@ -208,9 +208,9 @@ var Library = []Scenario{
 			},
 			{
 				Label:  "Examiner confirms the authorization and reprocesses",
-				Why:    "Prior auth is a judgment call the examiner can override. The claim is re-run (run 2), finalizes, and only now posts to the deductible. The first run is kept as history.",
+				Why:    "Prior auth is a judgment call the examiner can override. The claim is re-run (run 2), is adjudicated, and only now posts to the deductible. The first run is kept as history.",
 				Action: sim.Action{Type: "reprocess", ClaimID: "clm_A", Reason: "Auth PA-7731 confirmed by phone", Resolve: []sim.Resolve{{Code: "PRIOR_AUTH_REQUIRED", Line: 1}}},
-				Checks: []Check{status("clm_A", "APPROVED"), run("clm_A", 2), owes("clm_A", 42000), accum("DED_INN_IND", sam, 42000)},
+				Checks: []Check{outcome("clm_A", "APPROVED"), run("clm_A", 2), owes("clm_A", 42000), accum("DED_INN_IND", sam, 42000)},
 			},
 		},
 	},
@@ -240,7 +240,7 @@ var Library = []Scenario{
 			{
 				Label:  "Reprocess now that coverage exists",
 				Action: sim.Action{Type: "reprocess", ClaimID: "clm_A", Reason: "Enrollment file loaded"},
-				Checks: []Check{status("clm_A", "APPROVED"), run("clm_A", 3), pays("clm_A", 6500)},
+				Checks: []Check{outcome("clm_A", "APPROVED"), run("clm_A", 3), pays("clm_A", 6500)},
 			},
 		},
 	},
@@ -270,7 +270,7 @@ var Library = []Scenario{
 			{
 				Label:  "Jordan's office visit is processed",
 				Action: process(office("clm_A", jordan, "")),
-				Checks: []Check{status("clm_A", "APPROVED")},
+				Checks: []Check{outcome("clm_A", "APPROVED")},
 			},
 			{
 				Label:  "An identical claim arrives",
@@ -281,19 +281,19 @@ var Library = []Scenario{
 			{
 				Label:  "Examiner confirms two separate visits",
 				Action: sim.Action{Type: "reprocess", ClaimID: "clm_B", Reason: "Two separate visits confirmed with the office", Resolve: []sim.Resolve{{Code: "POSSIBLE_DUPLICATE"}}},
-				Checks: []Check{status("clm_B", "APPROVED"), pays("clm_B", 6500), accum("OOP_INN_IND", jordan, 6000)},
+				Checks: []Check{outcome("clm_B", "APPROVED"), pays("clm_B", 6500), accum("OOP_INN_IND", jordan, 6000)},
 			},
 		},
 	},
 	{
-		ID: "reprocess-finalized", Group: "Pends",
-		Title:   "Reprocessing a finalized claim is refused",
-		Summary: "Only pended claims are reprocessed; finalized claims change through adjustments.",
+		ID: "reprocess-adjudicated", Group: "Pends",
+		Title:   "Reprocessing an adjudicated claim is refused",
+		Summary: "Only pended claims are reprocessed; adjudicated claims change through adjustments.",
 		Steps: []Step{
 			{
-				Label:  "Jordan's office visit is processed and finalized",
+				Label:  "Jordan's office visit is adjudicated",
 				Action: process(office("clm_A", jordan, "")),
-				Checks: []Check{status("clm_A", "APPROVED")},
+				Checks: []Check{outcome("clm_A", "APPROVED")},
 			},
 			{
 				Label:    "Try to reprocess it",
@@ -304,11 +304,44 @@ var Library = []Scenario{
 		},
 	},
 
-	// ----------------------------------------------------------- Adjustments
+	// --------------------------------------------------------- Before payment
 	{
-		ID: "adjust-unpaid", Group: "Adjustments",
-		Title:   "Adjust a claim that is approved but not yet paid",
-		Summary: "The replacement takes the original's place; there is nothing to recover.",
+		ID: "reopen-before-payment", Group: "Before payment",
+		Title:   "Reopen a claim before it is paid",
+		Summary: "Nothing has been reported yet, so the same claim is re-run in place. No new version.",
+		Steps: []Step{
+			{Label: "Jordan's office visit pays $65 at the $95 rate", Action: process(office("clm_A", jordan, "")), Checks: []Check{pays("clm_A", 6500)}},
+			{
+				Label:  "The contracted rate for 99213 should have been $85",
+				Why:    "The claim is adjudicated, so the corrected rate does not touch it.",
+				Action: sim.Action{Type: "setFee", Procedure: "99213", Cents: 8500},
+				Checks: []Check{pays("clm_A", 6500)},
+			},
+			{
+				Label:    "Try to adjust it",
+				Why:      "An adjustment reverses what an 835 reported. Nothing has been reported for this claim.",
+				Action:   sim.Action{Type: "adjust", ClaimID: "clm_A", Reason: "Fee schedule correction"},
+				Rejected: "has not been released for payment",
+			},
+			{
+				Label:  "Reopen it",
+				Why:    "The claim goes back to pended. Its copay comes off the out-of-pocket accumulator, and the first result is kept as history.",
+				Action: sim.Action{Type: "reopen", ClaimID: "clm_A", Reason: "Fee schedule correction"},
+				Checks: []Check{status("clm_A", "PENDED"), run("clm_A", 2), accum("OOP_INN_IND", jordan, 0)},
+			},
+			{
+				Label:  "Reprocess it against the corrected rate",
+				Action: sim.Action{Type: "reprocess", ClaimID: "clm_A", Reason: "Fee schedule corrected"},
+				Checks: []Check{outcome("clm_A", "APPROVED"), pays("clm_A", 5500), run("clm_A", 3), accum("OOP_INN_IND", jordan, 3000), noClaim("clm_A-2")},
+			},
+			{Label: "The payment run selects it", Action: selectAll, Checks: []Check{payment("clm_A", "SELECTED")}},
+			{Label: "Release the run: one result, reported once", Action: releaseRun, Checks: []Check{payment("clm_A", "ISSUED")}},
+		},
+	},
+	{
+		ID: "corrected-before-payment", Group: "Before payment",
+		Title:   "The provider corrects a claim before it is paid",
+		Summary: "The original is closed with an answer of its own; the corrected claim is decided as a claim in its own right. Nothing is superseded.",
 		Steps: []Step{
 			{
 				Label:  "Jordan's visit is billed as a longer visit (99214)",
@@ -316,12 +349,56 @@ var Library = []Scenario{
 				Checks: []Check{pays("clm_A", 10500)},
 			},
 			{
-				Label:  "The office sends a correction: it was a standard visit (99213)",
-				Why:    "A new claim clm_A-2 replaces clm_A. The original's accumulator postings are reversed and the replacement's posted in one write, so the copay is counted once.",
-				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", Reason: "Provider billed the wrong visit level", Claim: toOffice},
+				Label:  "The office sends a corrected claim: it was a standard visit (99213)",
+				Why:    "clm_A was never reported, so there is nothing to reverse. It is denied as replaced by the provider, its copay comes off the accumulator, and clm_B is decided on its own.",
+				Action: sim.Action{Type: "corrected", ClaimID: "clm_A", Claim: &sim.ClaimSpec{ID: "clm_B", Procedure: "99213", Charge: 18000}},
 				Checks: []Check{
-					status("clm_A", "ADJUSTED"), status("clm_A-2", "APPROVED"), pays("clm_A-2", 6500),
-					delta("APPROVED_UNPAID", 10500, 6500, -4000), accum("OOP_INN_IND", jordan, 3000),
+					outcome("clm_A", "DENIED"), denied("clm_A", "REPLACED_BY_PROVIDER"), pays("clm_A", 0),
+					outcome("clm_B", "APPROVED"), pays("clm_B", 6500), accum("OOP_INN_IND", jordan, 3000),
+				},
+			},
+			{Label: "The payment run selects both", Action: selectAll, Checks: []Check{payment("clm_A", "SELECTED"), payment("clm_B", "SELECTED")}},
+			{
+				Label:  "Release the run",
+				Why:    "Each claim the provider sent gets one answer: clm_A denied, clm_B paid.",
+				Action: releaseRun,
+				Checks: []Check{payment("clm_A", "ISSUED"), payment("clm_B", "ISSUED")},
+			},
+		},
+	},
+	{
+		ID: "void-before-payment", Group: "Before payment",
+		Title:   "The provider voids a claim before it is paid",
+		Summary: "The original is closed as denied; the void has nothing to reverse.",
+		Steps: []Step{
+			{Label: "Jordan's office visit is processed", Action: process(office("clm_A", jordan, "")), Checks: []Check{pays("clm_A", 6500)}},
+			{
+				Label:  "The office sends a void: the visit never happened",
+				Action: sim.Action{Type: "providerVoid", ClaimID: "clm_A", Claim: &sim.ClaimSpec{ID: "clm_B"}},
+				Checks: []Check{
+					outcome("clm_A", "DENIED"), denied("clm_A", "VOIDED_BY_PROVIDER"), outcome("clm_B", "VOID"),
+					accum("OOP_INN_IND", jordan, 0),
+				},
+			},
+		},
+	},
+
+	// ----------------------------------------------------------- Adjustments
+	{
+		ID: "corrected-after-payment", Group: "Adjustments",
+		Title:   "The provider corrects a claim after it is paid",
+		Summary: "The result was reported, so the corrected claim supersedes it and the next 835 reverses it.",
+		Steps: []Step{
+			{Label: "Jordan's visit is billed as 99214", Action: process(longVisit("clm_A", jordan)), Checks: []Check{pays("clm_A", 10500)}},
+			{Label: "The payment run selects it", Action: selectAll},
+			{Label: "The run is released", Action: releaseRun, Checks: []Check{payment("clm_A", "ISSUED")}},
+			{
+				Label:  "The office sends a corrected claim: it was a standard visit (99213)",
+				Why:    "clm_A keeps the outcome it was reported with and is marked superseded. The copay is counted once.",
+				Action: sim.Action{Type: "corrected", ClaimID: "clm_A", Claim: &sim.ClaimSpec{ID: "clm_B", Procedure: "99213", Charge: 18000}},
+				Checks: []Check{
+					superseded("clm_A", "REPLACEMENT"), outcome("clm_A", "APPROVED"), outcome("clm_B", "APPROVED"), pays("clm_B", 6500),
+					accum("OOP_INN_IND", jordan, 3000),
 				},
 			},
 		},
@@ -333,18 +410,18 @@ var Library = []Scenario{
 		Steps: []Step{
 			{Label: "Jordan's visit is billed as 99214", Action: process(longVisit("clm_A", jordan)), Checks: []Check{pays("clm_A", 10500)}},
 			{Label: "The payment run selects it", Action: selectAll, Checks: []Check{payment("clm_A", "SELECTED")}},
-			{Label: "The run is released: $105 goes to the provider", Action: releaseRun, Checks: []Check{payment("clm_A", "ISSUED"), status("clm_A", "APPROVED")}},
+			{Label: "The run is released: $105 goes to the provider", Action: releaseRun, Checks: []Check{payment("clm_A", "ISSUED"), outcome("clm_A", "APPROVED")}},
 			{
 				Label:  "The bank confirms the payment cleared",
 				Why:    "Payment events never change the claim's status.",
 				Action: sim.Action{Type: "payment", ClaimID: "clm_A", Event: "clear"},
-				Checks: []Check{payment("clm_A", "CLEARED"), status("clm_A", "APPROVED")},
+				Checks: []Check{payment("clm_A", "CLEARED"), outcome("clm_A", "APPROVED")},
 			},
 			{
 				Label:  "Correct it to 99213",
 				Why:    "The provider holds $105; the replacement pays $65. The $40 difference is a recovery.",
 				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", Reason: "Provider billed the wrong visit level", Claim: toOffice},
-				Checks: []Check{delta("PAYMENT", 10500, 6500, -4000), status("clm_A", "ADJUSTED"), payment("clm_A", "CLEARED")},
+				Checks: []Check{delta("PAYMENT", 10500, 6500, -4000), superseded("clm_A", "REPLACEMENT"), payment("clm_A", "CLEARED")},
 			},
 			{Label: "The next payment run selects the replacement", Action: selectAll, Checks: []Check{payment("clm_A-2", "SELECTED")}},
 			{
@@ -358,7 +435,7 @@ var Library = []Scenario{
 	{
 		ID: "ripple", Group: "Adjustments",
 		Title:   "An adjustment changes what a later claim should have paid",
-		Summary: "Later claims are flagged for review, not changed automatically. Also shows that the flagging rule is broad.",
+		Summary: "Later claims are not changed automatically, and nothing yet tells anyone they may be wrong.",
 		Steps: []Step{
 			{
 				Label:  "Jordan: surgery, $1,200 to the deductible",
@@ -370,59 +447,56 @@ var Library = []Scenario{
 				Action: process(mri("clm_B", jordan, "2026-03-12", "PA-1001")),
 				Checks: []Check{pays("clm_B", 9600)},
 			},
+			{Label: "Both are selected for payment", Action: selectAll},
+			{Label: "The run is released", Action: releaseRun, Checks: []Check{payment("clm_B", "ISSUED")}},
 			{
 				Label:  "The surgery claim was wrong: it was an office visit",
-				Why:    "The replacement posts a $30 copay and no deductible. The $1,200 comes off Jordan's deductible, so clm_B was decided against a balance that is no longer true. clm_B is flagged, not changed.",
+				Why:    "The replacement posts a $30 copay and no deductible. The $1,200 comes off Jordan's deductible, so clm_B was decided against a balance that is no longer true. clm_B is not changed, and nothing marks it.",
 				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", Reason: "Wrong procedure code: this was an office visit", Claim: toOffice},
-				Checks: []Check{status("clm_A-2", "APPROVED"), accum("DED_INN_IND", jordan, 30000), openFlags("clm_B", 1), pays("clm_B", 9600)},
+				Checks: []Check{outcome("clm_A-2", "APPROVED"), accum("DED_INN_IND", jordan, 30000), pays("clm_B", 9600)},
 			},
 			{
-				Label:  "Examiner dry-runs an adjustment of the flagged MRI",
+				Label:  "Examiner, knowing to look, previews an adjustment of the MRI",
 				Why:    "Re-adjudicated against today's balances, the whole $420 goes to the deductible and the plan pays nothing.",
-				Action: sim.Action{Type: "adjust", ClaimID: "clm_B", DryRun: true, Reason: "Earlier claim adjusted"},
-				Checks: []Check{delta("APPROVED_UNPAID", 9600, 0, -9600), status("clm_B", "APPROVED")},
+				Action: sim.Action{Type: "adjust", ClaimID: "clm_B", Preview: true, Reason: "Earlier claim adjusted"},
+				Checks: []Check{delta("PAYMENT", 9600, 0, -9600), outcome("clm_B", "APPROVED")},
 			},
 			{
 				Label:  "Examiner adjusts the MRI",
-				Why:    "The broad flagging rule now flags clm_A-2, because it was finalized after clm_B and clm_B's postings changed.",
+				Why:    "The MRI now agrees with the family's balances. Finding it took an examiner who knew to look.",
 				Action: sim.Action{Type: "adjust", ClaimID: "clm_B", Reason: "Deductible no longer met by the earlier claim"},
 				Checks: []Check{
-					status("clm_B", "ADJUSTED"), pays("clm_B-2", 0), owes("clm_B-2", 42000),
-					accum("DED_INN_IND", jordan, 42000), accum("OOP_INN_IND", jordan, 45000), openFlags("clm_A-2", 1),
+					superseded("clm_B", "REPLACEMENT"), pays("clm_B-2", 0), owes("clm_B-2", 42000),
+					accum("DED_INN_IND", jordan, 42000), accum("OOP_INN_IND", jordan, 45000),
 				},
-			},
-			{
-				Label:  "Examiner clears the flag on the office visit",
-				Why:    "A flat copay does not depend on the deductible, so nothing needs to change. This is the noise the broad rule costs.",
-				Action: sim.Action{Type: "clearFlag", ClaimID: "clm_A-2", Reason: "Copay only; not affected by the deductible"},
-				Checks: []Check{openFlags("clm_A-2", 0)},
 			},
 		},
 	},
 	{
 		ID: "replacement-pends", Group: "Adjustments",
 		Title:   "The replacement claim itself pends",
-		Summary: "The original stays in force but cannot be paid until the replacement is resolved.",
+		Summary: "The original stays in force, as reported, until the replacement is adjudicated.",
 		Steps: []Step{
 			{Label: "Jordan's office visit is processed", Action: process(office("clm_A", jordan, "")), Checks: []Check{pays("clm_A", 6500)}},
+			{Label: "It is selected for payment", Action: selectAll},
+			{Label: "The run is released", Action: releaseRun, Checks: []Check{payment("clm_A", "ISSUED")}},
 			{
 				Label:  "Corrected claim: it was an MRI, with no authorization",
-				Why:    "The replacement pends for prior auth. The original is not retired yet and its accumulator postings stay, but it goes on payment hold so it cannot be paid in the meantime.",
+				Why:    "The replacement pends for prior auth. The original is not superseded yet and its accumulator postings stay.",
 				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", Reason: "Corrected claim from provider", Claim: &sim.ClaimSpec{Procedure: "70551", Charge: 90000}},
-				Checks: []Check{status("clm_A-2", "PENDED"), status("clm_A", "APPROVED"), hold("clm_A", true), accum("OOP_INN_IND", jordan, 3000)},
+				Checks: []Check{status("clm_A-2", "PENDED"), outcome("clm_A", "APPROVED"), accum("OOP_INN_IND", jordan, 3000)},
 			},
 			{
 				Label:    "The payment run finds nothing to pay",
 				Action:   selectAll,
 				Rejected: "no claims are eligible",
-				Checks:   []Check{noPayment("clm_A")},
 			},
 			{
 				Label:  "Examiner confirms the authorization on the replacement",
-				Why:    "Now the replacement finalizes: the original becomes ADJUSTED, its copay is reversed and the MRI's deductible is posted.",
+				Why:    "Now the replacement is adjudicated: the original is superseded, its copay is reversed and the MRI's deductible is posted.",
 				Action: sim.Action{Type: "reprocess", ClaimID: "clm_A-2", Reason: "Authorization confirmed", Resolve: []sim.Resolve{{Code: "PRIOR_AUTH_REQUIRED", Line: 1}}},
 				Checks: []Check{
-					status("clm_A-2", "APPROVED"), status("clm_A", "ADJUSTED"), hold("clm_A", false),
+					outcome("clm_A-2", "APPROVED"), superseded("clm_A", "REPLACEMENT"),
 					accum("DED_INN_IND", jordan, 42000), accum("OOP_INN_IND", jordan, 42000),
 				},
 			},
@@ -431,23 +505,23 @@ var Library = []Scenario{
 	{
 		ID: "retro-termination", Group: "Adjustments",
 		Title:   "Retroactive termination after a claim was paid",
-		Summary: "Eligibility changes do not touch finalized claims; an adjustment re-adjudicates against current data.",
+		Summary: "Eligibility changes do not touch adjudicated claims; an adjustment re-adjudicates against current data.",
 		Steps: []Step{
 			{Label: "Sam's office visit on March 10 is processed", Action: process(office("clm_A", sam, "")), Checks: []Check{pays("clm_A", 6500)}},
 			{Label: "It is selected for payment", Action: selectAll},
 			{Label: "The run is released", Action: releaseRun, Checks: []Check{payment("clm_A", "ISSUED")}},
 			{
 				Label:  "Enrollment update: Sam's coverage ended February 28",
-				Why:    "The claim is finalized, so it is not touched.",
+				Why:    "The claim is adjudicated, so it is not touched.",
 				Action: sim.Action{Type: "setCoverage", MemberID: sam, Start: "2026-01-01", End: "2026-02-28"},
-				Checks: []Check{status("clm_A", "APPROVED"), pays("clm_A", 6500)},
+				Checks: []Check{outcome("clm_A", "APPROVED"), pays("clm_A", 6500)},
 			},
 			{
 				Label:  "Adjust the claim with no changes, to re-adjudicate it",
 				Why:    "The replacement denies because coverage ended before the date of service. The $65 paid is a recovery and Sam's copay comes off the out-of-pocket accumulator.",
 				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", Reason: "Retroactive termination effective 2026-02-28"},
 				Checks: []Check{
-					status("clm_A-2", "DENIED"), denied("clm_A-2", "COVERAGE_TERMINATED"), status("clm_A", "ADJUSTED"),
+					outcome("clm_A-2", "DENIED"), denied("clm_A-2", "COVERAGE_TERMINATED"), superseded("clm_A", "REPLACEMENT"),
 					delta("PAYMENT", 6500, 0, -6500), accum("OOP_INN_IND", sam, 0),
 				},
 			},
@@ -456,7 +530,7 @@ var Library = []Scenario{
 	{
 		ID: "fee-schedule-fix", Group: "Adjustments",
 		Title:   "Fee schedule loaded wrong: measure, then correct",
-		Summary: "Dry-run adjustments show the savings from the claims alone, before anything changes.",
+		Summary: "Previewing adjustments shows the savings from the claims alone, before anything changes.",
 		Steps: []Step{
 			{Label: "Jordan's office visit pays $65 at the $95 rate", Action: process(office("clm_A", jordan, "")), Checks: []Check{pays("clm_A", 6500)}},
 			{Label: "Sam's office visit pays $65", Action: process(office("clm_B", sam, "")), Checks: []Check{pays("clm_B", 6500)}},
@@ -468,16 +542,16 @@ var Library = []Scenario{
 				Checks: []Check{pays("clm_A", 6500)},
 			},
 			{
-				Label:  "Dry-run an adjustment of Jordan's claim",
+				Label:  "Preview an adjustment of Jordan's claim",
 				Why:    "The projection and the delta come from the claim's own payment record; nothing is saved.",
-				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", DryRun: true, Reason: "Fee schedule correction"},
-				Checks: []Check{delta("PAYMENT", 6500, 5500, -1000), status("clm_A", "APPROVED")},
+				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", Preview: true, Reason: "Fee schedule correction"},
+				Checks: []Check{delta("PAYMENT", 6500, 5500, -1000), outcome("clm_A", "APPROVED")},
 			},
 			{
 				Label:  "Adjust Jordan's claim",
-				Why:    "The copay is unchanged, so accumulator postings are identical and no later claims are flagged.",
+				Why:    "The copay is unchanged, so accumulator postings are identical and no later claim is affected.",
 				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", Reason: "Fee schedule correction"},
-				Checks: []Check{pays("clm_A-2", 5500), openFlags("clm_B", 0), accum("OOP_INN_IND", jordan, 3000)},
+				Checks: []Check{pays("clm_A-2", 5500), accum("OOP_INN_IND", jordan, 3000)},
 			},
 			{
 				Label:  "Adjust Sam's claim",
@@ -489,7 +563,7 @@ var Library = []Scenario{
 	{
 		ID: "void-paid", Group: "Adjustments",
 		Title:   "Void a paid claim",
-		Summary: "The claim is cancelled, its accumulators are restored, and later claims are flagged.",
+		Summary: "The claim is cancelled and its accumulators are restored. Later claims are left as they are.",
 		Steps: []Step{
 			{Label: "Jordan: surgery, $1,200 to the deductible", Action: process(surgery("clm_A", jordan, ""))},
 			{Label: "Jordan: MRI, plan pays $96", Action: process(mri("clm_B", jordan, "2026-03-12", "PA-1001")), Checks: []Check{pays("clm_B", 9600)}},
@@ -497,11 +571,11 @@ var Library = []Scenario{
 			{Label: "The run is released", Action: releaseRun},
 			{
 				Label:  "The surgery never happened: void the claim",
-				Why:    "A void claim (clm_A-2) is created, finalized with nothing payable so the next remittance reports the reversal. The $1,200 comes off the deductible and the MRI is flagged.",
+				Why:    "A void claim (clm_A-2) is created, adjudicated with outcome VOID and nothing payable so the next remittance reports the reversal. The $1,200 comes off the deductible; the MRI, decided against the old balance, is left as it is.",
 				Action: sim.Action{Type: "void", ClaimID: "clm_A", Reason: "Billed in error: service not rendered"},
 				Checks: []Check{
-					status("clm_A", "VOIDED"), status("clm_A-2", "APPROVED"), pays("clm_A-2", 0),
-					accum("DED_INN_IND", jordan, 30000), openFlags("clm_B", 1),
+					superseded("clm_A", "VOID"), outcome("clm_A-2", "VOID"), pays("clm_A-2", 0),
+					accum("DED_INN_IND", jordan, 30000),
 				},
 			},
 		},
@@ -509,43 +583,42 @@ var Library = []Scenario{
 
 	// -------------------------------------------------------------- Payments
 	{
-		ID: "blocked-while-selected", Group: "Payments",
+		ID: "reopened-from-payment-run", Group: "Payments",
 		Title:   "Claim found to be wrong while in a payment run",
-		Summary: "Adjustments are refused while payment is in flight. Dry-run, pull the claim, then adjust.",
+		Summary: "Until the run is released nothing has been reported, so the claim is reopened, which takes it out of the run.",
 		Steps: []Step{
 			{Label: "Jordan's visit is billed as 99214", Action: process(longVisit("clm_A", jordan))},
 			{Label: "The payment run selects it", Action: sim.Action{Type: "select", ClaimID: "clm_A"}, Checks: []Check{payment("clm_A", "SELECTED")}},
 			{
 				Label:    "Try to adjust it",
-				Why:      "If this were allowed, the original payment could go out while the replacement also pays.",
+				Why:      "An adjustment is for a result that has been reported. This one hasn't.",
 				Action:   sim.Action{Type: "adjust", ClaimID: "clm_A", Reason: "Wrong visit level", Claim: toOffice},
-				Rejected: "selected for a payment run",
-				Checks:   []Check{status("clm_A", "APPROVED")},
+				Rejected: "has not been released for payment",
+				Checks:   []Check{outcome("clm_A", "APPROVED")},
 			},
 			{
-				Label:  "A dry run is still allowed",
-				Why:    "It changes nothing, and answers “is it worth pulling this from the run?”",
-				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", DryRun: true, Reason: "Wrong visit level", Claim: toOffice},
-				Checks: []Check{delta("APPROVED_UNPAID", 10500, 6500, -4000), payment("clm_A", "SELECTED")},
+				Label:  "Reopen it",
+				Why:    "The claim leaves the run and goes back to pended, so it cannot be paid as it stood.",
+				Action: sim.Action{Type: "reopen", ClaimID: "clm_A", Reason: "Visit level in question"},
+				Checks: []Check{noPayment("clm_A"), status("clm_A", "PENDED"), accum("OOP_INN_IND", jordan, 0)},
 			},
 			{
-				Label:  "Pull it from the run",
-				Why:    "The claim goes back to unpaid with a payment hold, so the next run does not pick it up again before it is fixed.",
-				Action: sim.Action{Type: "pull", ClaimID: "clm_A", Reason: "Wrong visit level; do not pay"},
-				Checks: []Check{noPayment("clm_A"), hold("clm_A", true)},
-			},
-			{
-				Label:    "The next payment run skips it",
+				Label:    "The next payment run finds nothing to pay",
 				Action:   selectAll,
 				Rejected: "no claims are eligible",
 			},
 			{
-				Label:  "Now adjust it",
-				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", Reason: "Wrong visit level", Claim: toOffice},
-				Checks: []Check{status("clm_A", "ADJUSTED"), hold("clm_A", false), status("clm_A-2", "APPROVED")},
+				Label:  "The records confirm the visit level: reprocess it",
+				Action: sim.Action{Type: "reprocess", ClaimID: "clm_A", Reason: "Records confirm the visit level"},
+				Checks: []Check{outcome("clm_A", "APPROVED"), pays("clm_A", 10500), noClaim("clm_A-2")},
 			},
-			{Label: "The payment run selects the replacement", Action: selectAll, Checks: []Check{payment("clm_A-2", "SELECTED")}},
-			{Label: "Release the run", Action: releaseRun, Checks: []Check{payment("clm_A-2", "ISSUED"), noPayment("clm_A")}},
+			{Label: "The payment run selects it", Action: selectAll, Checks: []Check{payment("clm_A", "SELECTED")}},
+			{Label: "Release the run", Action: releaseRun, Checks: []Check{payment("clm_A", "ISSUED")}},
+			{
+				Label:    "Now it has been reported: reopening is refused",
+				Action:   sim.Action{Type: "reopen", ClaimID: "clm_A", Reason: "Second thoughts"},
+				Rejected: "has been released for payment",
+			},
 		},
 	},
 	{
@@ -558,20 +631,20 @@ var Library = []Scenario{
 			{Label: "The run is released", Action: releaseRun, Checks: []Check{payment("clm_A", "ISSUED")}},
 			{
 				Label:  "The bank returns the payment (closed account)",
-				Why:    "The decision was right; only delivery failed. The claim stays APPROVED.",
+				Why:    "The decision was right; only delivery failed. The claim stays adjudicated and approved.",
 				Action: sim.Action{Type: "payment", ClaimID: "clm_A", Event: "return"},
-				Checks: []Check{payment("clm_A", "RETURNED"), status("clm_A", "APPROVED")},
+				Checks: []Check{payment("clm_A", "RETURNED"), outcome("clm_A", "APPROVED")},
 			},
 			{
-				Label:  "Dry-run a correction to a longer visit (99214)",
+				Label:  "Preview a correction to a longer visit (99214)",
 				Why:    "The provider holds nothing, so the delta is the replacement's full $105, not $105 minus $65.",
-				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", DryRun: true, Reason: "Visit level corrected", Claim: &sim.ClaimSpec{Procedure: "99214", Charge: 25000}},
+				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", Preview: true, Reason: "Visit level corrected", Claim: &sim.ClaimSpec{Procedure: "99214", Charge: 25000}},
 				Checks: []Check{delta("PAYMENT_NOT_HELD", 0, 10500, 10500)},
 			},
 			{
 				Label:  "Adjust it",
 				Action: sim.Action{Type: "adjust", ClaimID: "clm_A", Reason: "Visit level corrected", Claim: &sim.ClaimSpec{Procedure: "99214", Charge: 25000}},
-				Checks: []Check{status("clm_A", "ADJUSTED"), pays("clm_A-2", 10500)},
+				Checks: []Check{superseded("clm_A", "REPLACEMENT"), pays("clm_A-2", 10500)},
 			},
 			{
 				Label:    "Try to reissue the original's bounced payment",

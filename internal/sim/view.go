@@ -84,12 +84,20 @@ type ClaimView struct {
 	Provider      string `json:"provider"`
 	DOS           string `json:"dos"`
 	Procedure     string `json:"procedure"`
-	Status        string `json:"status"`
-	Frequency     string `json:"frequency"`
-	OriginalID    string `json:"originalId,omitempty"`
-	Run           int32  `json:"run"`
-	Reason        string `json:"reason,omitempty"`
-	Tier          string `json:"tier,omitempty"`
+	// Where it is in processing: RECEIVED, PENDED or ADJUDICATED.
+	Status string `json:"status"`
+	// What was decided, once adjudicated: APPROVED, PARTIALLY_DENIED,
+	// DENIED or VOID.
+	Outcome string `json:"outcome,omitempty"`
+	// What took its place, if anything: REPLACEMENT or VOID, and that
+	// claim's label.
+	Superseded   string `json:"superseded,omitempty"`
+	SupersededBy string `json:"supersededBy,omitempty"`
+	Frequency    string `json:"frequency"`
+	OriginalID   string `json:"originalId,omitempty"`
+	Run          int32  `json:"run"`
+	Reason       string `json:"reason,omitempty"`
+	Tier         string `json:"tier,omitempty"`
 
 	Charge  int64 `json:"charge"`
 	Allowed int64 `json:"allowed"`
@@ -99,8 +107,6 @@ type ClaimView struct {
 	Pends   []PendView    `json:"pends"`
 	Lines   []LineView    `json:"lines"`
 	Payment *PaymentView  `json:"payment,omitempty"`
-	Hold    string        `json:"hold,omitempty"`
-	Flags   []FlagView    `json:"flags"`
 	History []HistoryView `json:"history"`
 	// How the claim arrived, for claims loaded from an 837.
 	Intake *IntakeView `json:"intake,omitempty"`
@@ -180,37 +186,26 @@ type PaymentView struct {
 	Trace string `json:"trace,omitempty"`
 }
 
-type FlagView struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Source  string `json:"source"`
-	Open    bool   `json:"open"`
-	Note    string `json:"note,omitempty"`
-}
-
 type HistoryView struct {
 	Run     int32  `json:"run"`
 	Outcome string `json:"outcome"`
 }
 
 type DeltaView struct {
-	Basis     string   `json:"basis"`
-	Original  int64    `json:"original"`
-	Projected int64    `json:"projected"`
-	Delta     int64    `json:"delta"`
-	Flagged   []string `json:"flagged"`
+	Basis     string `json:"basis"`
+	Original  int64  `json:"original"`
+	Projected int64  `json:"projected"`
+	Delta     int64  `json:"delta"`
 }
 
 func trimEnum(s, prefix string) string { return strings.TrimPrefix(s, prefix) }
 
-func (s *Sim) deltaView(r *claimsv1.AdjustClaimResponse) *DeltaView {
-	d := r.GetDelta()
+func (s *Sim) deltaOf(d *claimsv1.AdjustmentDelta) *DeltaView {
 	return &DeltaView{
 		Basis:     trimEnum(d.GetBasis().String(), "DELTA_BASIS_"),
 		Original:  d.GetOriginalPaid().GetCents(),
 		Projected: d.GetProjectedPaid().GetCents(),
 		Delta:     d.GetDelta().GetCents(),
-		Flagged:   s.labels(r.GetFlaggedClaimIds()),
 	}
 }
 
@@ -371,6 +366,21 @@ func outcome(c *claimsv1.Claim, adj *claimsv1.Adjudication, status string) strin
 	return status
 }
 
+func outcomeName(o claimsv1.ClaimOutcome) string {
+	if o == claimsv1.ClaimOutcome_CLAIM_OUTCOME_UNSPECIFIED {
+		return ""
+	}
+	return trimEnum(o.String(), "CLAIM_OUTCOME_")
+}
+
+// supersededName is REPLACEMENT or VOID for a superseded claim.
+func supersededName(c *claimsv1.Claim) string {
+	if c.GetSupersededBy() == nil {
+		return ""
+	}
+	return trimEnum(c.GetSupersededBy().GetFrequency().String(), "CLAIM_FREQUENCY_")
+}
+
 // ClaimView flattens a stored claim for display.
 func (s *Sim) ClaimView(c *claimsv1.Claim) *ClaimView { return s.claimView(c) }
 
@@ -386,6 +396,8 @@ func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 		Provider:   c.GetBillingProvider().GetName(),
 		DOS:        dates.Format(c.GetServiceDates().GetStart()),
 		Status:     trimEnum(c.GetStatus().String(), "CLAIM_STATUS_"),
+		Outcome:    outcomeName(adj.GetOutcome()),
+		Superseded: supersededName(c),
 		Frequency:  trimEnum(c.GetFrequency().String(), "CLAIM_FREQUENCY_"),
 		OriginalID: c.GetOriginalClaimId(),
 		Run:        adj.GetRunNumber(),
@@ -397,16 +409,17 @@ func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 		Member_:    adj.GetTotalMemberResponsibility().GetCents(),
 		Pends:      []PendView{},
 		Lines:      []LineView{},
-		Flags:      []FlagView{},
 		History:    []HistoryView{},
 		Actions:    []string{},
-		Hold:       c.GetPaymentHold().GetReason(),
 	}
 	if len(c.GetLines()) > 0 {
 		v.Procedure = c.GetLines()[0].GetProcedureCode()
 	}
 	if c.GetOriginalClaimId() != "" {
 		v.OriginalLabel = s.label(c.GetOriginalClaimId())
+	}
+	if by := c.GetSupersededBy(); by != nil {
+		v.SupersededBy = s.label(by.GetClaimId())
 	}
 	if f := c.GetFrequency(); f == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT || f == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID {
 		cv := &CorrectionView{Kind: "corrected", Quoted: c.GetPayerClaimControlNumber()}
@@ -517,35 +530,31 @@ func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 			Date: dates.Format(p.GetPaidDate()), Remit: p.GetRemittanceId(), Trace: p.GetPaymentTraceNumber(),
 		}
 	}
-	openFlag := false
-	for _, f := range c.GetReviewFlags() {
-		open := f.GetClearedTime() == nil
-		openFlag = openFlag || open
-		v.Flags = append(v.Flags, FlagView{Code: f.GetCode(), Message: f.GetMessage(), Source: f.GetSourceClaimId(), Open: open, Note: f.GetClearNote()})
-	}
-
-	final := c.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_APPROVED || c.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_DENIED
+	// Adjudicated and still the version in force.
+	final := c.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_ADJUDICATED && c.GetSupersededBy() == nil
 	state := c.GetPayment().GetState()
 	switch {
 	case c.GetStatus() == claimsv1.ClaimStatus_CLAIM_STATUS_PENDED:
 		v.Actions = append(v.Actions, "reprocess")
 	case final && c.GetFrequency() == claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID:
 		// A void claim only carries the reversal; it is not adjusted.
-	case final:
-		v.Actions = append(v.Actions, "adjust", "void")
-		if c.GetPayment() == nil && c.GetPaymentHold() == nil {
+	case final && adjudication.ClosedByProvider(c):
+		// Closed by the provider's own correction: only its payment run,
+		// which reports the denial.
+		if c.GetPayment() == nil {
 			v.Actions = append(v.Actions, "select")
 		}
-		if c.GetPaymentHold() != nil {
-			v.Actions = append(v.Actions, "releaseHold")
+	case final && (c.GetPayment() == nil || state == claimsv1.PaymentState_PAYMENT_STATE_SELECTED):
+		// Nothing reported yet: it is reopened and re-run in place.
+		v.Actions = append(v.Actions, "reopen")
+		if c.GetPayment() == nil {
+			v.Actions = append(v.Actions, "select")
 		}
-		if openFlag {
-			v.Actions = append(v.Actions, "clearFlag")
-		}
+	case final:
+		// Reported: it changes only through a replacement or void.
+		v.Actions = append(v.Actions, "adjust", "void")
 	}
 	switch state {
-	case claimsv1.PaymentState_PAYMENT_STATE_SELECTED:
-		v.Actions = append(v.Actions, "pull")
 	case claimsv1.PaymentState_PAYMENT_STATE_ISSUED:
 		v.Actions = append(v.Actions, "clear", "return")
 	case claimsv1.PaymentState_PAYMENT_STATE_RETURNED:

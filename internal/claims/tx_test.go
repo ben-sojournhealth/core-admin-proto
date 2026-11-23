@@ -70,8 +70,9 @@ func TestReplacementIsAllOrNothing(t *testing.T) {
 	if got := describe(out); got != "26075-E-00002 APPROVED" || out.GetOriginalClaimId() != find(t, s, "26063-A-00001-2").GetId() {
 		t.Errorf("retry: %s", got)
 	}
-	if o := find(t, s, "26063-A-00001-2"); o.GetStatus() != claimsv1.ClaimStatus_CLAIM_STATUS_ADJUSTED {
-		t.Errorf("original after retry: %s", o.GetStatus())
+	// The original's result was never reported: closed, not superseded.
+	if o := find(t, s, "26063-A-00001-2"); describe(o) != "26063-A-00001-2 DENIED" || o.GetSupersededBy() != nil {
+		t.Errorf("original after retry: %s, superseded by %v", describe(o), o.GetSupersededBy())
 	}
 }
 
@@ -128,9 +129,9 @@ func (w *interleave) List(ctx context.Context, opts store.ListOptions[*claimsv1.
 }
 
 // Two corrections of the same claim arriving together must not both
-// become its open replacement. Both pend here (unknown member), and the
-// original is already on payment hold, so neither writes the original:
-// only the lock keeps them apart.
+// become its open replacement. Both pend here (unknown member). The
+// original's result was never reported, so the first to match it closes
+// it; the lock makes the second see that.
 //
 // The second starts while the first holds the lock on the original. It
 // waits for the first to commit, then reads what the first wrote, and
@@ -139,12 +140,6 @@ func TestRacingCorrectionsOneOpenReplacement(t *testing.T) {
 	s := sandbox(t)
 	ctx := context.Background()
 	orig := find(t, s, "26063-A-00001-2")
-	if orig.GetPayment() == nil && orig.GetPaymentHold() == nil {
-		orig.PaymentHold = &claimsv1.PaymentHold{Reason: "audit"}
-		if _, err := s.Repos.Claims.Update(ctx, orig); err != nil {
-			t.Fatal(err)
-		}
-	}
 	a := correcting(submitted("PAT-40711", "ZZZ999", "99214", 250, 2), replacement, "26063-A-00001")
 	b := correcting(submitted("PAT-40711", "ZZZ999", "99215", 300, 2), replacement, "26063-A-00001")
 

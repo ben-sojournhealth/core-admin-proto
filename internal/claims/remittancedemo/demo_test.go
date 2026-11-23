@@ -11,7 +11,7 @@ import (
 // Every sample runs, and builds the 835 it describes.
 func TestSamples(t *testing.T) {
 	want := map[string]struct {
-		claims  string // claim statuses, in order shown
+		claims  string // claim outcomes, in order shown; + what superseded it
 		clps    string // CLP02 of each entry
 		method  string
 		noBuild bool
@@ -21,11 +21,11 @@ func TestSamples(t *testing.T) {
 		"deductible":     {"APPROVED", "1", "NONE", false},
 		"multi-line":     {"APPROVED", "1", "ACH", false},
 		"denied":         {"DENIED", "4", "NONE", false},
-		"partial-denial": {"APPROVED", "1", "ACH", false},
+		"partial-denial": {"PARTIALLY_DENIED", "1", "ACH", false},
 		"batch":          {"APPROVED APPROVED APPROVED", "1 1 1", "ACH", false},
-		"corrected":      {"ADJUSTED APPROVED", "22 1", "ACH", false},
-		"void-netted":    {"VOIDED APPROVED APPROVED", "22 1", "ACH", false},
-		"void-alone":     {"VOIDED APPROVED", "", "", true},
+		"corrected":      {"APPROVED+REPLACEMENT APPROVED", "22 1", "ACH", false},
+		"void-netted":    {"APPROVED+VOID VOID APPROVED", "22 1", "ACH", false},
+		"void-alone":     {"APPROVED+VOID VOID", "", "", true},
 	}
 	samples := remittancedemo.Samples()
 	if len(samples) != len(want) {
@@ -39,7 +39,14 @@ func TestSamples(t *testing.T) {
 		w := want[x.ID]
 		var statuses, clps []string
 		for _, c := range v.Claims {
-			statuses = append(statuses, c.Status)
+			if c.Status != "ADJUDICATED" {
+				t.Errorf("%s: %s is %s", x.ID, c.Number, c.Status)
+			}
+			o := c.Outcome
+			if c.Superseded != "" {
+				o += "+" + c.Superseded
+			}
+			statuses = append(statuses, o)
 		}
 		for _, s := range v.Segments {
 			if strings.HasPrefix(s.Text, "CLP*") {

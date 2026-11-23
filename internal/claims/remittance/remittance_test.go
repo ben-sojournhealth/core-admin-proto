@@ -57,6 +57,22 @@ func receive(t *testing.T, s *sim.Sim, pcn, card, procedure string, dollars int6
 	return c
 }
 
+// pay runs a payment run for claims to release: the point at which their
+// results count as reported, and they are adjusted or voided, not reopened.
+func pay(t *testing.T, s *sim.Sim, cs ...*claimsv1.Claim) {
+	t.Helper()
+	var ids []string
+	for _, c := range cs {
+		ids = append(ids, c.GetId())
+	}
+	if _, err := s.Claims.SelectForPayment(context.Background(), ids); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Claims.ReleasePaymentRun(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func check(n string) *remittancev1.RemittancePayment {
 	return &remittancev1.RemittancePayment{
 		Method: remittancev1.PaymentMethod_PAYMENT_METHOD_CHECK, TraceNumber: n,
@@ -105,7 +121,7 @@ func TestPaidClaim(t *testing.T) {
 	s, b := setup(t)
 	c := receive(t, s, "RIV-88213", "ACM100101", "99213", 180)
 	la := c.GetLines()[0].GetAdjudication()
-	if c.GetStatus() != claimsv1.ClaimStatus_CLAIM_STATUS_APPROVED || la.GetPaid().GetCents() == 0 {
+	if c.GetAdjudication().GetOutcome() != claimsv1.ClaimOutcome_CLAIM_OUTCOME_APPROVED || la.GetPaid().GetCents() == 0 {
 		t.Fatalf("setup: %s, paid %d", c.GetStatus(), la.GetPaid().GetCents())
 	}
 	r, err := b.Build(context.Background(), []*claimsv1.Claim{c}, check("100231"))
@@ -155,7 +171,7 @@ func TestDeniedClaimIsNotificationOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := receive(t, s, "OKA-1", "ACM100101", "99499", 120)
-	if c.GetStatus() != claimsv1.ClaimStatus_CLAIM_STATUS_DENIED {
+	if c.GetAdjudication().GetOutcome() != claimsv1.ClaimOutcome_CLAIM_OUTCOME_DENIED {
 		t.Fatalf("setup: claim is %s, not denied", c.GetStatus())
 	}
 	r, err := b.Build(ctx, []*claimsv1.Claim{c}, check("100232"))
@@ -193,6 +209,7 @@ func TestReplacementReversesWhatWasReported(t *testing.T) {
 		t.Fatal(err)
 	}
 	reported := sent.GetClaims()[0]
+	pay(t, s, orig)
 
 	// The corrected claim bills a higher-level visit.
 	corrected := clone(orig)
@@ -233,9 +250,7 @@ func TestReplacementReversesWhatWasReported(t *testing.T) {
 	if _, err := b.Save(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	another := clone(repl)
-	another.Id = "another-replacement"
-	r2, err := b.Build(ctx, []*claimsv1.Claim{another}, check("100400"))
+	r2, err := b.Build(ctx, []*claimsv1.Claim{repl}, check("100400"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,24 +259,39 @@ func TestReplacementReversesWhatWasReported(t *testing.T) {
 	}
 }
 
-// A replacement of a version that was never reported (adjusted before
-// payment) has nothing to reverse.
-func TestReplacementOfUnreportedClaim(t *testing.T) {
+// A provider's corrected claim for a claim that was never reported has
+// nothing to reverse: it is reported as a claim of its own, and the
+// original gets its own answer, denied as replaced.
+func TestCorrectionOfUnreportedClaim(t *testing.T) {
 	s, b := setup(t)
 	ctx := context.Background()
 	orig := receive(t, s, "RIV-88213", "ACM100101", "99213", 180)
-	corrected := clone(orig)
-	corrected.Lines[0].ProcedureCode = "99214"
-	adj, err := s.Claims.AdjustClaim(ctx, &claimsv1.AdjustClaimRequest{OriginalClaimId: orig.GetId(), CorrectedClaim: corrected, Reason: "corrected"})
+	fix := clone(orig)
+	// A new submission: its own id and claim number.
+	fix.Id, fix.ClaimNumber, fix.ClaimVersion, fix.Lines[0].ProcedureCode = "", "", 0, "99214"
+	fix.Frequency, fix.PayerClaimControlNumber = claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT, orig.GetClaimNumber()
+	corrected, err := s.Claims.Receive(ctx, fix)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := b.Build(ctx, []*claimsv1.Claim{adj.GetClaim()}, check("100377"))
+	r, err := b.Build(ctx, []*claimsv1.Claim{corrected}, check("100377"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.GetClaims()) != 1 || r.GetClaims()[0].GetStatus() != processed {
+	if len(r.GetClaims()) != 1 || r.GetClaims()[0].GetStatus() != processed || r.GetClaims()[0].GetFrequencyCode() != "7" {
 		t.Errorf("entries %v", r.GetClaims())
+	}
+	// The original was closed, not superseded. Its denial can't be
+	// reported until a reason code is chosen for it.
+	closed, err := s.Repos.Claims.Get(ctx, orig.GetId())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if closed.GetSupersededBy() != nil || closed.GetAdjudication().GetOutcome() != claimsv1.ClaimOutcome_CLAIM_OUTCOME_DENIED {
+		t.Fatalf("original: outcome %s, superseded by %v", closed.GetAdjudication().GetOutcome(), closed.GetSupersededBy())
+	}
+	if _, err := b.Build(ctx, []*claimsv1.Claim{closed}, check("100378")); err == nil || !strings.Contains(err.Error(), "no reason code") {
+		t.Errorf("835 for the closed original: err = %v, want it refused for lacking a reason code", err)
 	}
 }
 
@@ -276,6 +306,7 @@ func TestVoidOfReportedClaimNeedsRecovery(t *testing.T) {
 	if _, err := b.Save(ctx, sent); err != nil {
 		t.Fatal(err)
 	}
+	pay(t, s, orig)
 	v, err := s.Claims.VoidClaim(ctx, &claimsv1.VoidClaimRequest{ClaimId: orig.GetId(), Reason: "billed in error"})
 	if err != nil {
 		t.Fatal(err)

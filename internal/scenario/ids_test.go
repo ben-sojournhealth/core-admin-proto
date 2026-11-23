@@ -16,7 +16,7 @@ func TestReplacementIDs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Load("adjust-unpaid"); err != nil {
+	if err := r.Load("adjust-paid"); err != nil {
 		t.Fatal(err)
 	}
 	for {

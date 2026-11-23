@@ -64,7 +64,6 @@ func TestIndexesServeTheirAccessPatterns(t *testing.T) {
 			m[ix.Path[len(ix.Path)-1]] = "v@"
 		}
 		// Claim ids are unique, so a lookup by one matches a row or two.
-		doc["reviewFlags"] = []any{map[string]any{"sourceClaimId": "x#"}}
 		doc["claims"] = []any{map[string]any{"claimId": "x#"}}
 		tmpl, _ := json.Marshal(doc)
 		q := fmt.Sprintf(`INSERT INTO %s (id, revision, tx_from, recorded_by, data)

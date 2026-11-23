@@ -13,11 +13,12 @@ internal/employer/enrollmentintake/      834 enrollment intake: maps member loop
 internal/employer/eligibility/           Eligibility derived from an append-only input log; every member version kept; regeneration; Verify
 internal/employer/eligibilitydemo/       Eligibility sandboxes and the walkthrough's live examples
 
-internal/claims/                         Claims domain. ClaimsService operations (process, reprocess, adjust, void, holds, flags)
+internal/claims/                         Claims domain. ClaimsService operations (process, reprocess, reopen, adjust, void; estimate and previews)
 internal/claims/claimsintake/            837P claims intake: maps files to claims, writes the 999, sample files
 internal/claims/adjudication/            Claims pipeline (eligibility → pricing → cost share), pends, denials, remark codes
 internal/claims/remittance/              835s from adjudicated claims: build, balance, reverse, render; previews
 internal/claims/remittancedemo/          Remittance demo: samples that adjudicate claims and build their 835
+internal/claims/claimsdemo/              "How claims works": the walkthrough behind the Claims domain on the map
 
 internal/network/                        Network domain. NetworkService: what other domains may ask it
 
@@ -58,11 +59,11 @@ To add a demo: add it to its domain's file in `internal/demos/` (`claims.go`, `e
 
 `/journey/`: the admin portal, our staff's view of the system, with a tab per area of administration:
 
-- **Claims.** Work queues (pended claims by reason, review flags, payment holds) and a claim page with the decision, money breakdown, the member's accumulators and the claim's activity. Examiners override judgment pends with a note, reprocess data pends, adjust and void, clear flags and release holds.
+- **Claims.** Work queues (pended claims by reason) and a claim page with the decision, money breakdown, the member's accumulators and the claim's activity. Examiners override judgment pends with a note, reprocess data pends, reopen a claim whose payment has not been released, and adjust or void one that has.
 - **Members.** Every member with coverage on today's date, and a member page: coverage through the year, the family, accumulators and claims.
 - **Employers.** A page per customer: headcount, subscribers by tier, each plan's version in force (network tiers, deductibles, out-of-pocket maximums, benefits), who may send its enrollment, and its stop-loss policy.
 - **Network.** Providers with their TINs and network participation on today's date, the claims each billed, and networks with their contracts' terms.
-- **Finance.** Payments by state (ready to pay, in the payment run, issued, cleared, returned, on hold), selecting and releasing a run, and stop-loss policies: contract basis, specific deductible and lasers, aggregate factors.
+- **Finance.** Payments by state (ready to pay, in the payment run, issued, cleared, returned), selecting and releasing a run, and stop-loss policies: contract basis, specific deductible and lasers, aggregate factors.
 - **Files.** Every file in and out: 837s, the 999 answering each, 834s and 835s.
 
 The tabs read each domain's stores as they stand in the sandbox (`journey.GetAdmin`). What isn't built shows as such in each tab's side menu: disputes, billing & funding, vendor intake, employer funding, bank reconciliation. Stop-loss exposure is empty until paid claims post to it, and releasing a run here doesn't write an 835. Enrollment exceptions and full-file terminations are worked in Eligibility, which has its own sandbox.

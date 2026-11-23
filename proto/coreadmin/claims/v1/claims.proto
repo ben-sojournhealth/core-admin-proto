@@ -9,21 +9,40 @@ import "google/protobuf/timestamp.proto";
 
 // Claim is a request for payment, modeled on the 837P/837I.
 //
-// Lifecycle:
+// Four separate facts describe where a claim stands:
 //
-//   RECEIVED -> PENDED | APPROVED | DENIED      first adjudication
-//   PENDED   -> PENDED | APPROVED | DENIED      ReprocessClaim
-//   APPROVED | DENIED -> ADJUSTED | VOIDED      AdjustClaim / VoidClaim
+//   status                where it is in processing
+//   adjudication.outcome  what was decided
+//   superseded_by         whether it is still the current version
+//   payment               where the money is
 //
-// `status` records the decision only. Payment (selection into a run,
-// issuance, clearing, returns) is tracked separately in `payment`, and
-// does not change the status.
+// Status:
 //
-// A claim is finalized when it reaches APPROVED or DENIED. Finalization is
-// the only point at which accumulators are posted. A finalized claim is
-// never re-adjudicated: corrections and voids create a new Claim that
-// references the original (claim frequency 7 / 8), and the original
-// becomes ADJUSTED or VOIDED.
+//   RECEIVED -> PENDED | ADJUDICATED     first adjudication
+//   PENDED   -> PENDED | ADJUDICATED     ReprocessClaim
+//
+// A claim is adjudicated when no pend is open and every line is decided.
+// That is the only point at which accumulators are posted.
+//
+// What happens to an adjudicated claim that needs to change depends on
+// whether its result has been reported, which happens when its payment
+// run is released (payment.state ISSUED or later):
+//
+//   Not yet released: nothing has been reported, so there is nothing to
+//   reverse. ReopenClaim puts the same claim back to PENDED and it is
+//   re-run in place. A provider's corrected claim or void (frequency 7 /
+//   8) of it closes it as denied, replaced or voided by the provider, and
+//   is itself decided as a claim of its own.
+//
+//   Released: the result stands as reported. Corrections and voids create
+//   a new Claim that references the original (AdjustClaim, VoidClaim, or a
+//   provider's frequency 7 / 8). When that claim is adjudicated the
+//   original's superseded_by is set; its status and outcome stay as they
+//   were, and the next 835 reverses what was reported.
+//
+// So every adjudicated result that reaches an 835 is reported once, and
+// only a reported result is ever superseded. Payment (selection into a
+// run, release, clearing, returns) is tracked in `payment`.
 //
 // Submitted versus matched: the fields a provider (or the 837) supplies are
 // kept exactly as sent and are the only inputs adjudication reads. What
@@ -97,10 +116,6 @@ message Claim {
   // system so adjustment deltas can be computed from the claim alone.
   // Unset until a payment run selects the claim.
   ClaimPayment payment = 28;
-  // When set, payment runs skip this claim.
-  PaymentHold payment_hold = 29;
-  // Open and cleared requests for an examiner to look at this claim.
-  repeated ReviewFlag review_flags = 30;
   // Examiner decisions that let the claim past a pend (e.g. "prior auth
   // confirmed", "not a duplicate"). These are inputs to adjudication,
   // unlike the adjudication results.
@@ -140,7 +155,25 @@ message Claim {
   // or by an examiner. An input to adjudication, like pend_overrides.
   ClaimLink original_link = 39;
 
+  // Output only: set once a replacement or void of this claim is
+  // adjudicated, in the same transaction, and only on a claim whose
+  // result was already reported (payment released). Unset on the current
+  // version. This claim's status and outcome stay as they were.
+  SupersededBy superseded_by = 41;
+
   common.v1.AuditInfo audit = 31;
+
+  reserved 29, 30;
+}
+
+// SupersededBy names the claim that took another's place.
+message SupersededBy {
+  // The replacement or void.
+  string claim_id = 1;
+  // That claim's frequency: REPLACEMENT or VOID.
+  ClaimFrequency frequency = 2;
+  // When it was adjudicated.
+  google.protobuf.Timestamp time = 3;
 }
 
 message ClaimLink {
@@ -197,19 +230,38 @@ enum ClaimFrequency {
   CLAIM_FREQUENCY_VOID = 8;
 }
 
+// ClaimStatus is where the claim is in processing. What was decided is
+// adjudication.outcome; whether it is still the current version is
+// superseded_by; where the money is is payment.
 enum ClaimStatus {
   CLAIM_STATUS_UNSPECIFIED = 0;
-  // Accepted at intake, not yet adjudicated.
+  // Saved at intake; adjudication has not completed.
   CLAIM_STATUS_RECEIVED = 1;
-  // Adjudication stopped for manual review; see adjudication.pends.
+  // At least one open pend; see adjudication.pends. The whole claim
+  // waits, even when the pend is on one line. Nothing posts to
+  // accumulators.
   CLAIM_STATUS_PENDED = 2;
-  // Finalized as payable.
-  CLAIM_STATUS_APPROVED = 3;
-  // Finalized with nothing payable.
-  CLAIM_STATUS_DENIED = 4;
-  // Replaced by a later claim.
-  CLAIM_STATUS_ADJUSTED = 5;
-  CLAIM_STATUS_VOIDED = 6;
+  // No open pends and every line decided. Accumulators post here, once.
+  // From here the claim changes only through a replacement or void.
+  CLAIM_STATUS_ADJUDICATED = 3;
+
+  reserved 4, 5, 6;
+  reserved "CLAIM_STATUS_APPROVED", "CLAIM_STATUS_DENIED", "CLAIM_STATUS_ADJUSTED", "CLAIM_STATUS_VOIDED";
+}
+
+// ClaimOutcome is what an adjudication run decided, from its line
+// results. Unset on a run that pended.
+enum ClaimOutcome {
+  CLAIM_OUTCOME_UNSPECIFIED = 0;
+  // Every line payable. Says nothing about the amount: the plan may pay
+  // zero when the allowed amount is all member cost share.
+  CLAIM_OUTCOME_APPROVED = 1;
+  // At least one line payable and at least one denied.
+  CLAIM_OUTCOME_PARTIALLY_DENIED = 2;
+  // Every line denied.
+  CLAIM_OUTCOME_DENIED = 3;
+  // A void (frequency 8): it cancels its original and decides no lines.
+  CLAIM_OUTCOME_VOID = 4;
 }
 
 enum ClaimSource {
@@ -263,8 +315,9 @@ message ClaimLine {
 }
 
 // ClaimPayment is the claim's copy of its payment and remittance, owned and
-// updated by the payment system. Every finalized claim is reported on a
-// remittance, including denials and other zero-pay claims: for those,
+// updated by the payment system. Every adjudicated claim that is not
+// reopened first is reported on a remittance, including denials and other
+// zero-pay claims: for those,
 // `paid` is zero and the state stops at ISSUED.
 message ClaimPayment {
   // Amount issued to the payee for this claim.
@@ -280,12 +333,14 @@ message ClaimPayment {
 
 enum PaymentState {
   PAYMENT_STATE_UNSPECIFIED = 0;
-  // Selected into a payment run that has not been released. The claim
-  // cannot be adjusted or voided (dry runs are allowed) until the run is
-  // released or the claim is pulled from it.
+  // Selected into a payment run that has not been released. Nothing has
+  // been reported yet: the claim can still be reopened, which takes it
+  // out of the run.
   PAYMENT_STATE_SELECTED = 1;
   // Run released: file sent to the bank or check printed, and the 835
-  // sent. A reissued payment returns to this state.
+  // sent. From here the result has been reported: the claim changes only
+  // through a replacement or void. A reissued payment returns to this
+  // state.
   PAYMENT_STATE_ISSUED = 2;
   // EFT settled or check cashed.
   PAYMENT_STATE_CLEARED = 3;
@@ -293,12 +348,6 @@ enum PaymentState {
   PAYMENT_STATE_RETURNED = 4;
   // Stop-payment succeeded or check went stale; the payee holds nothing.
   PAYMENT_STATE_VOIDED = 5;
-}
-
-message PaymentHold {
-  string reason = 1;
-  string placed_by = 2;
-  google.protobuf.Timestamp placed_time = 3;
 }
 
 // PendOverride records an examiner clearing a pend. Only pends that are a
@@ -312,23 +361,6 @@ message PendOverride {
   string note = 3;
   string resolved_by = 4;
   google.protobuf.Timestamp resolved_time = 5;
-}
-
-// ReviewFlag asks an examiner to look at a finalized claim without
-// changing it. The examiner either adjusts the claim or clears the flag.
-message ReviewFlag {
-  // Machine code. "ACCUMULATOR_CHANGE": an earlier claim for the same
-  // family was adjusted or voided and its accumulator postings changed, so
-  // this claim's cost sharing may no longer be right.
-  string code = 1;
-  string message = 2;
-  // The claim whose adjustment or void raised the flag.
-  string source_claim_id = 3;
-  google.protobuf.Timestamp raised_time = 4;
-  // Unset while the flag is open.
-  google.protobuf.Timestamp cleared_time = 5;
-  string cleared_by = 6;
-  string clear_note = 7;
 }
 
 // Adjudication is the outcome of one run of a claim through the engine.
@@ -351,7 +383,7 @@ message Adjudication {
 
   repeated Pend pends = 11;
   // The accumulator postings this result implies. They are applied only
-  // when the claim is finalized, and only if the family's accumulator
+  // when the claim is adjudicated, and only if the family's accumulator
   // record is still at family_accumulators_revision; otherwise cost
   // sharing is recalculated against the current balances.
   repeated AccumulatorPosting accumulator_postings = 12;
@@ -367,6 +399,9 @@ message Adjudication {
   string member_id = 17;
   string original_claim_id = 18;
   OriginalMatch original_match = 19;
+
+  // What this run decided. Output only, derived from the lines' statuses.
+  ClaimOutcome outcome = 20;
 }
 
 // How a replacement or void was matched to its original.

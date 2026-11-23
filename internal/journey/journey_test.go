@@ -19,29 +19,17 @@ func TestWorkload(t *testing.T) {
 		t.Fatal(err)
 	}
 	pends := map[string]int{}
-	flags, holds := 0, 0
 	for _, c := range st.Claims {
 		for _, p := range c.Pends {
 			pends[p.Code]++
 		}
-		for _, f := range c.Flags {
-			if f.Open {
-				flags++
-			}
-		}
-		if c.Hold != "" {
-			holds++
-		}
 		t.Logf("%-10s %-9s %-10s pays %6d %v", c.ID, c.Status, c.Member, c.Paid, c.Pends)
 	}
-	want := map[string]int{"PRIOR_AUTH_REQUIRED": 2, "POSSIBLE_DUPLICATE": 1, "NO_BENEFIT_MATCH": 1, "NO_ELIGIBILITY": 1}
+	want := map[string]int{"PRIOR_AUTH_REQUIRED": 2, "POSSIBLE_DUPLICATE": 1, "NO_BENEFIT_MATCH": 1, "NO_ELIGIBILITY": 1, "REOPENED": 1}
 	for code, n := range want {
 		if pends[code] != n {
 			t.Errorf("%s pends: got %d, want %d", code, pends[code], n)
 		}
-	}
-	if flags != 1 || holds != 1 {
-		t.Errorf("open flags %d, holds %d; want 1 and 1", flags, holds)
 	}
 	// Every claim has a UUIDv7 id and a claim number; the adjustment of
 	// 26063-A-00001 is version 2 of the same number.

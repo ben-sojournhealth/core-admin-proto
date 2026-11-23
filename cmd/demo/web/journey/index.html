@@ -90,7 +90,8 @@ table.list .r { text-align: right; }
 .chip.todo { background: var(--amber-soft); color: var(--amber); }
 .chip.APPROVED { background: var(--green-soft); color: var(--green); }
 .chip.DENIED { background: var(--red-soft); color: var(--red); }
-.chip.PENDED { background: var(--amber-soft); color: var(--amber); }
+.chip.PENDED, .chip.PARTIALLY_DENIED { background: var(--amber-soft); color: var(--amber); }
+.chip.superseded { background: transparent; border: 1px dashed var(--muted); }
 .age.old { color: var(--red); font-weight: 600; }
 .clear { padding: 56px 20px; text-align: center; color: var(--muted); }
 .clear b { display: block; font-size: 16px; color: var(--ink); margin-bottom: 2px; }
@@ -272,13 +273,21 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const usd = (c) => (c / 100).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: c % 100 ? 2 : 0 });
 const words = (s) => String(s).toLowerCase().replace(/_/g, " ");
+// A claim carries four separate facts: status (received, pended,
+// adjudicated), outcome (what was decided), superseded (a replacement or
+// void took its place) and payment. decision is the one word for the
+// first two: the status until adjudicated, then the outcome.
+const decision = (c) => c.status === "ADJUDICATED" ? c.outcome : c.status;
+const supersededWord = (c) => c.superseded === "VOID" ? "voided" : c.superseded ? "replaced" : "";
+const OUTCOME_LABEL = { APPROVED: "Approved", PARTIALLY_DENIED: "Partially denied", DENIED: "Denied", VOID: "Void" };
+const decisionChips = (c, style = "") => `<span class="chip ${decision(c)}"${style}>${words(decision(c))}</span>${c.superseded ? ` <span class="chip superseded"${style} title="superseded by ${esc(c.supersededBy || "a later claim")}">${supersededWord(c)}</span>` : ""}`;
 
 const PEND = {
   PRIOR_AUTH_REQUIRED: "Prior authorization", POSSIBLE_DUPLICATE: "Possible duplicate", NO_ELIGIBILITY: "No eligibility",
   NO_BENEFIT_MATCH: "No benefit match", MEMBER_NOT_FOUND: "Member not found", NO_PRICE: "No price",
   COVERAGE_IN_GRACE: "Grace period", NO_TIER: "No network tier", NO_PLAN_VERSION: "No plan version",
   ORIGINAL_NOT_FOUND: "Original not found", ORIGINAL_NOT_FINALIZED: "Original not final",
-  ORIGINAL_IN_PAYMENT_RUN: "Original in payment run", ORIGINAL_HAS_OPEN_REPLACEMENT: "Replacement in progress", REMARK_CODE_REQUIRED: "Remark code missing",
+  REOPENED: "Reopened", ORIGINAL_HAS_OPEN_REPLACEMENT: "Replacement in progress", REMARK_CODE_REQUIRED: "Remark code missing",
 };
 const PEND_HELP = {
   PRIOR_AUTH_REQUIRED: "Confirm the authorization, then override.",
@@ -289,7 +298,7 @@ const PEND_HELP = {
   MEMBER_NOT_FOUND: "Find the member from the patient as sent (see Received). Linking by hand isn't built yet.",
   ORIGINAL_NOT_FOUND: "Find the original with the provider, from the patient control number or the EOP. Linking by hand isn't built yet.",
   ORIGINAL_NOT_FINALIZED: "The claim it corrects hasn't been decided. Resolve that claim first, then reprocess this one.",
-  ORIGINAL_IN_PAYMENT_RUN: "Reprocess after the payment run is released, or pull the original from the run.",
+  REOPENED: "Reopened before anything was reported. Reprocess it when it's ready to be decided again.",
   REMARK_CODE_REQUIRED: "A denial reason needs a remark code on the 835 and doesn't have one. Fix the reporting rules, then reprocess.",
 };
 const pendName = (code) => PEND[code] || words(code);
@@ -299,12 +308,13 @@ let lastQueue = "pended";
 
 const QUEUES = [
   { id: "pended", label: "Pended", work: true, test: (c) => c.status === "PENDED" },
-  { id: "flags", label: "Review flags", work: true, test: (c) => c.flags.some((f) => f.open) },
-  { id: "holds", label: "Payment holds", work: true, test: (c) => !!c.hold },
   { id: "all", label: "All claims", browse: true, test: () => true },
-  { id: "approved", label: "Approved", browse: true, test: (c) => c.status === "APPROVED" },
-  { id: "denied", label: "Denied", browse: true, test: (c) => c.status === "DENIED" },
-  { id: "closed", label: "Adjusted & voided", browse: true, test: (c) => c.status === "ADJUSTED" || c.status === "VOIDED" },
+  // By outcome, for claims still in force; superseded claims and the
+  // voids that cancelled them are together at the end.
+  { id: "approved", label: "Approved", browse: true, test: (c) => c.outcome === "APPROVED" && !c.superseded },
+  { id: "partial", label: "Partially denied", browse: true, test: (c) => c.outcome === "PARTIALLY_DENIED" && !c.superseded },
+  { id: "denied", label: "Denied", browse: true, test: (c) => c.outcome === "DENIED" && !c.superseded },
+  { id: "closed", label: "Replaced & voided", browse: true, test: (c) => !!c.superseded || c.outcome === "VOID" },
 ];
 
 async function get(path) { const r = await fetch(path); if (!r.ok) throw new Error(await r.text()); return r.json(); }
@@ -393,9 +403,7 @@ function ageDays(c) { return Math.max(0, Math.floor((new Date(S.today) - new Dat
 
 function reasonChip(c, q) {
   if (c.status === "PENDED") return c.pends.map((p) => `<span class="chip todo">${esc(pendName(p.code))}</span>`).join(" ");
-  if (q && q.id === "flags") return `<span class="chip todo">Accumulator change</span>`;
-  if (q && q.id === "holds") return `<span class="chip todo" title="${esc(c.hold)}">Payment hold</span>`;
-  return `<span class="chip ${c.status}">${words(c.status)}</span>`;
+  return decisionChips(c);
 }
 
 function renderList(q, code, isSearch) {
@@ -425,23 +433,23 @@ function renderList(q, code, isSearch) {
 function barHTML(c) {
   const seg = (cls, amount) => amount > 0 ? `<div class="seg ${cls}" style="flex-grow:${amount}"></div>` : "";
   if (c.status === "PENDED" || c.status === "RECEIVED") return `<div class="bar"><div class="seg pended" style="flex-grow:1"></div></div>`;
-  if (c.status === "DENIED") return `<div class="bar"><div class="seg denied" style="flex-grow:1"></div></div>`;
+  if (c.outcome === "DENIED") return `<div class="bar"><div class="seg denied" style="flex-grow:1"></div></div>`;
   return `<div class="bar">${seg("plan", c.paid)}${seg("member", c.memberOwes)}${seg("writeoff", c.charge - c.allowed)}</div>`;
 }
 
 function trackHTML(c) {
   const pay = c.payment ? c.payment.state : "";
   const everPended = c.status === "PENDED" || c.history.some((h) => h.outcome.startsWith("PENDED"));
-  const decided = ["APPROVED", "DENIED", "ADJUSTED", "VOIDED"].includes(c.status);
+  const decided = c.status === "ADJUDICATED";
   const nodes = [["Received", true, ""]];
   if (everPended) nodes.push(["Pended", true, "warn"]);
-  nodes.push([c.status === "DENIED" ? "Denied" : "Approved", decided, c.status === "DENIED" ? "bad" : ""]);
-  if (c.status !== "DENIED") {
+  nodes.push([OUTCOME_LABEL[c.outcome] || "Adjudicated", decided, c.outcome === "DENIED" ? "bad" : c.outcome === "PARTIALLY_DENIED" ? "warn" : ""]);
+  if (c.outcome !== "DENIED" && c.outcome !== "VOID") {
     nodes.push(["Selected", !!pay, ""], ["Paid", ["ISSUED", "CLEARED", "RETURNED", "VOIDED"].includes(pay), ""]);
     nodes.push(pay === "RETURNED" || pay === "VOIDED" ? ["Returned", true, "bad"] : ["Cleared", pay === "CLEARED", ""]);
   }
-  if (c.status === "ADJUSTED") nodes.push(["Adjusted", true, "warn"]);
-  if (c.status === "VOIDED") nodes.push(["Voided", true, "bad"]);
+  if (c.superseded === "REPLACEMENT") nodes.push(["Replaced", true, "warn"]);
+  if (c.superseded === "VOID") nodes.push(["Voided", true, "bad"]);
   return `<div class="track">` + nodes.map(([l, on, cls]) => `<span class="${on ? "on" : ""} ${cls}">${l}</span>`).join("<b></b>") + `</div>`;
 }
 
@@ -455,18 +463,8 @@ function workHTML(c) {
     html += `<div class="work"><h3>${esc(pendName(p.code))}</h3><p>${esc(p.message)}</p>
       <div class="do">${act}</div>${help !== p.message ? `<div class="hint" style="margin-top:8px">${esc(help)}</div>` : ""}</div>`;
   }
-  for (const f of c.flags.filter((f) => f.open)) {
-    html += `<div class="work"><h3>Accumulator change</h3><p>${esc(f.message)}</p>
-      <div class="do"><button class="btn small" data-act="dryadjust">Preview re-adjudication</button>
-        <button class="btn primary small" data-act="adjust">Adjust…</button>
-        <input data-flagnote placeholder="Note"><button class="btn small" data-clearflag>No change needed</button></div></div>`;
-  }
-  if (c.hold) {
-    html += `<div class="work"><h3>Payment hold</h3><p>${esc(c.hold)}</p>
-      <div class="do"><input data-holdnote placeholder="Note"><button class="btn primary small" data-releasehold>Release hold</button></div></div>`;
-  }
-  if (c.status === "ADJUSTED") html += `<div class="note">Replaced by a later claim.</div>`;
-  if (c.status === "VOIDED") html += `<div class="note">Voided.</div>`;
+  if (c.superseded === "REPLACEMENT") html += `<div class="note">Superseded: replaced by ${esc(c.supersededBy || "a later claim")}. Its own decision stands as history.</div>`;
+  if (c.superseded === "VOID") html += `<div class="note">Superseded: voided by ${esc(c.supersededBy || "a later claim")}. Its own decision stands as history.</div>`;
   for (const l of c.lines) if (l.denial) html += `<div class="note red">${esc(l.denial)}</div>`;
   return html;
 }
@@ -541,10 +539,10 @@ function renderClaim() {
   $("#main").innerHTML = `
     <a class="back" href="#/q/${esc(lastQueue)}">← ${esc(backQ ? (lastQueue.includes("/") ? pendName(lastQueue.split("/")[1]) : backQ.label) : "Back")}</a>
     <div class="claimhead">
-      <div><h1 class="num">${esc(c.number)} <span class="chip ${c.frequency === "VOID" ? "" : c.status}" style="vertical-align:4px">${c.frequency === "VOID" ? "void" : words(c.status)}</span></h1>
+      <div><h1 class="num">${esc(c.number)} ${decisionChips(c, ` style="vertical-align:4px"`)}</h1>
         ${corrHTML(c)}
         <div class="who">${[c.member, D.card, c.provider, c.dos].filter(Boolean).map(esc).join(" · ")}</div></div>
-      <div class="tools">${final ? `<button class="btn" data-act="adjust">Adjust…</button><button class="btn" data-act="void">Void…</button>` : ""}</div>
+      <div class="tools">${final ? `<button class="btn" data-act="adjust">Adjust…</button><button class="btn" data-act="void">Void…</button>` : ""}${c.actions.includes("reopen") ? `<button class="btn" data-act="reopen" title="Nothing has been reported yet: back to pended, to be re-run in place">Reopen…</button>` : ""}</div>
     </div>
     <div class="cols">
       <div>
@@ -582,8 +580,8 @@ async function act(a, quiet) {
   let res;
   try { res = await post("api/action", a); } catch (e) { toast(e.message, true); return null; }
   if (!res.ok) { toast(res.error, true); return res; }
-  if (!quiet && !a.dryRun) toast(summary(res));
-  if (!a.dryRun) await load();
+  if (!quiet && !a.preview) toast(summary(res));
+  if (!a.preview) await load();
   return res;
 }
 
@@ -607,25 +605,16 @@ document.addEventListener("click", async (ev) => {
     return act({ type: "reprocess", claimId: c.id, reason: note, resolve: [{ code: p.code, line: p.line }] });
   }
   if (t.closest("[data-recheck]")) return act({ type: "reprocess", claimId: c.id, reason: "Rechecked after data update" });
-  if (t.closest("[data-clearflag]")) {
-    const note = $("[data-flagnote]").value.trim();
-    if (!note) return toast("Add a note saying why no change is needed.", true);
-    return act({ type: "clearFlag", claimId: c.id, reason: note });
-  }
-  if (t.closest("[data-releasehold]")) {
-    const note = $("[data-holdnote]").value.trim();
-    if (!note) return toast("Add a note for the release.", true);
-    return act({ type: "releaseHold", claimId: c.id, reason: note });
-  }
   const a = t.closest("[data-act]");
   if (!a) return;
   if (a.dataset.act === "adjust") return adjustDialog(c);
   if (a.dataset.act === "dryadjust") {
-    const res = await act({ type: "adjust", claimId: c.id, reason: "Preview", dryRun: true });
+    const res = await act({ type: "adjust", claimId: c.id, reason: "Preview", preview: true });
     if (res && res.ok) showDelta(res);
     return;
   }
   if (a.dataset.act === "void") return voidDialog(c);
+  if (a.dataset.act === "reopen") return reopenDialog(c);
 });
 
 const dlg = $("#dlg");
@@ -650,7 +639,7 @@ function showDelta(res) {
   const d = res.delta, p = res.preview;
   dialog(`<form><h3>If re-adjudicated today</h3>
     <div class="money" style="grid-template-columns:repeat(3,1fr)">
-      <div><small>Outcome</small><b style="font-size:15px"><span class="chip ${p.status}">${words(p.status)}</span></b></div>
+      <div><small>Outcome</small><b style="font-size:15px"><span class="chip ${decision(p)}">${words(decision(p))}</span></b></div>
       <div><small>Member owes</small><b class="num">${usd(p.memberOwes)}</b></div>
       <div><small>Plan pays</small><b class="num">${usd(p.paid)}</b></div></div>
     <div class="delta"><b class="num">${usd(d.delta)}</b> <span class="muted">${d.delta < 0 ? "to recover" : d.delta > 0 ? "more to pay" : "no change"} · provider holds ${usd(d.original)} (${words(d.basis)})</span></div>
@@ -678,19 +667,32 @@ function adjustDialog(c) {
       const a = { type: "adjust", claimId: c.id, reason: d.reason };
       if (Object.keys(spec).length) a.claim = spec;
       if (mode === "dry") {
-        a.dryRun = true;
+        a.preview = true;
         const res = await act(a, true);
         if (!res || !res.ok) return res ? res.error : "Request failed.";
         const x = res.delta, p = res.preview;
-        $("#preview").innerHTML = `<div class="delta"><span class="chip ${p.status}">${words(p.status)}</span> plan pays <b class="num">${usd(p.paid)}</b>
-          · <span class="num">${usd(x.delta)}</span> <span class="muted">${x.delta < 0 ? "to recover" : x.delta > 0 ? "more to pay" : "no change"}</span>
-          ${x.flagged.length ? `<div class="sub" style="margin-top:4px">Would flag ${x.flagged.map(esc).join(", ")} for review</div>` : ""}</div>`;
+        $("#preview").innerHTML = `<div class="delta"><span class="chip ${decision(p)}">${words(decision(p))}</span> plan pays <b class="num">${usd(p.paid)}</b>
+          · <span class="num">${usd(x.delta)}</span> <span class="muted">${x.delta < 0 ? "to recover" : x.delta > 0 ? "more to pay" : "no change"}</span></div>`;
         return "keep";
       }
       const res = await act(a);
       if (!res || !res.ok) return res ? res.error : "Request failed.";
       if (res.claimId) goToClaim(res.claimId);
       return "";
+    });
+}
+
+// Before a claim's payment run is released nothing has been reported, so
+// it is reopened and re-run in place: no new version.
+function reopenDialog(c) {
+  dialog(`<form><h3>Reopen ${esc(c.number)}</h3>
+    <p class="sub">Back to pended${c.payment ? ", out of the payment run" : ""}. Its accumulator postings are reversed. Reprocess it to decide it again.</p>
+    <label>Reason<input name="reason" required placeholder="e.g. Visit level in question"></label>
+    <div class="formerr"></div>
+    <div class="actions"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="go">Reopen claim</button></div></form>`,
+    async (d) => {
+      const res = await act({ type: "reopen", claimId: c.id, reason: d.reason });
+      return !res ? "Request failed." : res.ok ? "" : res.error;
     });
 }
 

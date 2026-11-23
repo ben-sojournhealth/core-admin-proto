@@ -52,6 +52,10 @@ svg { display: block; width: 100%; min-width: 860px; height: auto; }
 .node.planned.hl rect { stroke: var(--accent); }
 .domain rect { fill: var(--domain); stroke: var(--muted); stroke-width: 1.2; }
 .domain text { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; fill: var(--muted); }
+/* A domain with a page of its own: its title is a link. */
+.domain .dlink { cursor: pointer; fill: var(--accent); }
+.domain .dlink .more { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.domain .dlink:hover { text-decoration: underline; }
 /* Contracted out, not built for '28. */
 .node.oos rect { stroke: var(--oos); }
 .node .s.oos-text { fill: var(--oos); }
@@ -127,7 +131,8 @@ const TOP = 70;
 // Domains: a box drawn around the components that belong together.
 const DOMAINS = [
   { t: "Employer", x: 200, y: 8, w: 660, h: 222 },
-  { t: "Claims", x: 200, y: 250, w: 660, h: 330 },
+  // href: the domain's own page, one level in; its title becomes a link.
+  { t: "Claims", x: 200, y: 250, w: 660, h: 330, href: "/claims/", more: "how it works" },
   { t: "Network", x: 200, y: 600, w: 660, h: 240 },
   { t: "Finance", x: 875, y: 450, w: 205, h: 230 },
   // TPAs usually contract this out: shown, but out of scope for '28.
@@ -194,7 +199,7 @@ const EDGES = [
   ["clearinghouse", "claims-intake", "M180,428 H220"], ["claims-intake", "adjudication", "M380,428 H410"],
   ["adjudication", "remittance", "M600,442 H660", "preview", 609, 456],
   ["disputes", "adjudication", "M380,528 H395 V452 H410"],
-  // Settlement can be previewed before the claim finalizes, like the 835.
+  // Settlement can be previewed before the claim is adjudicated, like the 835.
   ["adjudication", "settlement", "M580,464 V528 H660", "preview", 600, 522],
   ["settlement", "disbursement", "M840,528 H890"],
   ["disbursement", "remittance", "M978,492 V428 H840", "paid", 984, 470],
@@ -249,7 +254,8 @@ function draw() {
     <path class="arrow proto" d="M0,0 L10,5 L0,10 z"/></marker></defs><g transform="translate(0,${TOP})">`;
   for (const d of DOMAINS) {
     svg += `<g class="domain${d.oos ? " oos" : ""}"><rect x="${d.x}" y="${d.y}" width="${d.w}" height="${d.h}" rx="14"/>
-      <text x="${d.x + 14}" y="${d.y + 24}">${esc(d.t)}</text>
+      ${d.href ? `<text class="dlink" x="${d.x + 14}" y="${d.y + 24}" data-href="${esc(d.href)}" tabindex="0" role="link"><title>${esc(d.t)} · ${esc(d.more)}</title>${esc(d.t)}<tspan class="more" dx="8">${esc(d.more)} →</tspan></text>`
+        : `<text x="${d.x + 14}" y="${d.y + 24}">${esc(d.t)}</text>`}
       ${d.oos ? `<text class="oos-tag" x="${d.x + d.w - 14}" y="${d.y + 24}" text-anchor="end">out of scope for '28</text>` : ""}</g>`;
   }
   for (const [from, to, d, label, lx, ly, ends] of EDGES) {

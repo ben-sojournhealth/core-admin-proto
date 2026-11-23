@@ -31,7 +31,7 @@ const (
 // Steps lists what the engine does. The list implies no order.
 var Steps = []Step{
 	{ID: "match-original", Title: "Match original", Sub: "replacements & voids · locks it",
-		Pends: []string{PendOriginalNotFound, PendOriginalNotFinalized, PendOriginalInPaymentRun, PendOpenReplacement},
+		Pends: []string{PendOriginalNotFound, PendOriginalNotFinalized, PendOpenReplacement},
 		Data:  []string{"claims"}},
 	{ID: "match-member", Title: "Match member", Sub: "member id · dependent by name & birth date",
 		Pends: []string{PendMemberNotFound},
