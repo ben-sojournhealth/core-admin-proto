@@ -5,7 +5,8 @@
 // Each domain lists its own components and demos in its own file
 // (employer.go, claims.go, network.go, finance.go, medical.go), so work on
 // one domain doesn't touch another's file. Component ids match the nodes in
-// the map (cmd/demo/web/index.html).
+// the map (cmd/demo/web/index.html), which has two levels: the overview,
+// and a domain opened on its own with every component in it.
 package demos
 
 // Status of a demo.
