@@ -176,9 +176,10 @@ details.tbl .ix div { margin-top: 6px; } details.tbl .ix b { color: var(--ink); 
 button.linkish { border: 0; background: none; color: var(--brand); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; margin-top: 10px; }
 
 /* delta bars */
-.dl { display: grid; grid-template-columns: 220px minmax(0, 1fr) 110px; gap: 12px 16px; align-items: center; }
+.dl { display: grid; grid-template-columns: 250px minmax(0, 1fr) 150px; gap: 12px 16px; align-items: center; }
+.dl .dlh { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .dl .lab b { display: block; font-size: 14.5px; } .dl .lab small { color: var(--muted); font-size: 12.5px; }
-.dl .pair { display: grid; grid-template-columns: 78px 1fr 70px; gap: 4px 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.dl .pair { display: grid; grid-template-columns: 140px 1fr 70px; gap: 4px 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
 .dl .pair i { display: block; height: 14px; border-radius: 4px; background: var(--muted); min-width: 2px; }
 .dl .pair i.proj { background: var(--brand); }
 .dl .d { font-size: 17px; font-weight: 700; text-align: right; }
@@ -413,17 +414,23 @@ const SLIDES = [
 
   () => {
     const f = T.examples.delta.facts;
-    const rows = [["PAID", "Paid", "issued or cleared: what was paid"], ["RETURNED", "Payment returned", "the payee holds nothing"],
-      ["DENIED", "Denied", "reported with nothing paid"]];
+    // Each row: the original's situation, in a sentence a newcomer can read.
+    const rows = [["PAID", "The original was paid", "the provider has the money"],
+      ["RETURNED", "The original's payment bounced", "the bank returned it, so the provider has nothing"],
+      ["DENIED", "The original was denied", "nothing was paid in the first place"]];
     const max = Math.max(...rows.flatMap(([k]) => [f[k].held, f[k].projected]), 1);
-    return `<div class="kicker">Adjustments in money</div><h1>The delta: what the payee holds against what's now right</h1>
-    <p class="lede">Each AdjustClaim answers with a delta. An adjusted claim has always been reported, so the delta is measured against what the payee holds from that payment.</p>
-    <div class="box"><div class="dl">${rows.map(([k, t, s]) => `
-      <div class="lab"><b>${esc(t)}</b><small>${esc(s)}</small></div>
-      <div class="pair"><span>payee holds</span><i style="width:${f[k].held / max * 100}%"></i><span>${usd(f[k].held)}</span>
-        <span>replacement</span><i class="proj" style="width:${f[k].projected / max * 100}%"></i><span>${usd(f[k].projected)}</span></div>
-      <div class="d ${f[k].delta < 0 ? "neg" : "pos"}">${signed(f[k].delta)}<small>${f[k].delta < 0 ? "recover" : "pay"}</small></div>`).join("")}</div></div>
-    <div class="note"><span class="live">live</span> · three reported visits, each previewed with PreviewAdjustment against the same replacement (${usd(f.PAID.projected)}). Only a payment the payee still holds produces a recovery.</div>`;
+    const move = (d) => d < 0 ? `take back ${usd(-d)}` : d > 0 ? `pay ${usd(d)} more` : "nothing moves";
+    return `<div class="kicker">Correcting a claim, in money</div><h1>When we correct a claim, how much money moves?</h1>
+    <p class="lede">A claim we already reported turns out to be wrong, so we replace it with a corrected one. The provider may already have been paid for the original. What moves is the difference: what the corrected claim pays, minus what the provider already has.</p>
+    <div class="box"><div class="dl">
+      <div class="dlh">If…</div><div class="dlh">Then…</div><div class="dlh" style="text-align:right">So we…</div>${rows.map(([k, t, sub]) => `
+      <div class="lab"><b>${esc(t)}</b><small>${esc(sub)}</small></div>
+      <div class="pair"><span>provider already has</span><i style="width:${f[k].held / max * 100}%"></i><span>${usd(f[k].held)}</span>
+        <span>corrected claim pays</span><i class="proj" style="width:${f[k].projected / max * 100}%"></i><span>${usd(f[k].projected)}</span></div>
+      <div class="d ${f[k].delta < 0 ? "neg" : "pos"}">${move(f[k].delta)}</div>`).join("")}</div></div>
+    <div class="grid2">
+      <div class="note">The same correction, to a ${usd(f.PAID.projected)} visit, in all three rows. Only the first takes money back, because only there does the provider still have a payment.</div>
+      <div class="note">AdjustClaim reports this difference as the <b>delta</b>, and PreviewAdjustment shows it before anything changes. <span class="live">live</span></div></div>`;
   },
 
   () => {

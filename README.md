@@ -2,6 +2,10 @@
 
 A prototype core administration system for a health plan payer and TPA. It covers customers and plan design, eligibility, provider data, claims adjudication, stop-loss and file ingestion.
 
+![The domain map](docs/domain-map.png)
+
+This is the domain map, the demo's landing page (`make demo`). After changing it, run `make screenshot` with the demo running and commit the new image.
+
 ## Layout
 
 ```
@@ -51,7 +55,7 @@ Each domain is a folder under `internal/`. A domain's code uses only its own tab
 make demo        # then open http://localhost:8080
 ```
 
-The landing page is the domain map. Components with a demo are solid and clickable; dashed ones have a demo planned. Clicking a component opens its demo filtered to the relevant scenarios (e.g. Accumulators opens `/claims-lifecycle/?group=Accumulators`). Lines between domains appear when a component is hovered, or all at once with *Show all connections*. Lines with a protobuf interface are drawn in teal; clicking one opens the service, which methods each caller uses over that line, and the source of every message those calls carry, grouped by protobuf package (`demos.Interfaces` lists them; a test checks every method exists and every domain-service method is on some line). Lines without one (X12 files, interfaces not defined yet) aren't clickable.
+The landing page is the domain map. It has two levels: the overview shows each domain's main components, and clicking a domain's title (Claims, so far) opens that domain on its own, with every component in it and the ones it talks to elsewhere drawn small around it. Components with a demo are solid and clickable; dashed ones have a demo planned. Clicking a component opens its demo filtered to the relevant scenarios (e.g. Accumulators opens `/claims-lifecycle/?group=Accumulators`). Every line between domains is shown by default; unchecking *Show all connections* (remembered per browser) shows only a hovered component's lines. Lines with a protobuf interface are drawn in teal; clicking one opens the service, which methods each caller uses over that line, and the source of every message those calls carry, grouped by protobuf package (`demos.Interfaces` lists them; a test checks every method exists and every domain-service method is on some line). Lines without one (X12 files, interfaces not defined yet) aren't clickable.
 
 To add a demo: add it to its domain's file in `internal/demos/` (`claims.go`, `employer.go`, ...) with the components it covers (set `Status: Planned` until it exists), serve its API from a file of its own in `cmd/demo/` registered in `registrations`, and put its page in `cmd/demo/web/<id>/`. Components are the node ids in `cmd/demo/web/index.html`.
 
