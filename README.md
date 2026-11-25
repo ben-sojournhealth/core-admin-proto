@@ -22,6 +22,8 @@ internal/claims/claimsintake/            837P claims intake: maps files to claim
 internal/claims/adjudication/            Claims pipeline (eligibility → pricing → cost share), pends, denials, remark codes
 internal/claims/remittance/              835s from adjudicated claims: build, balance, reverse, render; previews
 internal/claims/remittancedemo/          Remittance demo: samples that adjudicate claims and build their 835
+internal/claims/servicedefs/             Service definitions: named groups of services by code; which groups a line is in
+internal/claims/servicedefsdemo/         Service Definitions demo: the starting set of definitions, and the How it works examples
 internal/claims/claimsdemo/              "How claims works": the walkthrough behind the Claims domain on the map
 
 internal/network/                        Network domain. NetworkService: what other domains may ask it
@@ -81,7 +83,7 @@ Each domain has a README of its own:
 | Domain | | Key resources |
 |---|---|---|
 | Employer | [internal/employer](internal/employer/README.md) | Customer, Group, Plan → PlanVersion, Member, CoverageSpan, EnrollmentTransaction, EligibilityInput, MemberVersion |
-| Claims | [internal/claims](internal/claims/README.md) | Claim, ClaimLine, Adjudication, LineAdjudication, ClaimPayment, FamilyAccumulators, FeeSchedule, Remittance |
+| Claims | [internal/claims](internal/claims/README.md) | Claim, ClaimLine, Adjudication, LineAdjudication, ClaimPayment, FamilyAccumulators, FeeSchedule, Remittance, ServiceDefinition |
 | Network | [internal/network](internal/network/README.md) | Provider, Network, UnderlyingNetwork, Contract |
 | Finance | [internal/finance](internal/finance/README.md) | StopLossPolicy, exposures, filings |
 
@@ -99,7 +101,7 @@ Each domain has a README of its own:
 Everything runs on Postgres: the demo, the tests, and the throwaway sandboxes the Remittance demo and the walkthrough build per request. There is no in-memory store. One local Postgres serves them all (`internal/common/pgdb`): an embedded one on port 5433, shared by every checkout and worktree, its data outside all of them (`~/Library/Application Support/coreadmin/pg` on macOS). `make pg` starts it, and the demo or a test run starts it if it isn't running; it keeps running until `make pg-stop`. Each checkout has its own databases: `coreadmin` and `coreadmin_test` in the main checkout, `coreadmin_<worktree>` and `coreadmin_test_<worktree>` in a worktree, so demos and tests in different worktrees never touch each other's data. Each domain owns a schema holding its tables, and reads and writes only that schema (each domain declares its tables in its own `<domain>db` package; `repo.Tables` collects them):
 
 - `employer`: customers, groups, plans, members, the 834 ingestion jobs, enrollment transactions, eligibility inputs and member versions
-- `claims`: claims, family accumulators, fee schedules, the 837 ingestion jobs, remittances and claim number blocks
+- `claims`: claims, family accumulators, fee schedules, service definitions, the 837 ingestion jobs, remittances and claim number blocks
 - `network`: providers, networks, underlying networks and contracts
 - `finance`: stop-loss policies, exposures and filings
 

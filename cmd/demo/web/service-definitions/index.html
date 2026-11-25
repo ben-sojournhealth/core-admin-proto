@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Service Definitions</title>
+<link rel="stylesheet" href="/shared/interfaces.css">
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --nav: #eef1f4; --ink: #18202b; --muted: #687384; --line: #e2e6ec;
+  --brand: #0f766e; --brand-ink: #ffffff; --brand-soft: #e3f3f1; --accent: #0f766e;
+  --amber: #8a5a00; --amber-soft: #fff4d9; --red: #b42318; --red-soft: #fdecea;
+  --green: #157347; --green-soft: #e2f4ea; --gray-soft: #edf0f3;
+  --proto: #0e7490; --proto-soft: #e0f2f7;
+  --code: #f3f5f8; --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101418; --panel: #171c22; --nav: #13181d; --ink: #e6eaef; --muted: #93a0b0; --line: #262e37;
+    --brand: #2dd4bf; --brand-ink: #062320; --brand-soft: #123532; --accent: #2dd4bf;
+    --amber: #f3c969; --amber-soft: #2e2611; --red: #ff8f85; --red-soft: #3a1d1b;
+    --green: #6fdc9f; --green-soft: #15301f; --gray-soft: #232a33;
+    --proto: #67d5ea; --proto-soft: #12313a;
+    --code: #12171c; --shadow: none;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.muted { color: var(--muted); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+
+.top { height: 54px; display: flex; align-items: center; gap: 16px; padding: 0 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 700; font-size: 17px; text-decoration: none; color: inherit; }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 13px; }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--muted); font-size: 13px; text-decoration: none; }
+.linkbtn:hover { color: var(--brand); }
+.linkbtn.proto { color: var(--proto); font-weight: 600; }
+
+.shell { display: grid; grid-template-columns: 290px minmax(0, 1fr); height: calc(100% - 54px); }
+nav { background: var(--nav); padding: 14px 12px; overflow-y: auto; border-right: 1px solid var(--line); }
+h4 { margin: 2px 6px 8px; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+.card { display: block; width: 100%; text-align: left; border: 1px solid transparent; background: none; border-radius: 9px; padding: 8px 10px; }
+.card:hover { background: var(--gray-soft); }
+.card.on { background: var(--panel); border-color: var(--line); box-shadow: var(--shadow); }
+.card b { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; }
+.card small { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+.card.new { color: var(--muted); border: 1px dashed var(--line); margin-top: 8px; text-align: center; font-weight: 600; }
+main { overflow-y: auto; padding: 20px 26px 48px; }
+@media (max-width: 1100px) { .shell { grid-template-columns: 1fr; height: auto; } nav { border: 0; border-bottom: 1px solid var(--line); } }
+
+.head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.head h1 { font-size: 21px; margin: 0; letter-spacing: -.01em; }
+.rev { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; background: var(--gray-soft); color: var(--muted); }
+.edit { border: 0; background: none; padding: 0; outline: none; border-bottom: 1px dashed transparent; }
+.edit:hover, .edit:focus { border-bottom-color: var(--muted); }
+h1 .edit { font-weight: 700; min-width: 80px; }
+.intent { display: block; width: 100%; margin: 6px 0 18px; color: var(--muted); }
+/* One dense panel: a row per code system, its codes as chips. */
+.systems { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.sys { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 4px 12px; padding: 9px 14px; border-top: 1px solid var(--line); }
+.sys:first-child { border-top: 0; }
+.sys h3 { margin: 3px 0 0; font-size: 13px; font-weight: 650; }
+.sys h3 span { display: block; font-weight: 400; color: var(--muted); font-size: 11.5px; }
+.codes { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.code { border: 1px solid var(--line); background: var(--code); border-radius: 7px; padding: 1px 7px; font: 600 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.code:hover, .code.open { border-color: var(--brand); }
+/* The dates a code counts for, only when it isn't every date. */
+.code span { font-weight: 400; color: var(--amber); margin-left: 3px; }
+.code.off { opacity: .5; }
+.code.off span { color: var(--muted); }
+.more { border: 0; background: none; padding: 1px 4px; font-size: 12px; color: var(--muted); }
+.more:hover { color: var(--brand); }
+.add { width: 130px; border: 1px dashed var(--line); background: none; border-radius: 7px; padding: 1px 7px; font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; outline: none; }
+.add:focus { border-color: var(--brand); border-style: solid; }
+button.rev { border: 0; }
+button.rev:hover, button.rev.on { background: var(--brand-soft); color: var(--brand); }
+/* Edit history: when the group was changed, newest first. */
+.hist { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.hrow { display: grid; grid-template-columns: 96px 190px minmax(0, 1fr); gap: 12px; align-items: baseline; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--line); background: none; padding: 9px 14px; }
+.hrow:first-child { border-top: 0; }
+.hrow:hover { background: var(--code); }
+.hrow b { font-size: 13px; }
+.hrow .when { color: var(--muted); font-size: 12.5px; }
+.hrow .chg { display: flex; flex-wrap: wrap; gap: 4px; }
+.hrow .chg span { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; border-radius: 6px; padding: 0 6px; background: var(--gray-soft); white-space: nowrap; }
+.hrow .chg .plus { background: var(--green-soft); color: var(--green); }
+.hrow .chg .minus { background: var(--red-soft); color: var(--red); }
+.hrow .chg .dates { background: var(--amber-soft); color: var(--amber); }
+.asit { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; padding: 9px 12px; border-radius: 10px; background: var(--amber-soft); color: var(--amber); font-weight: 600; }
+.asit .linkbtn { margin-left: auto; color: inherit; font-weight: 600; }
+.subhead { display: flex; align-items: center; gap: 12px; margin: 0 0 8px; }
+.subhead h4 { margin: 0; }
+.pop { grid-column: 2; margin: 4px 0 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--code); display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.pop label input { width: 128px; }
+label { display: grid; gap: 3px; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+label input { border: 1px solid var(--line); background: var(--panel); border-radius: 7px; padding: 5px 8px; font-size: 13px; color: var(--ink); width: 100%; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 5px 12px; font-weight: 600; white-space: nowrap; }
+.btn:hover { border-color: var(--brand); color: var(--brand); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.btn.danger:hover { border-color: var(--red); color: var(--red); }
+.rule { margin-top: 16px; font-size: 12.5px; color: var(--muted); }
+.err { margin: 0 0 12px; padding: 9px 12px; border-radius: 10px; background: var(--red-soft); color: var(--red); font-weight: 600; }
+
+/* tabs, and the How it works tab */
+.tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.tabs button { border: 0; background: var(--panel); padding: 4px 12px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.tabs button + button { border-left: 1px solid var(--line); }
+.tabs button.on { background: var(--brand); color: var(--brand-ink); }
+.shell.how { grid-template-columns: minmax(0, 1fr); }
+.shell.how nav { display: none; }
+.how-wrap { max-width: 1020px; margin: 0 auto; display: grid; gap: 16px; }
+.hcard { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 16px 18px; }
+.hcard h2 { margin: 0 0 2px; font-size: 16px; }
+.hcard .lede { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+.hcard .systems { box-shadow: none; }
+.hcard .code { cursor: default; }
+.ex { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 24px minmax(0, 1.2fr); gap: 6px 12px; align-items: center; }
+.ex > * { padding: 6px 0; border-top: 1px solid var(--line); }
+.ex > :nth-child(-n+4) { border-top: 0; }
+.ex .codes { gap: 4px; }
+.ex .arrow { color: var(--muted); text-align: center; }
+.ex .tag { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; border-radius: 6px; padding: 0 6px; background: var(--gray-soft); white-space: nowrap; }
+.grp { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; background: var(--green-soft); color: var(--green); white-space: nowrap; }
+.grp.none { background: var(--gray-soft); color: var(--muted); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 860px) { .two { grid-template-columns: 1fr; } .ex { grid-template-columns: 1fr; } .ex .arrow { display: none; } }
+.side { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.side h3 { margin: 0; font-size: 13.5px; }
+.side .sub { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
+.side .ex { grid-template-columns: minmax(0, 1fr) 20px auto; }
+.side .ex > :nth-child(-n+4) { border-top: 1px solid var(--line); }
+.side .ex > :nth-child(-n+3) { border-top: 0; }
+.side .ex.rv { grid-template-columns: minmax(0, 1fr) auto; }
+.side .ex.rv > :nth-child(3) { border-top: 1px solid var(--line); }
+table.rows { width: 100%; border-collapse: collapse; font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+table.rows th { text-align: left; font-weight: 600; color: var(--muted); padding: 5px 10px 5px 0; border-bottom: 1px solid var(--line); }
+table.rows td { padding: 5px 10px 5px 0; border-bottom: 1px solid var(--line); }
+table.rows tr:last-child td { border-bottom: 0; font-weight: 600; }
+table.rows .cur { color: var(--green); }
+details.data { margin-top: 10px; }
+details.data summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+details.data pre { margin: 8px 0 0; padding: 10px 12px; background: var(--code); border: 1px solid var(--line); border-radius: 8px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; max-height: 320px; }
+.eps { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 14px; align-items: baseline; }
+.eps b { font: 600 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--proto); }
+.eps span { font-size: 13px; }
+
+.newform { max-width: 420px; display: grid; gap: 10px; }
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="brand" href="/#claims">Service Definitions</a>
+  <span class="tabs"><button id="tab-groups" class="on">Groups</button><button id="tab-how">How it works</button></span>
+  <div class="right">
+    <button class="linkbtn proto" id="proto" data-opens-panel>proto interface</button>
+    <button class="linkbtn" id="reset">Reset</button>
+    <a class="linkbtn" href="/#claims">← Claims</a>
+  </div>
+</div>
+<div class="shell" id="shell">
+  <nav><h4>Groups</h4><div id="list"></div></nav>
+  <main id="main"></main>
+</div>
+<script src="/shared/interfaces.js"></script>
+<script>
+"use strict";
+// Everything here goes through the ServiceDefinitionService itself, as
+// Connect serves it: JSON over POST, one path per method.
+const SERVICE = "coreadmin.claims.v1.ServiceDefinitionService";
+async function rpc(method, body) {
+  const r = await fetch(`/${SERVICE}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  const out = await r.json();
+  if (!r.ok) throw new Error(out.message || r.statusText);
+  return out;
+}
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const SYSTEMS = [
+  ["CODE_SYSTEM_PROCEDURE", "Procedure", "CPT · HCPCS", "CPT"],
+  ["CODE_SYSTEM_PLACE_OF_SERVICE", "Place of service", "CMS", "POS"],
+  ["CODE_SYSTEM_REVENUE", "Revenue code", "UB-04", "REV"],
+];
+const iso = (d) => d ? `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}` : "";
+const date = (s) => { if (!s) return undefined; const [year, month, day] = s.split("-").map(Number); return { year, month, day }; };
+const label = (e) => e.start === e.end ? e.start : `${e.start}–${e.end}`;
+
+let defs = [];        // every definition, as stored
+let selected = null;  // id of the one shown; "+" for the new-group form
+let open = null;      // index of the entry being edited
+let past = false;     // codes that don't count today are shown
+let error = "";
+let revs = null;   // the group's revisions, newest first, while the edit history is open
+let viewing = null;   // the revision number being looked at, if an old one
+const today = new Date().toLocaleDateString("en-CA");
+// Keys of the selected group's entries that count for a service today,
+// as the service answers (GetServiceDefinition with effective_on).
+let current_ = new Set();
+
+const current = () => defs.find((d) => d.id === selected);
+const key = (e) => [e.system, e.start, e.end, iso(e.effective?.start), iso(e.effective?.end)].join("|");
+// For the current version the service says what counts today; an old
+// version's entries are judged by their own dates.
+const counts = (e) => viewing === null ? current_.has(key(e))
+  : (!e.effective?.start || iso(e.effective.start) <= today) && (!e.effective?.end || iso(e.effective.end) >= today);
+// The dates of service a code counts for, as briefly as they can be
+// said: years when it runs from a January 1 or through a December 31,
+// "(2022–)", "(–2020)", "(2021–2023)"; full dates otherwise. Nothing for
+// a code that counts on every date.
+function span(e) {
+  const s = iso(e.effective?.start), u = iso(e.effective?.end);
+  if (!s && !u) return "";
+  const years = (!s || s.endsWith("-01-01")) && (!u || u.endsWith("-12-31"));
+  const f = (d) => years ? d.slice(0, 4) : d;
+  return `(${f(s)}–${f(u)})`;
+}
+
+function drawList() {
+  document.getElementById("list").innerHTML = defs.map((d) => `<button class="card${d.id === selected ? " on" : ""}" data-id="${esc(d.id)}">
+      <b>${esc(d.name)}</b><small class="mono">${esc(d.id)}</small></button>`).join("")
+    + `<button class="card new${selected === "+" ? " on" : ""}" data-id="+">+ New group</button>`;
+}
+
+// ---------- How it works ----------
+
+let how = false;  // the How it works tab is showing
+let tour = null;  // its examples, from the real service on a fresh sandbox
+
+function howHTML() {
+  if (!tour) return `<div class="how-wrap"><div class="hcard muted">Running the examples…</div></div>`;
+  const t = tour;
+  const yrs = (c) => {
+    if (!c.from && !c.to) return "";
+    const years = (!c.from || c.from.endsWith("-01-01")) && (!c.to || c.to.endsWith("-12-31"));
+    const f = (d) => years ? (d || "").slice(0, 4) : d || "";
+    return `<span>(${f(c.from)}–${f(c.to)})</span>`;
+  };
+  const tags = (l) => [["CPT", l.procedure], ["POS", l.placeOfService], ["REV", l.revenue]].filter(([, v]) => v).map(([k, v]) => `<span class="tag">${k} ${esc(v)}</span>`).join("");
+  const groups = (l) => l.groups.length ? l.groups.map((g) => `<span class="grp">${esc(g)}</span>`).join(" ") : `<span class="grp none">in no group</span>`;
+  return `<div class="how-wrap">
+    <div class="hcard"><h2>A group is a name and its codes</h2><p class="lede">${esc(t.group.name)}: ${esc(t.group.intent)}</p>
+      <div class="systems">${t.group.systems.map((s) => `<div class="sys"><h3>${esc(s.name)}<span>${s.codes.length ? "" : "not checked"}</span></h3>
+        <div class="codes">${s.codes.map((c) => `<span class="code">${esc(c.label)}${yrs(c)}</span>`).join("")}</div></div>`).join("")}</div></div>
+
+    <div class="hcard"><h2>A line is in a group when it has a code of every kind the group lists</h2><p class="lede">A line can be in several groups, or none. Asked of the service: MatchServiceDefinitions.</p>
+      <div class="ex">${t.lines.map((l) => `<div>${esc(l.what)}</div><div class="codes">${tags(l)}</div><div class="arrow">→</div><div>${groups(l)}</div>`).join("")}</div></div>
+
+    <div class="hcard"><h2>Two kinds of time</h2><p class="lede">They answer different questions and are kept apart.</p>
+      <div class="two">
+        <div class="side"><h3>Date of service</h3><p class="sub">Which codes count for a service on a given day. Each code carries its own dates.</p>
+          <div class="ex">${t.dates.map((l) => `<div>${esc(l.what)}<br><span class="tag">${esc(l.dateOfService)}</span> ${tags(l)}</div><div class="arrow">→</div><div>${groups(l)}</div>`).join("")}</div></div>
+        <div class="side"><h3>When we edited it</h3><p class="sub">What the group looked like after each save. Nothing is overwritten.</p>
+          <div class="ex rv">${t.revisions.map((r) => `<div>revision ${r.revision} <span class="muted">· ${esc(r.by)}</span></div><div><span class="tag">${esc(r.saved)}</span> <span class="muted">${r.codes} codes</span></div>`).join("")}</div></div>
+      </div></div>
+
+    <div class="hcard"><h2>Stored as one row per save</h2><p class="lede">claims.service_definitions. An edit closes the current row and inserts the next; the open row is the current one.</p>
+      <table class="rows"><thead><tr><th>id</th><th>revision</th><th>tx_from</th><th>tx_to</th><th>recorded_by</th><th>data</th></tr></thead>
+        <tbody>${t.rows.map((r) => `<tr><td>${esc(r.id)}</td><td>${r.revision}</td><td>${esc(r.txFrom)}</td><td>${r.txTo ? esc(r.txTo) : '<span class="cur">open</span>'}</td><td>${esc(r.recordedBy)}</td><td class="muted">{…}</td></tr>`).join("")}</tbody></table>
+      <details class="data"><summary>data in the open row: the whole definition, as protojson</summary><pre>${esc(t.data)}</pre></details></div>
+
+    <div class="hcard"><h2>Endpoints</h2><p class="lede">ServiceDefinitionService. Nothing calls it yet; plan benefits, pricing contracts and claim edits are expected to.</p>
+      <div class="eps">${t.endpoints.map((e) => `<b>${esc(e.name)}</b><span>${esc(e.doc.replace(e.name + " ", "").replace(/^./, (c) => c.toUpperCase()))}</span>`).join("")}</div></div>
+  </div>`;
+}
+
+async function setTab(on) {
+  how = on;
+  document.getElementById("shell").classList.toggle("how", how);
+  document.getElementById("tab-how").classList.toggle("on", how);
+  document.getElementById("tab-groups").classList.toggle("on", !how);
+  drawMain();
+  if (how && !tour) {
+    const r = await fetch("/service-definitions/api/tour");
+    if (r.ok) tour = await r.json(); else error = await r.text();
+    drawMain();
+  }
+}
+document.getElementById("tab-how").addEventListener("click", () => setTab(true));
+document.getElementById("tab-groups").addEventListener("click", () => setTab(false));
+
+function drawMain() {
+  const el = document.getElementById("main");
+  if (how) { el.innerHTML = (error ? `<div class="err">${esc(error)}</div>` : "") + howHTML(); return; }
+  const err = error ? `<div class="err">${esc(error)}</div>` : "";
+  if (selected === "+") {
+    el.innerHTML = `${err}<div class="head"><h1>New group</h1></div><p class="muted">The id is what plans, contracts and edits will refer to. It never changes.</p>
+      <form class="newform" id="new"><label>Name<input name="name" placeholder="Burn treatment" required></label>
+      <label>Id<input name="id" class="mono" placeholder="burn-treatment" required></label>
+      <label>What it is meant to cover<input name="intent"></label><div><button class="btn primary">Create</button></div></form>`;
+    return;
+  }
+  const d = current();
+  if (!d) { el.innerHTML = err; return; }
+  const head = (d, extra) => `<div class="head"><h1>${extra ? esc(d.name) : `<input class="edit" id="name" value="${esc(d.name)}" size="${Math.max(8, d.name.length)}">`}</h1>
+      <span class="mono muted">${esc(d.id)}</span><button class="rev${revs ? " on" : ""}" data-history title="When the group was last edited, and by whom. Click for every earlier version.">revision ${esc(current().audit.revision)} · saved ${esc(current().audit.updateTime.slice(0, 10))} by ${esc(current().audit.updatedBy)}</button></div>`;
+  if (revs && viewing === null) {
+    el.innerHTML = `${err}${head(d, true)}<p class="intent">${esc(d.intent || "")}</p>
+      <div class="subhead"><h4>Edit history</h4><span class="muted">when the group was changed · click a version to see it</span><button class="linkbtn" data-history style="margin-left:auto">← Back to the codes</button></div>
+      <div class="hist">${revs.map((r, i) => `<button class="hrow" data-rev="${esc(r.audit.revision)}"><b>revision ${esc(r.audit.revision)}</b>
+        <span class="when">${esc(stamp(r.audit.updateTime))} · ${esc(r.audit.updatedBy)}</span><span class="chg">${changeHTML(revs[i + 1], r)}</span></button>`).join("")}</div>`;
+    return;
+  }
+  // An old version is shown as it was, read-only.
+  const old = viewing !== null ? revs.find((r) => r.audit.revision === viewing) : null;
+  const shown = old || d;
+  const ro = !!old;
+  const chip = ([e, i]) => `<button class="code${counts(e) ? "" : " off"}${i === open ? " open" : ""}" ${ro ? "disabled" : `data-i="${i}"`}
+      title="${e.effective ? `Counts for services ${iso(e.effective.start) || "from the start"} to ${iso(e.effective.end) || "further notice"}` : "Counts for every date of service"}">${esc(label(e))}${span(e) ? `<span>${span(e)}</span>` : ""}</button>`;
+  el.innerHTML = `${err}${head(shown, ro)}
+    ${ro ? `<p class="intent">${esc(shown.intent || "")}</p><div class="asit">As it was at revision ${esc(old.audit.revision)}, saved ${esc(stamp(old.audit.updateTime))} by ${esc(old.audit.updatedBy)} · read only
+        <button class="linkbtn" data-rev="">← Edit history</button><button class="linkbtn" data-history style="margin-left:0">Current version</button></div>`
+      : `<input class="edit intent" id="intent" value="${esc(d.intent || "")}" placeholder="What the group is meant to cover">`}
+    <div class="systems">${SYSTEMS.map(([sys, name, sub]) => {
+      const entries = (shown.entries || []).map((e, i) => [e, i]).filter(([e]) => e.system === sys);
+      const now = entries.filter(([e]) => counts(e)), other = entries.filter(([e]) => !counts(e));
+      const pop = ro ? null : entries.find(([, i]) => i === open);
+      return `<div class="sys"><h3>${name}<span>${entries.length ? sub : "not checked"}</span></h3>
+        <div class="codes">${now.map(chip).join("")}${past || other.some(([, i]) => i === open) ? other.map(chip).join("") : ""}
+          ${other.length ? `<button class="more" data-past title="Codes that don't count for a service today">${past ? "hide" : `+${other.length}`} not current</button>` : ""}
+          ${ro ? "" : `<input class="add" data-sys="${sys}" placeholder="+ code or range" aria-label="Add a ${name} code">`}</div>
+        ${pop ? `<form class="pop" data-i="${pop[1]}"><label>From code<input name="start" class="mono" value="${esc(pop[0].start)}"></label><label>To code<input name="end" class="mono" value="${esc(pop[0].end)}"></label>
+          <label>Services from<input type="date" name="from" value="${iso(pop[0].effective?.start)}"></label><label>Through<input type="date" name="until" value="${iso(pop[0].effective?.end)}"></label>
+          <button class="btn primary">Save</button><button type="button" class="btn danger" data-remove="${pop[1]}">Remove</button></form>` : ""}</div>`;
+    }).join("")}</div>
+    <p class="rule">The codes that count for a service today${ro ? ", as the group stood at that revision" : ""}. A code with dates counts only for services in them; the rest count on every date. A line is in the group when it has a code of every kind listed.</p>`;
+}
+
+const stamp = (t) => new Date(t).toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "short" });
+// changeHTML is what a revision changed from the one before it.
+function changeHTML(before, after) {
+  const short = (e) => `${SYSTEMS.find((s) => s[0] === e.system)[3]} ${label(e)}`;
+  if (!before) return `<span>created · ${(after.entries || []).length} codes</span>`;
+  const a = before.entries || [], b = after.entries || [];
+  const gone = a.filter((e) => !b.some((x) => key(x) === key(e))), came = b.filter((e) => !a.some((x) => key(x) === key(e)));
+  const code = (e) => [e.system, e.start, e.end].join("|");
+  const out = [];
+  if (before.name !== after.name) out.push(`<span>renamed from ${esc(before.name)}</span>`);
+  if ((before.intent || "") !== (after.intent || "")) out.push(`<span>intent reworded</span>`);
+  // The same code with different dates is one change, not a removal and an addition.
+  for (const e of came) {
+    const was = gone.find((g) => code(g) === code(e));
+    if (was) { gone.splice(gone.indexOf(was), 1); out.push(`<span class="dates">${esc(short(e))} ${span(was) || "(always)"} → ${span(e) || "(always)"}</span>`); }
+    else out.push(`<span class="plus">+ ${esc(short(e))}${span(e) ? " " + span(e) : ""}</span>`);
+  }
+  for (const e of gone) out.push(`<span class="minus">− ${esc(short(e))}${span(e) ? " " + span(e) : ""}</span>`);
+  return out.join("") || `<span>saved with no change</span>`;
+}
+
+// show asks which of the group's entries count for a service today, then
+// draws.
+async function show() {
+  const d = current();
+  current_ = new Set();
+  if (d) {
+    try {
+      const r = await rpc("GetServiceDefinition", { id: d.id, effectiveOn: date(today) });
+      current_ = new Set((r.definition.entries || []).map(key));
+    } catch (e) { error = e.message; }
+  }
+  drawList();
+  drawMain();
+}
+
+async function load() {
+  defs = (await rpc("ListServiceDefinitions")).definitions || [];
+  if (selected !== "+" && !current()) selected = defs[0]?.id || "+";
+}
+
+// save sends the whole definition back at the revision it was read at.
+async function save(change) {
+  error = "";
+  const d = structuredClone(current());
+  change(d);
+  try {
+    await rpc("UpdateServiceDefinition", { definition: d });
+    open = null;
+  } catch (e) { error = e.message; }
+  await load();
+  await show();
+}
+
+// "70450" or "70450-70498".
+function parseCodes(text) {
+  const [start, end] = text.trim().split(/\s*[-–]\s*/);
+  return { start, end: end || start };
+}
+
+document.addEventListener("click", async (ev) => {
+  const card = ev.target.closest("[data-id]");
+  if (card) { selected = card.dataset.id; open = null; past = false; error = ""; revs = null; viewing = null; return show(); }
+  // The revision badge opens the edit history, and closes it.
+  if (ev.target.closest("[data-history]")) {
+    viewing = null; open = null;
+    if (revs) { revs = null; return drawMain(); }
+    try { revs = (await rpc("ListServiceDefinitionRevisions", { id: selected })).revisions || []; } catch (e) { error = e.message; }
+    return drawMain();
+  }
+  const rev = ev.target.closest("[data-rev]");
+  if (rev) { viewing = rev.dataset.rev || null; past = false; return drawMain(); }
+  if (ev.target.closest("[data-past]")) { past = !past; return drawMain(); }
+  const rm = ev.target.closest("[data-remove]");
+  if (rm) return save((d) => { d.entries.splice(+rm.dataset.remove, 1); });
+  const code = ev.target.closest(".code");
+  if (code) { open = open === +code.dataset.i ? null : +code.dataset.i; return drawMain(); }
+});
+document.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const f = Object.fromEntries(new FormData(ev.target));
+  if (ev.target.id === "new") {
+    error = "";
+    try {
+      await rpc("CreateServiceDefinition", { definition: { id: f.id, name: f.name, intent: f.intent } });
+      selected = f.id;
+    } catch (e) { error = e.message; }
+    await load();
+    return show();
+  }
+  if (ev.target.classList.contains("pop")) {
+    const i = +ev.target.dataset.i;
+    return save((d) => {
+      const e = d.entries[i];
+      e.start = f.start; e.end = f.end;
+      e.effective = f.from || f.until ? { start: date(f.from), end: date(f.until) } : undefined;
+    });
+  }
+});
+document.addEventListener("change", async (ev) => {
+  const t = ev.target;
+  if (t.id === "name" || t.id === "intent") return save((d) => { d[t.id] = t.value; });
+});
+document.addEventListener("keydown", async (ev) => {
+  if (ev.key !== "Enter" || !ev.target.classList.contains("add") || !ev.target.value.trim()) return;
+  const sys = ev.target.dataset.sys, c = parseCodes(ev.target.value);
+  await save((d) => { (d.entries ||= []).push({ system: sys, ...c }); });
+  document.querySelector(`.add[data-sys="${sys}"]`)?.focus();
+});
+document.getElementById("reset").addEventListener("click", async () => {
+  await fetch("/service-definitions/api/reset", { method: "POST" });
+  selected = null; open = null; past = false; error = ""; revs = null; viewing = null;
+  await load();
+  await show();
+});
+document.getElementById("proto").addEventListener("click", async () => {
+  const body = InterfacePanel.open("Service definitions");
+  const r = await fetch(`/api/contract?service=${SERVICE}&methods=ListServiceDefinitions,GetServiceDefinition,ListServiceDefinitionRevisions,CreateServiceDefinition,UpdateServiceDefinition,MatchServiceDefinitions`);
+  if (!r.ok) { body.textContent = await r.text(); return; }
+  InterfacePanel.showContract(await r.json());
+});
+
+// A link can open a group, and its edit history: ?id=office-visit&history.
+const q = new URLSearchParams(location.search);
+selected = q.get("id");
+load().then(async () => {
+  if (q.has("history") && current()) revs = (await rpc("ListServiceDefinitionRevisions", { id: selected })).revisions || [];
+  if (q.get("rev") && revs) viewing = q.get("rev");
+  await show();
+  if (q.has("how")) setTab(true);
+});
+</script>
+</body>
+</html>

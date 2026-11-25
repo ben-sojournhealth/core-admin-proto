@@ -33,6 +33,8 @@ var Tables = []store.Table{
 	}},
 	{Schema: Schema, Name: "family_accumulators"},
 	{Schema: Schema, Name: "fee_schedules"},
+	// Named groups of services by code. A few dozen rows, read whole.
+	{Schema: Schema, Name: "service_definitions"},
 	// 837 files received.
 	{Schema: Schema, Name: "ingestion_jobs", Indexes: []store.Index{
 		{Name: "ingestion_jobs_by_icn", Path: []string{"envelope", "interchangeControlNumber"},
@@ -50,6 +52,8 @@ type ClaimsStores struct {
 	// One record per subscriber unit, plan and benefit period.
 	FamilyAccumulators store.Store[*claimsv1.FamilyAccumulators]
 	FeeSchedules       store.Store[*providerv1.FeeSchedule]
+	// Named groups of services by code, each version kept.
+	ServiceDefinitions store.Store[*claimsv1.ServiceDefinition]
 	// 837 files received.
 	ClaimIngestionJobs store.Store[*ingestionv1.IngestionJob]
 	// 835s as sent.
@@ -69,6 +73,7 @@ func New(ctx context.Context, db *store.PGDB) (ClaimsStores, error) {
 		Claims:             store.NewPG[*claimsv1.Claim](db, Schema, "claims"),
 		FamilyAccumulators: store.NewPG[*claimsv1.FamilyAccumulators](db, Schema, "family_accumulators"),
 		FeeSchedules:       store.NewPG[*providerv1.FeeSchedule](db, Schema, "fee_schedules"),
+		ServiceDefinitions: store.NewPG[*claimsv1.ServiceDefinition](db, Schema, "service_definitions"),
 		ClaimIngestionJobs: store.NewPG[*ingestionv1.IngestionJob](db, Schema, "ingestion_jobs"),
 		Remittances:        store.NewPG[*remittancev1.Remittance](db, Schema, "remittances"),
 		ClaimNumbers:       numbers,

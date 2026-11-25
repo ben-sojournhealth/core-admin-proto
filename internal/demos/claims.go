@@ -64,6 +64,11 @@ func claimsDemos() []Demo {
 			Links:   []Link{{Component: Remittance}},
 		},
 		{
+			ID: "service-definitions", Title: "Service Definitions", Status: Live, Path: "/service-definitions/",
+			Summary: "Named groups of services by code: view and edit a group's codes and their dates.",
+			Links:   []Link{{Component: ServiceDefinitions}},
+		},
+		{
 			ID: "settlement", Title: "Settlement", Status: Planned,
 			Summary: "What each claim will pay, to whom and from whose funds, before it is adjudicated; payment cycles net recoveries across claims.",
 			Links:   []Link{{Component: Settlement}},
