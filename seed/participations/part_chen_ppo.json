@@ -1,0 +1,10 @@
+{
+  "id": "part_chen_ppo",
+  "underlyingNetworkId": "net_ppo",
+  "npi": "1234567893",
+  "tin": "311234567",
+  "contractId": "ctr_ppo_std",
+  "periods": [{"start": {"year": 2024, "month": 1, "day": 1}}],
+  "billingName": "Dayton Family Medicine LLC",
+  "locations": [{"id": "loc_1", "address": {"lines": ["22 Main St"], "city": "Dayton", "state": "OH", "postalCode": "45402"}, "acceptingNewPatients": true}]
+}

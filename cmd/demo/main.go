@@ -39,6 +39,7 @@ var registrations = []func(*http.ServeMux) error{
 	registerJourney,
 	registerEnrollment,
 	registerRemittance,
+	registerProviderIntake,
 }
 
 // newRepos gives a long-lived sandbox its schema in the demo database,
@@ -66,7 +67,7 @@ func main() {
 	if _, err := pgdb.Pool(context.Background()); err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Postgres: %s (sandboxes lifecycle, journey, enrollment, each a schema per domain like journey_claims; throwaway s_* sandboxes per request)", pgdb.URL(pgdb.Database()))
+	log.Printf("Postgres: %s (sandboxes lifecycle, journey, enrollment, providers, each a schema per domain like journey_claims; throwaway s_* sandboxes per request)", pgdb.URL(pgdb.Database()))
 
 	web, err := fs.Sub(webFS, "web")
 	if err != nil {

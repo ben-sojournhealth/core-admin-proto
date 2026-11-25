@@ -315,6 +315,13 @@ func (s *PG[T]) listSQL(opts ListOptions[T]) (string, []any, int, error) {
 				args[n-1] = likeEscape(c.Value) + "%"
 				where = append(where, fmt.Sprintf("%s LIKE $%d", expr, n))
 			}
+		case OpIn:
+			expr, err := pathExpr(c.Path)
+			if err != nil {
+				return "", nil, 0, err
+			}
+			args[n-1] = c.Values
+			where = append(where, fmt.Sprintf("%s = ANY($%d::text[])", expr, n))
 		case OpContains:
 			where = append(where, fmt.Sprintf("data @> $%d::jsonb", n))
 		default:
@@ -482,6 +489,83 @@ func (s *PG[T]) Create(ctx context.Context, r T) (T, error) {
 		return zero, fmt.Errorf("%w: %s", ErrAlreadyExists, r.GetId())
 	}
 	return r, nil
+}
+
+// CreateBatch creates many records in one INSERT. Like Create, a record
+// that was deleted is created again at its next revision.
+func (s *PG[T]) CreateBatch(ctx context.Context, rs []T) error {
+	if len(rs) == 0 {
+		return nil
+	}
+	return s.db.InTx(ctx, func(ctx context.Context) error {
+		q, _, err := s.db.q(ctx)
+		if err != nil {
+			return err
+		}
+		ids := make([]string, len(rs))
+		for i, r := range rs {
+			if r.GetId() == "" {
+				return fmt.Errorf("%w: id is required", ErrInvalid)
+			}
+			ids[i] = r.GetId()
+		}
+		// Where each id's history stands, for the ids that have one.
+		type past struct {
+			rev   int64
+			ended time.Time
+		}
+		history := map[string]past{}
+		rows, err := q.Query(ctx, "SELECT id, bool_or(tx_to IS NULL), max(revision), max(tx_to) FROM "+s.table+" WHERE id = ANY($1) GROUP BY id", ids)
+		if err != nil {
+			return mapErr(err)
+		}
+		for rows.Next() {
+			var id string
+			var current bool
+			var p past
+			var ended *time.Time
+			if err := rows.Scan(&id, &current, &p.rev, &ended); err != nil {
+				rows.Close()
+				return err
+			}
+			if current {
+				rows.Close()
+				return fmt.Errorf("%w: %s", ErrAlreadyExists, id)
+			}
+			if ended != nil {
+				p.ended = *ended
+			}
+			history[id] = p
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return mapErr(err)
+		}
+		now, actor := s.db.now(), Actor(ctx)
+		revs, froms, docs := make([]int64, len(rs)), make([]time.Time, len(rs)), make([]string, len(rs))
+		for i, r := range rs {
+			p := history[r.GetId()]
+			from := now
+			if from.Before(p.ended) {
+				from = p.ended
+			}
+			r = proto.Clone(r).(T)
+			ts := timestamppb.New(from)
+			setAudit(r, &commonv1.AuditInfo{CreateTime: ts, UpdateTime: ts, CreatedBy: actor, UpdatedBy: actor, Revision: p.rev + 1})
+			b, err := marshal.Marshal(r)
+			if err != nil {
+				return fmt.Errorf("store: encode: %w", err)
+			}
+			revs[i], froms[i], docs[i] = p.rev+1, from, string(b)
+		}
+		_, err = q.Exec(ctx, "INSERT INTO "+s.table+` (id, revision, tx_from, recorded_by, data)
+			SELECT u.id, u.rev, u.tx_from, $5, u.doc::jsonb FROM unnest($1::text[], $2::bigint[], $3::timestamptz[], $4::text[]) AS u(id, rev, tx_from, doc)`,
+			ids, revs, froms, docs, actor)
+		if err = mapErr(err); errors.Is(err, ErrConflict) {
+			return fmt.Errorf("%w: %v", ErrAlreadyExists, err)
+		}
+		return err
+	})
 }
 
 // close ends the current version, if it is still the one at revision rev:

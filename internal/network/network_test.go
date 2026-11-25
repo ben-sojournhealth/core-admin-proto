@@ -23,21 +23,24 @@ func TestProviderPlaceInANetwork(t *testing.T) {
 	ctx := context.Background()
 	var api network.API = network.New(r)
 
-	part := func(underlying, tin, contract string) *providerv1.NetworkParticipation {
-		return &providerv1.NetworkParticipation{UnderlyingNetworkId: underlying, Tin: tin, ContractId: contract, Effective: from(d(2026, 1, 1))}
-	}
-	for _, p := range []*providerv1.Provider{
+	for npi, parts := range map[string][][3]string{
 		// In all three underlying networks.
-		{Id: "p_all", Npi: "1", Participations: []*providerv1.NetworkParticipation{
-			part("leased", "t1", "ctr_leased"), part("wrap", "t1", "ctr_wrap"), part("direct", "t1", "ctr_direct")}},
+		"1": {{"leased", "t1", "ctr_leased"}, {"wrap", "t1", "ctr_wrap"}, {"direct", "t1", "ctr_direct"}},
 		// In the wrap network only, and under another TIN in direct.
-		{Id: "p_wrap", Npi: "2", Participations: []*providerv1.NetworkParticipation{
-			part("wrap", "t1", "ctr_wrap"), part("direct", "t2", "ctr_direct")}},
+		"2": {{"wrap", "t1", "ctr_wrap"}, {"direct", "t2", "ctr_direct"}},
 		// In an underlying network that is no part of the network.
-		{Id: "p_other", Npi: "3", Participations: []*providerv1.NetworkParticipation{part("elsewhere", "t1", "ctr_x")}},
+		"3": {{"elsewhere", "t1", "ctr_x"}},
 	} {
-		if _, err := r.Providers.Create(ctx, p); err != nil {
+		if _, err := r.Providers.Create(ctx, &providerv1.Provider{Id: "p_" + npi, Npi: npi}); err != nil {
 			t.Fatal(err)
+		}
+		for _, x := range parts {
+			if _, err := r.Participations.Create(ctx, &providerv1.NetworkParticipation{
+				Id: npi + "/" + x[0] + "/" + x[1], Npi: npi, UnderlyingNetworkId: x[0], Tin: x[1], ContractId: x[2],
+				Periods: []*commonv1.DateRange{from(d(2026, 1, 1))},
+			}); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	if _, err := r.Networks.Create(ctx, &providerv1.Network{Id: "mainline", Components: []*providerv1.NetworkComponent{

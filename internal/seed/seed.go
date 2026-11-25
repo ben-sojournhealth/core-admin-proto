@@ -33,6 +33,7 @@ func Load(ctx context.Context, r *repo.Repos, fsys fs.FS) (int, error) {
 		{"fee_schedules", loader(r.FeeSchedules)},
 		{"contracts", loader(r.Contracts)},
 		{"providers", loader(r.Providers)},
+		{"participations", loader(r.Participations)},
 		{"members", loader(r.Members)},
 		{"claims", loader(r.Claims)},
 		{"stoploss_policies", loader(r.StopLossPolicies)},

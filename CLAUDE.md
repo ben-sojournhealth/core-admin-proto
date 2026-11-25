@@ -70,3 +70,6 @@ go run ./cmd/demo -addr localhost:8081   # a second demo, e.g. from another work
 - **Duplicate detection.**
 - **Adjudication step order and dependencies:** the adjudication map lists steps without an order.
 - **Raw inbound file storage:** comes with the SFTP integrations.
+- **A row missing from a vendor's full provider file.** Today it removes the participation for every date, on the assumption that each file is a full history. Confirm with the vendor before launch.
+- **Network status on a claim beyond NPI + TIN + date:** e.g. a provider in network at a clinic who sees a patient at a hospital. Locations are for the directory only until this is designed.
+- **Facility provider files:** how a facility is identified (TIN and address matter more than NPI). Waiting on the vendor's layout.

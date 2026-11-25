@@ -46,11 +46,17 @@ func (s *Service) GetProvider(ctx context.Context, req *networkv1.GetProviderReq
 		return res, err
 	}
 	res.Provider = ps[0]
-	for _, np := range res.Provider.GetParticipations() {
-		if (req.GetTin() == "" || np.GetTin() == req.GetTin()) && dates.In(req.GetOn(), np.GetEffective()) {
-			res.Participations = append(res.Participations, np)
-		}
+	// The provider's participations are the TINs it bills under, in each
+	// underlying network.
+	where := []store.Cond{store.Eq(req.GetNpi(), "npi")}
+	parts, _, err := s.r.Participations.List(ctx, store.ListOptions[*providerv1.NetworkParticipation]{PageSize: maxParticipations, Where: where,
+		Filter: func(np *providerv1.NetworkParticipation) bool {
+			return (req.GetTin() == "" || np.GetTin() == req.GetTin()) && inForce(np, req.GetOn())
+		}})
+	if err != nil {
+		return nil, err
 	}
+	res.Participations = parts
 	if req.GetNetworkId() == "" {
 		return res, nil
 	}
@@ -62,6 +68,20 @@ func (s *Service) GetProvider(ctx context.Context, req *networkv1.GetProviderReq
 	}
 	res.TierId, res.Participation = place(n, res.Participations, req.GetOn())
 	return res, nil
+}
+
+// More participations than any one NPI has.
+const maxParticipations = 10000
+
+// inForce reports whether a participation covers the date in any of its
+// periods.
+func inForce(np *providerv1.NetworkParticipation, on *commonv1.Date) bool {
+	for _, r := range np.GetPeriods() {
+		if dates.In(on, r) {
+			return true
+		}
+	}
+	return false
 }
 
 // place says where a provider with these participations stands in a

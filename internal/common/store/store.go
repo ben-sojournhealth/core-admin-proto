@@ -77,6 +77,8 @@ const (
 	// OpContains: the record contains the JSON document Value, as
 	// Postgres's @> (every key and array element in Value is present).
 	OpContains
+	// OpIn: the field at Path equals one of Values.
+	OpIn
 )
 
 // Cond is a condition on a stored record, addressed by the record's
@@ -87,10 +89,16 @@ type Cond struct {
 	Path  []string
 	Op    Op
 	Value string
+	// For OpIn.
+	Values []string
 }
 
 // Eq is the condition that the field at path equals value.
 func Eq(value string, path ...string) Cond { return Cond{Path: path, Op: OpEq, Value: value} }
+
+// In is the condition that the field at path equals one of values: many
+// Eq lookups in one read.
+func In(values []string, path ...string) Cond { return Cond{Path: path, Op: OpIn, Values: values} }
 
 // Prefix is the condition that the field at path starts with prefix.
 func Prefix(prefix string, path ...string) Cond { return Cond{Path: path, Op: OpPrefix, Value: prefix} }
@@ -109,6 +117,10 @@ type Store[T Resource] interface {
 	Get(ctx context.Context, id string) (T, error)
 	List(ctx context.Context, opts ListOptions[T]) (items []T, nextPageToken string, err error)
 	Create(ctx context.Context, r T) (T, error)
+	// CreateBatch creates many records in one statement, for loads too
+	// large to create one at a time. All are created or none: if any id
+	// has a current version it fails with ErrAlreadyExists.
+	CreateBatch(ctx context.Context, rs []T) error
 	// Update replaces the resource. r.audit.revision must equal the stored
 	// revision, otherwise ErrConflict.
 	Update(ctx context.Context, r T) (T, error)

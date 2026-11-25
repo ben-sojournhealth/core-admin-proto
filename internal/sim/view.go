@@ -243,7 +243,11 @@ func (s *Sim) State() (*State, error) {
 	}
 	for _, p := range providers {
 		network := "out-of-network"
-		if len(p.GetParticipations()) > 0 {
+		parts, _, err := s.Repos.Participations.List(ctx, store.ListOptions[*providerv1.NetworkParticipation]{PageSize: 1, Where: []store.Cond{store.Eq(p.GetNpi(), "npi")}})
+		if err != nil {
+			return nil, err
+		}
+		if len(parts) > 0 {
 			network = "in-network"
 		}
 		st.Providers = append(st.Providers, ProviderView{NPI: p.GetNpi(), Name: providerName(p), Network: network})

@@ -1,0 +1,195 @@
+syntax = "proto3";
+
+package coreadmin.provider.v1;
+
+import "coreadmin/common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// Vendor intake: a network vendor sends its whole network as a full file
+// per source (e.g. the vendor's PPO individual-provider file). Intake
+// keeps each row as sent, compares the file with what the source's last
+// approved file said, and proposes the differences as one ProviderUpdate.
+// Nothing changes provider data until the update is approved as a whole.
+
+// VendorProviderRow is one row of a vendor's individual-provider file, as
+// sent: nothing looked up, nothing cleaned. A file has one row per NPI
+// and TIN, more when a provider has more specialties than fit on a row
+// or has earlier periods of participation.
+message VendorProviderRow {
+  // The row's line number in the file; the header is line 1.
+  int64 row_number = 1;
+  // The provider's NPI, as sent.
+  string npi = 2;
+  // The TIN the provider bills under, as sent.
+  string tin = 3;
+  // The provider's name, as sent.
+  common.v1.PersonName name = 4;
+  // The TIN's name (the group or practice), as sent.
+  string billing_name = 5;
+  // The specialties on this row, in column order, as sent.
+  repeated string specialties = 6;
+  // The office address on this row.
+  common.v1.Address address = 7;
+  // The office phone, as sent.
+  string phone = 8;
+  // When participation starts, as sent.
+  string start_date = 9;
+  // When participation ends, as sent. Empty when the vendor leaves it
+  // open.
+  string term_date = 10;
+  // Every column intake has no field for, by its header, as sent.
+  map<string, string> other_columns = 11;
+}
+
+// VendorProviderChange is what one file says changed for one NPI and
+// TIN, against what the source's last approved file said. Only
+// differences are stored; an NPI and TIN the file repeats unchanged has
+// no record.
+message VendorProviderChange {
+  // Stable id.
+  string id = 1;
+  // The update this change is part of.
+  string provider_update_id = 2;
+  // The NPI, as sent.
+  string npi = 3;
+  // The TIN, as sent.
+  string tin = 4;
+  // Added, changed or dropped.
+  VendorChangeKind kind = 5;
+  // The file's rows for this NPI and TIN, in file order. Empty when
+  // dropped.
+  repeated VendorProviderRow rows = 6;
+  // The rows the last approved file had. Empty when added.
+  repeated VendorProviderRow previous_rows = 7;
+  // For a change: what differs between the two sets of rows.
+  repeated VendorChangeAspect aspects = 8;
+  // The participation this change creates, changes or removes when the
+  // update is approved.
+  string participation_id = 9;
+  // Fingerprint of rows, kept on the participation and compared with the
+  // next file's rows for the pair. Empty when dropped.
+  string rows_hash = 10;
+  // Who recorded this version and when.
+  common.v1.AuditInfo audit = 15;
+}
+
+// VendorChangeKind is how a file differs from the last approved one for
+// an NPI and TIN.
+enum VendorChangeKind {
+  VENDOR_CHANGE_KIND_UNSPECIFIED = 0;
+  // In this file, not in the last: a new participation.
+  VENDOR_CHANGE_KIND_ADDED = 1;
+  // In both, with different rows.
+  VENDOR_CHANGE_KIND_CHANGED = 2;
+  // In the last file, not in this one. The file is a full history, so
+  // the participation is removed for every date, past ones included.
+  VENDOR_CHANGE_KIND_DROPPED = 3;
+}
+
+// VendorChangeAspect is one thing a change changes.
+enum VendorChangeAspect {
+  VENDOR_CHANGE_ASPECT_UNSPECIFIED = 0;
+  // An open period now has an end date: the provider is termed.
+  VENDOR_CHANGE_ASPECT_TERMED = 1;
+  // The periods differ in some other way.
+  VENDOR_CHANGE_ASPECT_PERIODS = 2;
+  // The specialties differ.
+  VENDOR_CHANGE_ASPECT_SPECIALTIES = 3;
+  // An address or phone differs.
+  VENDOR_CHANGE_ASPECT_LOCATION = 4;
+  // The TIN's name differs.
+  VENDOR_CHANGE_ASPECT_BILLING_NAME = 5;
+  // The provider's name differs.
+  VENDOR_CHANGE_ASPECT_NAME = 6;
+  // Only columns intake has no field for differ.
+  VENDOR_CHANGE_ASPECT_OTHER = 7;
+}
+
+// ProviderUpdate is everything one file would change for its source,
+// approved or rejected as a whole. Approving applies every change;
+// rejecting applies none, and the next file is compared with the last
+// approved one.
+message ProviderUpdate {
+  // Stable id.
+  string id = 1;
+  // The file received (IngestionJob).
+  string ingestion_job_id = 2;
+  // The source the file is from, e.g. "cigna-ppo-individual". A file
+  // speaks only for its own source.
+  string source_id = 3;
+  // The underlying network the source feeds.
+  string underlying_network_id = 4;
+  // The breadth of the update, for the review.
+  ProviderUpdateSummary summary = 5;
+  // Proposed, approved or rejected.
+  ProviderUpdateStatus status = 6;
+  // Who approved or rejected it.
+  string decided_by = 7;
+  // When it was approved or rejected.
+  google.protobuf.Timestamp decided_time = 8;
+  // The file's name, for display.
+  string filename = 9;
+  // Who recorded this version and when.
+  common.v1.AuditInfo audit = 15;
+}
+
+// ProviderUpdateStatus is where an update stands.
+enum ProviderUpdateStatus {
+  PROVIDER_UPDATE_STATUS_UNSPECIFIED = 0;
+  // Built from the file, waiting for a decision. Nothing is applied.
+  PROVIDER_UPDATE_STATUS_PROPOSED = 1;
+  // Approved: every change is applied.
+  PROVIDER_UPDATE_STATUS_APPROVED = 2;
+  // Rejected: nothing was applied.
+  PROVIDER_UPDATE_STATUS_REJECTED = 3;
+}
+
+// ProviderUpdateSummary counts what an update would change.
+message ProviderUpdateSummary {
+  // Data rows in the file.
+  int64 rows_read = 1;
+  // Rows left out because they can't be used (no NPI or TIN, an
+  // unreadable date). A sample is on the IngestionJob.
+  int64 rows_errored = 2;
+  // Participations the source has now, before the update.
+  int64 participations_before = 3;
+  // Participations the source would have after it.
+  int64 participations_after = 4;
+  // NPI and TIN pairs new in this file.
+  int64 added = 5;
+  // Pairs whose rows differ.
+  int64 changed = 6;
+  // Pairs the file no longer has: removed for every date.
+  int64 removed = 7;
+  // Pairs the file repeats unchanged.
+  int64 unchanged = 8;
+  // Of the changed pairs, how many change each aspect. A pair counts
+  // under every aspect it changes.
+  repeated AspectCount aspects = 9;
+  // NPIs in the file we have no provider record for.
+  int64 new_providers = 10;
+  // TINs in the file the source has no participation under today.
+  int64 new_tins = 11;
+  // The changes by the state of the office address, largest first.
+  repeated StateCount states = 12;
+}
+
+// AspectCount is how many changed pairs change one aspect.
+message AspectCount {
+  // The aspect.
+  VendorChangeAspect aspect = 1;
+  // How many changed pairs change it.
+  int64 count = 2;
+}
+
+// StateCount is an update's changes in one state.
+message StateCount {
+  // Two-letter state as sent; empty when the rows carry none.
+  string state = 1;
+  // Pairs added there.
+  int64 added = 2;
+  // Pairs changed there.
+  int64 changed = 3;
+  // Pairs removed there.
+  int64 removed = 4;
+}

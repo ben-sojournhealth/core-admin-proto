@@ -73,6 +73,8 @@ enum IngestionKind {
   INGESTION_KIND_FEE_SCHEDULE = 4;
   // Accumulator postings from outside (PBM, prior carrier).
   INGESTION_KIND_ACCUMULATORS = 5;
+  // A network vendor's full provider file (Network's vendor intake).
+  INGESTION_KIND_VENDOR_PROVIDERS = 6;
 }
 
 enum IngestionFormat {

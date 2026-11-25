@@ -17,8 +17,13 @@ const (
 
 var networkDemos = []Demo{
 	{
+		ID: "provider-intake", Title: "Provider Intake", Status: Live, Path: "/provider-intake/",
+		Summary: "A network vendor's full provider files: each proposes one update, reviewed in full and approved or rejected as a whole; NPIs rolled up to TINs.",
+		Links:   []Link{{Component: NetworkVendors}, {Component: VendorIntake}},
+	},
+	{
 		ID: "provider-data", Title: "Provider Data", Status: Planned,
 		Summary: "Roster loads, network participation, contracting and the provider directory.",
-		Links:   []Link{{Component: NetworkVendors}, {Component: Rosters}, {Component: VendorIntake}, {Component: RosterIntake}, {Component: ProviderData}, {Component: Contracting}, {Component: Credentialing}},
+		Links:   []Link{{Component: Rosters}, {Component: RosterIntake}, {Component: ProviderData}, {Component: Contracting}, {Component: Credentialing}},
 	},
 }

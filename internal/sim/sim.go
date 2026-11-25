@@ -559,6 +559,11 @@ func (s *Sim) correct(ctx context.Context, orig *claimsv1.Claim, spec *ClaimSpec
 	return c, s.fill(ctx, c, &sp)
 }
 
+// Provider data knows a TIN only through a participation. A provider in
+// no network tells us its TIN on the claim; these are the ones the
+// simulator's out-of-network providers bill under.
+var outOfNetworkTINs = map[string]string{"1987654321": "452345678"}
+
 // fill sets the provider, dates, line and authorization from a spec.
 func (s *Sim) fill(ctx context.Context, c *claimsv1.Claim, sp *ClaimSpec) error {
 	p, err := s.provider(ctx, sp.Provider)
@@ -569,9 +574,15 @@ func (s *Sim) fill(ctx context.Context, c *claimsv1.Claim, sp *ClaimSpec) error 
 	if err != nil {
 		return fmt.Errorf("%w: %v", claims.ErrRejected, err)
 	}
-	tin := ""
-	if len(p.GetTins()) > 0 {
-		tin = p.GetTins()[0].GetTin()
+	// The TIN the provider bills under: from its participations, or, for
+	// a provider in no network, the one it would put on its claim.
+	tin := outOfNetworkTINs[p.GetNpi()]
+	parts, _, err := s.Repos.Participations.List(ctx, store.ListOptions[*providerv1.NetworkParticipation]{PageSize: 1, Where: []store.Cond{store.Eq(p.GetNpi(), "npi")}})
+	if err != nil {
+		return err
+	}
+	if len(parts) > 0 {
+		tin = parts[0].GetTin()
 	}
 	taxonomy := ""
 	if len(p.GetTaxonomyCodes()) > 0 {

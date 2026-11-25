@@ -1,1 +1,1 @@
-{"id": "net_ppo", "name": "Regional PPO", "kind": "UNDERLYING_NETWORK_KIND_RENTED", "vendor": "Example PPO Network"}
+{"id": "net_ppo", "name": "Regional PPO", "kind": "UNDERLYING_NETWORK_KIND_RENTED", "vendor": "Example PPO Network", "pricing": "UNDERLYING_NETWORK_PRICING_CONTRACTS_HELD"}

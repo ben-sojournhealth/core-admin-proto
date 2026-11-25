@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Provider Intake</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --nav: #eef1f4; --ink: #18202b; --muted: #687384; --line: #e2e6ec;
+  --brand: #0f766e; --brand-ink: #ffffff; --brand-soft: #e3f3f1;
+  --amber: #8a5a00; --amber-soft: #fff4d9; --amber-line: #f2d48b;
+  --red: #b42318; --red-soft: #fdecea; --green: #157347; --green-soft: #e2f4ea; --gray-soft: #edf0f3;
+  --blue: #1d4ed8; --blue-soft: #e6edff;
+  --code: #f3f5f8; --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101418; --panel: #171c22; --nav: #13181d; --ink: #e6eaef; --muted: #93a0b0; --line: #262e37;
+    --brand: #2dd4bf; --brand-ink: #062320; --brand-soft: #123532;
+    --amber: #f3c969; --amber-soft: #2e2611; --amber-line: #5c4a1c;
+    --red: #ff8f85; --red-soft: #3a1d1b; --green: #6fdc9f; --green-soft: #15301f; --gray-soft: #232a33;
+    --blue: #93b4ff; --blue-soft: #1a2440;
+    --code: #12171c; --shadow: none;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: inherit; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+
+.top { height: 54px; display: flex; align-items: center; gap: 16px; padding: 0 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 17px; text-decoration: none; }
+.brand svg { width: 22px; height: 22px; color: var(--brand); }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--muted); }
+.top .right a { text-decoration: none; }
+.top .right a:hover, .linkbtn:hover { color: var(--brand); }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--muted); font-size: 13px; }
+
+.shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: calc(100% - 54px); }
+nav { background: var(--nav); border-right: 1px solid var(--line); padding: 14px 12px; overflow-y: auto; }
+nav h4 { margin: 16px 6px 8px; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+nav h4:first-child { margin-top: 2px; }
+.card { display: block; width: 100%; text-align: left; border: 1px solid transparent; background: none; border-radius: 9px; padding: 8px 10px; }
+.card:hover { background: var(--gray-soft); }
+.card.on { background: var(--panel); border-color: var(--line); box-shadow: var(--shadow); }
+.card b { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; }
+.card small { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+.card .sent { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--muted); }
+.job { display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
+.dot.COMPLETED { background: var(--green); }
+.dot.COMPLETED_WITH_ERRORS { background: var(--amber); }
+.dot.FAILED { background: var(--red); }
+main { overflow-y: auto; padding: 20px 26px 48px; }
+@media (max-width: 860px) { .shell { grid-template-columns: 1fr; height: auto; } nav { border-right: 0; border-bottom: 1px solid var(--line); } main { padding: 16px; } }
+
+.head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.head h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; word-break: break-all; }
+.head .meta { color: var(--muted); font-size: 13px; }
+.head .tools { margin-left: auto; display: flex; gap: 8px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 12px; font-weight: 600; white-space: nowrap; }
+.btn:hover { border-color: var(--brand); color: var(--brand); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.btn.primary:hover { filter: brightness(1.07); color: var(--brand-ink); }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; background: var(--gray-soft); color: var(--muted); white-space: nowrap; }
+.chip.APPROVED, .chip.COMPLETED, .chip.ok { background: var(--green-soft); color: var(--green); }
+.chip.DENIED, .chip.FAILED, .chip.bad, .chip.REJECTED, .chip.NOT_LOADED { background: var(--red-soft); color: var(--red); }
+.chip.PENDED, .chip.COMPLETED_WITH_ERRORS { background: var(--amber-soft); color: var(--amber); }
+.chip.PROPOSED { background: var(--amber-soft); color: var(--amber); }
+.chip.ADDED, .chip.in { background: var(--green-soft); color: var(--green); }
+.chip.CHANGED { background: var(--blue-soft); color: var(--blue); }
+.chip.DROPPED { background: var(--red-soft); color: var(--red); }
+.dot.PROPOSED { background: var(--amber); } .dot.APPROVED { background: var(--green); } .dot.REJECTED { background: var(--red); }
+.find { margin-left: 18px; display: flex; gap: 6px; align-items: center; }
+.find input { width: 210px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 13px ui-monospace, Menlo, monospace; }
+.find .linkbtn { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.src { border: 1px solid var(--line); background: var(--panel); border-radius: 9px; padding: 8px 10px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.src b { font-size: 13px; font-weight: 600; } .src .n { margin-left: auto; font-weight: 650; }
+.banner.amber { background: var(--amber-soft); color: var(--amber); }
+.banner.amber span { color: var(--ink); }
+
+.net { padding: 16px; margin-bottom: 14px; }
+.net .ends { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.net .ends b { font-size: 22px; font-weight: 650; } .net .ends small { color: var(--muted); margin-left: 6px; }
+.bar { display: flex; height: 26px; border-radius: 7px; overflow: hidden; background: var(--gray-soft); }
+.bar i { display: block; min-width: 0; }
+.bar .unchanged { background: color-mix(in srgb, var(--muted) 35%, transparent); }
+.bar .changed, .sw.changed { background: var(--blue); } .bar .added, .sw.added { background: var(--green); }
+.bar .removed, .sw.removed { background: repeating-linear-gradient(45deg, var(--red), var(--red) 5px, color-mix(in srgb, var(--red) 55%, transparent) 5px, color-mix(in srgb, var(--red) 55%, transparent) 10px); }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; } .sw.unchanged { background: color-mix(in srgb, var(--muted) 35%, transparent); }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.tile { text-align: left; border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 10px 12px; }
+button.tile:hover, .tile.on { border-color: var(--brand); }
+.tile small { display: flex; align-items: center; gap: 6px; font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+.tile b { display: block; font-size: 22px; font-weight: 650; }
+.tile.warn { border-color: var(--red); background: var(--red-soft); } .tile.warn b { color: var(--red); }
+.tile em { font-style: normal; font-size: 12px; color: var(--red); font-weight: 600; }
+.facts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.fact { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 12px; font-size: 13px; }
+.fact b { font-weight: 650; margin-right: 4px; } .fact.amber { border-color: var(--amber-line); background: var(--amber-soft); color: var(--amber); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
+@media (max-width: 900px) { .two, .tiles { grid-template-columns: 1fr 1fr; } }
+.mini { padding: 12px 16px; } .mini h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+.mrow { display: grid; grid-template-columns: 110px minmax(0, 1fr) 36px; gap: 8px; align-items: center; font-size: 13px; padding: 3px 0; }
+.mrow .bar { height: 12px; border-radius: 4px; } .mrow .n { text-align: right; }
+tbody tr[data-i] { cursor: pointer; } tr.open td { background: var(--brand-soft); }
+tr.detail td { background: var(--code); white-space: normal; }
+.ba { display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr); gap: 8px; align-items: stretch; }
+.box { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.box.gone { border-style: dashed; opacity: .6; } .box h5 { margin: 0 0 4px; font-size: 13.5px; } .box .chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+.box .diff { background: var(--amber-soft); border-radius: 4px; padding: 0 3px; }
+.ba .to { align-self: center; text-align: center; color: var(--muted); }
+.roll { display: grid; grid-template-columns: 240px 40px minmax(0, 1fr); gap: 0; align-items: start; }
+.roll .hub { border-color: var(--brand); position: sticky; top: 0; } .roll .hub b { display: block; font-size: 16px; }
+.roll .spokes { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.roll .link { border-top: 2px solid var(--brand); margin-top: 26px; }
+.empty { padding: 70px 20px; text-align: center; color: var(--muted); } .empty b { display: block; color: var(--ink); font-size: 17px; margin-bottom: 4px; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.on { opacity: 1; }
+.tablewrap { overflow-x: auto; } table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 9px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; } tr:last-child td { border-bottom: 0; }
+.sub { color: var(--muted); font-size: 12.5px; }
+.banner { border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; background: var(--red-soft); color: var(--red); font-weight: 600; }
+.banner span { display: block; font-weight: 400; color: var(--ink); margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="brand" href="#/">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18"/><rect x="4" y="4" width="16" height="16" rx="4"/></svg>
+    Provider Intake
+  </a>
+  <form class="find" id="find">
+    <input id="q" placeholder="NPI or TIN" autocomplete="off">
+    <span id="examples"></span>
+  </form>
+  <div class="right">
+    <a href="/">All demos</a>
+    <button class="linkbtn" id="reset" title="Clears every file and all provider data">Reset</button>
+  </div>
+</div>
+<div class="shell">
+  <nav>
+    <h4>Sources</h4>
+    <div id="sources"></div>
+    <h4>Send a file</h4>
+    <div id="samples"></div>
+    <h4>Files</h4>
+    <div id="files"></div>
+  </nav>
+  <main id="main"></main>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const num = (n) => Number(n || 0).toLocaleString("en-US");
+const nice = (s) => s.replaceAll("_", " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
+const KIND = { ADDED: "Added", CHANGED: "Changed", DROPPED: "Removed" };
+async function get(path) { const r = await fetch(path); if (!r.ok) throw new Error(await r.text()); return r.json(); }
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 3600); }
+const guard = (f) => async (...a) => { try { await f(...a); } catch (e) { toast(e.message.trim()); } };
+
+let S = { sources: [], samples: [], updates: [] }, EX = [];
+let cur = null;   // { id, kind } the update shown and the kind of change listed
+let U = null;     // the update's view
+
+function take(d) { S = d.state; EX = d.examples || []; nav(); }
+async function load() { take(await get("api/state")); route(); }
+
+function nav() {
+  const name = Object.fromEntries(S.sources.map((s) => [s.id, s.name]));
+  $("#sources").innerHTML = S.sources.map((s) => `<div class="src"><b>${esc(s.name)}</b>${s.pending ? `<span class="chip PROPOSED">review</span>` : ""}<span class="n num">${num(s.participations)}</span></div>`).join("");
+  $("#samples").innerHTML = S.samples.map((x) => `<button class="card" data-sample="${esc(x.id)}"><b>${esc(x.title)}${x.sent ? `<span class="sent">sent</span>` : ""}</b><small>${esc(x.summary)}</small></button>`).join("");
+  $("#files").innerHTML = S.updates.map((u) => `<button class="card ${cur && cur.id === u.id ? "on" : ""}" data-update="${esc(u.id)}"><b class="job"><span class="dot ${esc(u.status)}"></span>${esc(u.filename)}</b><small>${esc(name[u.source] || "")} · ${esc(nice(u.status))}</small></button>`).join("") || `<small class="muted" style="padding:0 8px">None yet.</small>`;
+  $("#examples").innerHTML = EX.map((x) => `<button type="button" class="linkbtn" data-q="${esc(x)}">${esc(x)}</button>`).join(" ");
+}
+
+function route() {
+  const h = location.hash.slice(2).split("/");
+  if (h[0] === "find" && h[1]) return guard(showLookup)(decodeURIComponent(h[1]));
+  if (h[0] === "file" && h[1]) return guard(showUpdate)(h[1], h[2] || "");
+  cur = null; nav();
+  $("#main").innerHTML = `<div class="empty"><b>Send a file</b>Each file proposes one update. Nothing changes until it is approved.</div>`;
+}
+
+async function showUpdate(id, kind) {
+  cur = { id, kind }; nav();
+  const failed = S.updates.find((u) => u.id === id && u.status === "FAILED");
+  U = failed || await get(`api/update?id=${encodeURIComponent(id)}&kind=${kind}`);
+  const name = (S.sources.find((s) => s.id === U.source) || {}).name || "";
+  const s = U.summary;
+  let h = `<div class="head"><h1>${esc(U.filename)}</h1>${name ? `<span class="chip">${esc(name)}</span>` : ""}<span class="chip ${esc(U.status)}">${esc(nice(U.status))}</span>
+    ${U.decidedBy ? `<span class="meta">by ${esc(U.decidedBy)}</span>` : ""}
+    ${U.status === "PROPOSED" ? `<div class="tools"><button class="btn" data-decide="0">Reject</button><button class="btn primary" data-decide="1">Approve all</button></div>` : ""}</div>`;
+  if (!s) { $("#main").innerHTML = h + `<div class="banner">Nothing was proposed<span>${esc(U.problem)}</span></div>`; return; }
+  const total = s.unchanged + s.changed + s.added + s.removed || 1, w = (n) => `style="width:${(100 * n / total).toFixed(2)}%"`;
+  const share = s.before ? s.removed / s.before : 0;
+  if (share >= 0.1) h += `<div class="banner amber">This file would remove ${Math.round(100 * share)}% of the source's network<span>${num(s.removed)} of ${num(s.before)} participations are not in it.</span></div>`;
+  const tile = (k, cls, label, n, extra = "") => `<button class="tile ${cur.kind === k ? "on" : ""} ${extra && n ? "warn" : ""}" data-kind="${k}"><small><span class="sw ${cls}"></span>${label}</small><b class="num">${num(n)}</b>${extra && n ? `<em>${extra}</em>` : ""}</button>`;
+  h += `<div class="panel net">
+    <div class="ends"><span><b class="num">${num(s.before)}</b><small>before</small></span><span><b class="num">${num(s.after)}</b><small>after</small></span></div>
+    <div class="bar"><i class="unchanged" ${w(s.unchanged)}></i><i class="changed" ${w(s.changed)}></i><i class="added" ${w(s.added)}></i><i class="removed" ${w(s.removed)}></i></div>
+    <div class="tiles">${tile("ADDED", "added", "Added", s.added)}${tile("CHANGED", "changed", "Changed", s.changed)}${tile("DROPPED", "removed", "Removed", s.removed, "for every date")}
+      <div class="tile"><small><span class="sw unchanged"></span>Unchanged</small><b class="num">${num(s.unchanged)}</b></div></div>
+  </div>
+  <div class="facts"><span class="fact"><b class="num">${num(s.rowsRead)}</b>rows</span><span class="fact"><b class="num">${num(s.newProviders)}</b>new NPIs</span><span class="fact"><b class="num">${num(s.newTins)}</b>new TINs</span>
+    ${s.rowsErrored ? `<button class="fact amber" id="errbtn"><b class="num">${num(s.rowsErrored)}</b>rows left out</button>` : ""}</div>
+  <div id="errs" hidden>${errors(U.rowErrors || [])}</div>`;
+  const amax = Math.max(1, ...s.aspects.map((a) => a.count)), smax = Math.max(1, ...s.states.map((x) => x.added + x.changed + x.removed));
+  h += `<div class="two">
+    <div class="panel mini"><h3>What changed</h3>${s.aspects.map((a) => `<div class="mrow"><span>${esc(nice(a.name))}</span><div class="bar"><i class="changed" style="width:${100 * a.count / amax}%"></i></div><span class="n num">${num(a.count)}</span></div>`).join("") || `<span class="sub">Nothing.</span>`}</div>
+    <div class="panel mini"><h3>Where</h3>${s.states.slice(0, 8).map((x) => `<div class="mrow"><span>${esc(x.state || "No state")}</span><div class="bar"><i class="changed" style="width:${100 * x.changed / smax}%"></i><i class="added" style="width:${100 * x.added / smax}%"></i><i class="removed" style="width:${100 * x.removed / smax}%"></i></div><span class="n num">${num(x.added + x.changed + x.removed)}</span></div>`).join("") || `<span class="sub">Nothing.</span>`}</div>
+  </div>`;
+  if (cur.kind) h += changes(U.changes || [], s);
+  $("#main").innerHTML = h;
+}
+
+function errors(list) {
+  return `<div class="panel tablewrap" style="margin-bottom:14px"><table><thead><tr><th>Row</th><th>NPI / TIN</th><th>Why</th></tr></thead><tbody>${list.map((e) => `<tr><td class="num">${e.row}</td><td class="mono">${esc(e.key)}</td><td>${esc(e.message)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function changes(list, s) {
+  const all = { ADDED: s.added, CHANGED: s.changed, DROPPED: s.removed }[cur.kind];
+  return `<div class="panel tablewrap"><table><thead><tr><th>${KIND[cur.kind]} <span class="sub">${list.length < all ? `first ${list.length} of ${num(all)}` : num(all)}</span></th><th>NPI</th><th>TIN</th><th></th></tr></thead><tbody>
+    ${list.map((c, i) => `<tr data-i="${i}"><td>${esc(c.name)}</td><td class="mono">${esc(c.npi)}</td><td class="mono">${esc(c.tin)} <span class="sub">${esc((c.after || c.before).billingName)}</span></td>
+      <td>${c.aspects.map((a) => `<span class="chip CHANGED">${esc(nice(a))}</span>`).join(" ")}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function part(p, other, title) {
+  if (!p) return `<div class="box gone"><h5>${title}</h5><span class="sub">No participation</span></div>`;
+  const d = (v, o) => other && JSON.stringify(v) !== JSON.stringify(o) ? "diff" : "";
+  return `<div class="box"><h5>${title}</h5>
+    <div class="${d(p.billingName, other && other.billingName)}">${esc(p.billingName)}</div>
+    <div class="${d(p.periods, other && other.periods)}">${p.periods.map(esc).join("<br>")}</div>
+    <div class="sub ${d(p.locations, other && other.locations)}">${p.locations.map(esc).join("<br>")}</div>
+    <div class="chips ${d(p.specialties, other && other.specialties)}">${(p.specialties || []).map((x) => `<span class="chip">${esc(x)}</span>`).join("")}</div></div>`;
+}
+
+async function showLookup(q) {
+  cur = null; nav(); $("#q").value = q;
+  const r = await get("api/lookup?q=" + encodeURIComponent(q));
+  if (!r.kind) { $("#main").innerHTML = `<div class="empty"><b>${esc(q)}</b>No NPI or TIN like that in approved provider data.</div>`; return; }
+  const byNPI = r.kind === "npi";
+  $("#main").innerHTML = `<div class="head"><h1>${byNPI ? "NPI" : "TIN"} ${esc(q)}</h1><span class="meta">${r.parts.length}${r.more ? "+" : ""} ${byNPI ? "TIN" : "NPI"}${r.parts.length === 1 ? "" : "s"}</span></div>
+  <div class="roll"><div class="box hub"><span class="sub">${byNPI ? "Provider" : "Bills as"}</span><b>${esc(r.name || q)}</b><span class="mono">${esc(q)}</span></div><div class="link"></div>
+  <div class="spokes">${r.parts.map((p) => `<a class="box" style="text-decoration:none" href="#/find/${esc(byNPI ? p.tin : p.npi)}">
+    <h5>${esc(byNPI ? p.billingName : p.name)}</h5><span class="mono">${esc(byNPI ? p.tin : p.npi)}</span>
+    <div class="chips"><span class="chip ${p.current ? "in" : ""}">${esc(p.network)}</span>${p.current ? "" : `<span class="chip">not current</span>`}</div>
+    <div class="sub" style="margin-top:6px">${p.periods.map(esc).join("<br>")}</div>
+    <div class="sub">${p.locations.slice(0, 1).map(esc).join("")}</div>
+    <div class="chips">${(p.specialties || []).map((x) => `<span class="chip">${esc(x)}</span>`).join("")}</div></a>`).join("")}</div></div>`;
+}
+
+document.addEventListener("click", guard(async (e) => {
+  const t = e.target.closest("[data-sample],[data-update],[data-kind],[data-decide],[data-i],[data-q],#errbtn,#reset");
+  if (!t) return;
+  if (t.dataset.sample) { const r = await post("api/send", { sample: t.dataset.sample }); take(await get("api/state")); location.hash = "#/file/" + r.id; }
+  else if (t.dataset.update) location.hash = "#/file/" + t.dataset.update;
+  else if (t.dataset.kind) location.hash = `#/file/${cur.id}/${cur.kind === t.dataset.kind ? "" : t.dataset.kind}`;
+  else if (t.dataset.decide) { take(await post("api/decide", { id: cur.id, approve: t.dataset.decide === "1" })); await showUpdate(cur.id, cur.kind); }
+  else if (t.dataset.q) location.hash = "#/find/" + t.dataset.q;
+  else if (t.id === "errbtn") $("#errs").hidden = !$("#errs").hidden;
+  else if (t.id === "reset") { take(await post("api/reset")); location.hash = "#/"; route(); }
+  else if (t.dataset.i) {
+    const open = t.classList.contains("open");
+    document.querySelectorAll("tr.detail").forEach((x) => x.remove());
+    document.querySelectorAll("tr.open").forEach((x) => x.classList.remove("open"));
+    if (open) return;
+    const c = U.changes[+t.dataset.i];
+    t.classList.add("open");
+    t.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="4"><div class="ba">${part(c.before, c.after, "Before")}<span class="to">→</span>${part(c.after, c.before, "After")}</div></td></tr>`);
+  }
+}));
+$("#find").addEventListener("submit", (e) => { e.preventDefault(); const q = $("#q").value.trim(); if (q) location.hash = "#/find/" + encodeURIComponent(q); });
+window.addEventListener("hashchange", route);
+guard(load)();
+</script>
+</body>
+</html>

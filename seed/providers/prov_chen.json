@@ -4,8 +4,5 @@
   "kind": "PROVIDER_KIND_INDIVIDUAL",
   "name": {"first": "Mei", "last": "Chen"},
   "taxonomyCodes": ["207Q00000X"],
-  "locations": [{"id": "loc_1", "address": {"lines": ["22 Main St"], "city": "Dayton", "state": "OH", "postalCode": "45402"}, "acceptingNewPatients": true}],
-  "tins": [{"tin": "311234567", "billingName": "Dayton Family Medicine LLC", "effective": {"start": {"year": 2020, "month": 1, "day": 1}}}],
-  "participations": [{"underlyingNetworkId": "net_ppo", "tin": "311234567", "contractId": "ctr_ppo_std", "effective": {"start": {"year": 2024, "month": 1, "day": 1}}}],
   "status": "PROVIDER_STATUS_ACTIVE"
 }

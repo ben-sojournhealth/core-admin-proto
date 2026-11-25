@@ -3,6 +3,7 @@ package journey
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -403,6 +404,15 @@ func GetAdmin(s *sim.Sim) (*Admin, error) {
 	}
 	sort.Slice(providers, func(i, j int) bool { return providerLabel(providers[i]) < providerLabel(providers[j]) })
 	participating := map[string]int{}
+	// Each provider's participations: the TINs it bills under, by network.
+	participations, err := listAll(ctx, r.Participations)
+	if err != nil {
+		return nil, err
+	}
+	partsByNPI := map[string][]*providerv1.NetworkParticipation{}
+	for _, pt := range participations {
+		partsByNPI[pt.GetNpi()] = append(partsByNPI[pt.GetNpi()], pt)
+	}
 	for _, p := range providers {
 		row := ProviderRow{
 			ID: p.GetId(), NPI: p.GetNpi(), Name: providerLabel(p),
@@ -410,32 +420,41 @@ func GetAdmin(s *sim.Sim) (*Admin, error) {
 			Taxonomies: append([]string{}, p.GetTaxonomyCodes()...),
 			TINs:       []TINView{}, Participations: []ParticipationView{}, Locations: []LocationView{},
 		}
-		for _, t := range p.GetTins() {
-			row.TINs = append(row.TINs, TINView{TIN: t.GetTin(), BillingName: t.GetBillingName(),
-				Start: dates.Format(t.GetEffective().GetStart()), End: dates.Format(t.GetEffective().GetEnd())})
-		}
 		in := map[string]bool{}
-		for _, pt := range p.GetParticipations() {
-			cur := dates.In(today, pt.GetEffective())
+		for _, pt := range partsByNPI[p.GetNpi()] {
+			// A participation's dates: its first period's start to its last
+			// period's end.
+			periods := pt.GetPeriods()
+			var start, end string
+			cur := false
+			if len(periods) > 0 {
+				start, end = dates.Format(periods[0].GetStart()), dates.Format(periods[len(periods)-1].GetEnd())
+			}
+			for _, r := range periods {
+				cur = cur || dates.In(today, r)
+			}
 			if cur {
 				row.InNetwork = true
 				in[pt.GetUnderlyingNetworkId()] = true
 			}
+			if !slices.ContainsFunc(row.TINs, func(t TINView) bool { return t.TIN == pt.GetTin() }) {
+				row.TINs = append(row.TINs, TINView{TIN: pt.GetTin(), BillingName: pt.GetBillingName(), Start: start, End: end})
+			}
 			row.Participations = append(row.Participations, ParticipationView{
 				NetworkID: pt.GetUnderlyingNetworkId(), Network: networkName[pt.GetUnderlyingNetworkId()], TIN: pt.GetTin(),
 				ContractID: pt.GetContractId(), Contract: contractName[pt.GetContractId()],
-				Start: dates.Format(pt.GetEffective().GetStart()), End: dates.Format(pt.GetEffective().GetEnd()), Current: cur,
+				Start: start, End: end, Current: cur,
 			})
+			for _, l := range pt.GetLocations() {
+				ad := l.GetAddress()
+				row.Locations = append(row.Locations, LocationView{
+					Address:   strings.Join(append(append([]string{}, ad.GetLines()...), ad.GetCity()+", "+ad.GetState()+" "+ad.GetPostalCode()), ", "),
+					Accepting: l.GetAcceptingNewPatients(),
+				})
+			}
 		}
 		for id := range in {
 			participating[id]++
-		}
-		for _, l := range p.GetLocations() {
-			ad := l.GetAddress()
-			row.Locations = append(row.Locations, LocationView{
-				Address:   strings.Join(append(append([]string{}, ad.GetLines()...), ad.GetCity()+", "+ad.GetState()+" "+ad.GetPostalCode()), ", "),
-				Accepting: l.GetAcceptingNewPatients(),
-			})
 		}
 		a.Providers = append(a.Providers, row)
 	}

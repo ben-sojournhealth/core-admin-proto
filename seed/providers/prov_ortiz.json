@@ -3,21 +3,6 @@
   "npi": "1987654321",
   "kind": "PROVIDER_KIND_ORGANIZATION",
   "organizationName": "Ortiz Orthopedics",
-  "taxonomyCodes": [
-    "207X00000X"
-  ],
-  "tins": [
-    {
-      "tin": "452345678",
-      "billingName": "Ortiz Orthopedics PC",
-      "effective": {
-        "start": {
-          "year": 2019,
-          "month": 1,
-          "day": 1
-        }
-      }
-    }
-  ],
+  "taxonomyCodes": ["207X00000X"],
   "status": "PROVIDER_STATUS_ACTIVE"
 }

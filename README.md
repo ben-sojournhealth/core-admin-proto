@@ -25,6 +25,7 @@ internal/claims/remittancedemo/          Remittance demo: samples that adjudicat
 internal/claims/claimsdemo/              "How claims works": the walkthrough behind the Claims domain on the map
 
 internal/network/                        Network domain. NetworkService: what other domains may ask it
+internal/network/vendorintake/           A network vendor's full provider files: one proposed update per file, applied on approval
 
 internal/finance/stoploss/               Finance domain: stop-loss tracking interfaces
 
@@ -82,7 +83,7 @@ Each domain has a README of its own:
 |---|---|---|
 | Employer | [internal/employer](internal/employer/README.md) | Customer, Group, Plan → PlanVersion, Member, CoverageSpan, EnrollmentTransaction, EligibilityInput, MemberVersion |
 | Claims | [internal/claims](internal/claims/README.md) | Claim, ClaimLine, Adjudication, LineAdjudication, ClaimPayment, FamilyAccumulators, FeeSchedule, Remittance |
-| Network | [internal/network](internal/network/README.md) | Provider, Network, UnderlyingNetwork, Contract |
+| Network | [internal/network](internal/network/README.md) | Provider, NetworkParticipation, Network, UnderlyingNetwork, Contract, ProviderUpdate |
 | Finance | [internal/finance](internal/finance/README.md) | StopLossPolicy, exposures, filings |
 
 ## Conventions
@@ -100,7 +101,7 @@ Everything runs on Postgres: the demo, the tests, and the throwaway sandboxes th
 
 - `employer`: customers, groups, plans, members, the 834 ingestion jobs, enrollment transactions, eligibility inputs and member versions
 - `claims`: claims, family accumulators, fee schedules, the 837 ingestion jobs, remittances and claim number blocks
-- `network`: providers, networks, underlying networks and contracts
+- `network`: providers, participations (NPI to TIN), networks, underlying networks, contracts, vendor files and their updates
 - `finance`: stop-loss policies, exposures and filings
 
 No foreign keys cross schemas; a reference to another domain's record is a value. A domain's code asks other domains through their services, defined in proto and called in-process: `EmployerService` (`employer_service.proto`: customers, members, medical coverage on a date and the network it uses, the plan version in force) and `NetworkService` (`network_service.proto`: a provider, its participations and its tier in a network on a date, contracts). It never touches their stores; a test enforces it. The services are generated with Connect in simple mode, so the same service could be served over the network unchanged. Answers use the latest data we have, about the date asked: a retro-termination recorded today changes the answer for a January date of service. Demos, the simulator and seed loading still set up every domain through `repo.Repos`.

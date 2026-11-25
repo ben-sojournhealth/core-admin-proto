@@ -116,10 +116,15 @@ func TestSeedLoadsAndLinks(t *testing.T) {
 	}
 
 	providers := listAll(t, r.Providers)
+	npis := map[string]bool{}
 	for _, p := range providers {
-		for _, np := range p.GetParticipations() {
-			mustExist("participation network", np.GetUnderlyingNetworkId(), underlying)
-			mustExist("participation contract", np.GetContractId(), contract)
+		npis[p.GetNpi()] = true
+	}
+	for _, np := range listAll(t, r.Participations) {
+		mustExist("participation network", np.GetUnderlyingNetworkId(), underlying)
+		mustExist("participation contract", np.GetContractId(), contract)
+		if !npis[np.GetNpi()] {
+			t.Errorf("participation %s: no provider with NPI %s", np.GetId(), np.GetNpi())
 		}
 	}
 

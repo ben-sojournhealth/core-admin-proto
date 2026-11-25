@@ -5,11 +5,18 @@ package coreadmin.provider.v1;
 import "coreadmin/common/v1/common.proto";
 
 // Provider is an individual practitioner (NPI type 1) or an organization
-// (NPI type 2). Providers are shared across customers; network
-// participation and contracts determine how they are paid.
+// (NPI type 2): who they are. Providers are shared across customers.
+// Where they bill and which networks they are in is on their
+// participations (NetworkParticipation), stored separately.
 message Provider {
+  reserved 7, 8, 9, 12;
+  reserved "locations", "tins", "participations", "source_ingestion_job_id";
+
+  // Stable id.
   string id = 1;
+  // National Provider Identifier, ten digits.
   string npi = 2;
+  // Individual or organization.
   ProviderKind kind = 3;
   // For individuals.
   common.v1.PersonName name = 4;
@@ -17,14 +24,15 @@ message Provider {
   string organization_name = 5;
   // NUCC taxonomy codes; the first is primary.
   repeated string taxonomy_codes = 6;
-  repeated ServiceLocation locations = 7;
-  // Billing affiliations: the TINs this provider bills under.
-  repeated TinAffiliation tins = 8;
-  repeated NetworkParticipation participations = 9;
+  // Whether claims may pay to this provider.
   ProviderStatus status = 10;
+  // Ids other systems know this provider by.
   repeated common.v1.ExternalId external_ids = 11;
-  // Roster ingestion that last touched this record.
-  string source_ingestion_job_id = 12;
+  // The provider update (a vendor file, approved) that created this
+  // record or last changed its name. Empty for a record entered another
+  // way.
+  string provider_update_id = 13;
+  // Who recorded this version and when.
   common.v1.AuditInfo audit = 15;
 }
 
@@ -42,27 +50,67 @@ enum ProviderStatus {
   PROVIDER_STATUS_SANCTIONED = 3;
 }
 
+// ServiceLocation is a place a provider sees patients under a TIN, for
+// the directory. It does not decide network status on a claim.
 message ServiceLocation {
+  // Id of the location within its participation; may be empty.
   string id = 1;
+  // Street address.
   common.v1.Address address = 2;
+  // Office phone, as sent.
   string phone = 3;
+  // Whether the provider takes new patients here.
   bool accepting_new_patients = 4;
 }
 
-message TinAffiliation {
-  string tin = 1;
-  string billing_name = 2;
-  common.v1.DateRange effective = 3;
-}
-
-// NetworkParticipation says a provider, billing under a TIN, is in an
-// underlying network for a period, paid under a contract.
+// NetworkParticipation says a provider (NPI), billing under a TIN, is in
+// an underlying network for one or more periods. It is also the roll-up
+// of NPIs to TINs: a provider's participations name the TINs it bills
+// under, and a TIN's participations name its providers.
+//
+// One source states each participation (a network vendor's file feed, or
+// none for one entered directly). What a vendor's source says is exactly
+// what its latest approved file says, history included: nothing is
+// remembered from older files.
 message NetworkParticipation {
+  reserved 4;
+  reserved "effective";
+
+  // Stable id. For a participation stated by a source it is made from the
+  // source, NPI and TIN.
+  string id = 5;
   // The underlying network the provider participates in.
   string underlying_network_id = 1;
+  // The provider's NPI.
+  string npi = 6;
+  // The TIN the provider bills under.
   string tin = 2;
+  // The contract that prices claims, only for an underlying network whose
+  // contracts we hold (UNDERLYING_NETWORK_PRICING_CONTRACTS_HELD). Empty
+  // where the vendor reprices.
   string contract_id = 3;
-  common.v1.DateRange effective = 4;
+  // When the provider participates, as the source states it: every
+  // period, past ones included. A period with no end is open.
+  repeated common.v1.DateRange periods = 14;
+  // The TIN's name as the source gives it (the group or practice).
+  string billing_name = 7;
+  // Specialties as the source sends them: the vendor's own wording, not
+  // mapped to NUCC taxonomy.
+  repeated string specialties = 8;
+  // Where the provider sees patients under this TIN, for the directory.
+  repeated ServiceLocation locations = 9;
+  // The source that states this participation (a vendor file feed, e.g.
+  // "cigna-ppo-individual"). Empty for one entered directly.
+  string source_id = 10;
+  // The provider update that created or last changed it.
+  string provider_update_id = 11;
+  // The change within that update: the file rows it was derived from.
+  string vendor_change_id = 12;
+  // Fingerprint of the file rows it was derived from, compared with the
+  // next file's rows for the same NPI and TIN to find what changed.
+  string source_hash = 13;
+  // Who recorded this version and when.
+  common.v1.AuditInfo audit = 15;
 }
 
 // Network is what a customer's plan opts into (PlanVersion.network_id):
@@ -109,6 +157,8 @@ message UnderlyingNetwork {
   UnderlyingNetworkKind kind = 3;
   // For rented networks, the vendor (e.g. a national PPO).
   string vendor = 4;
+  // Who prices claims for its providers.
+  UnderlyingNetworkPricing pricing = 5;
   // Who recorded this version and when.
   common.v1.AuditInfo audit = 15;
 }
@@ -118,6 +168,18 @@ enum UnderlyingNetworkKind {
   UNDERLYING_NETWORK_KIND_OWNED = 1;
   UNDERLYING_NETWORK_KIND_RENTED = 2;
   UNDERLYING_NETWORK_KIND_DIRECT_CONTRACT = 3;
+}
+
+// UnderlyingNetworkPricing says who holds the rates for an underlying
+// network's providers.
+enum UnderlyingNetworkPricing {
+  UNDERLYING_NETWORK_PRICING_UNSPECIFIED = 0;
+  // We hold the contracts: a participation names the contract that
+  // prices the claim.
+  UNDERLYING_NETWORK_PRICING_CONTRACTS_HELD = 1;
+  // The vendor holds the rates and reprices each claim; participations
+  // carry no contract.
+  UNDERLYING_NETWORK_PRICING_VENDOR_REPRICED = 2;
 }
 
 // Contract defines how a participating provider is reimbursed.

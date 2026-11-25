@@ -1,1 +1,1 @@
-{"id": "net_direct", "name": "Direct contracts", "kind": "UNDERLYING_NETWORK_KIND_DIRECT_CONTRACT"}
+{"id": "net_direct", "name": "Direct contracts", "kind": "UNDERLYING_NETWORK_KIND_DIRECT_CONTRACT", "pricing": "UNDERLYING_NETWORK_PRICING_CONTRACTS_HELD"}
