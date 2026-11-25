@@ -166,38 +166,42 @@ const VIEWS = {
     href: "/claims/", more: "how it works",
     groups: [{ t: "Externally Processed Claims", at: [210, 362, 205, 212] }],
   },
+  Employer: { size: [1140, 540], top: 10, frame: [200, 110, 710, 300] },
 };
 // o: x, y, w (and h) in the overview; absent for a component shown only
 // inside its domain. v: x, y, w in a domain's view, as one of its own
 // components or, for another domain's, as a small one beside it.
 const NODES = [
-  { id: "enrollment", t: "Employers", s: "HR · 834 enrollment", ext: true, o: [20, 95, 160] },
+  { id: "enrollment", t: "Employers", s: "HR · 834 enrollment", ext: true, o: [20, 95, 160], v: { Employer: [20, 220, 160] } },
   { id: "clearinghouse", t: "Clearinghouses", s: "837 claims", ext: true, o: [20, 292, 160], v: { Claims: [20, 250, 160] } },
   // Whoever adjudicates and pays a benefit's claims instead of us.
-  { id: "external-processors", t: "Other processors", s: "PBM · behavioral", s2: "dental · vision", ext: true, o: [20, 392, 160], v: { Claims: [20, 440, 160] } },
+  { id: "external-processors", t: "Other processors", s: "PBM · behavioral", s2: "dental · vision", ext: true, o: [20, 392, 160], v: { Claims: [20, 440, 160], Employer: [980, 290, 150] } },
   { id: "network-vendors", t: "Network vendors", s: "network · provider files", ext: true, o: [20, 562, 160] },
   { id: "rosters", t: "Providers", s: "rosters · contracts", ext: true, o: [20, 652, 160] },
   // Employer
-  { id: "employer-portal", dom: "Employer", t: "Employer Portal", s: "approvals · views", o: [220, 50, 160] },
-  { id: "plan-design", dom: "Employer", t: "Plan Design", s: "per-customer benefits", o: [410, 50, 170], v: { Claims: [580, 30, 130] } },
-  { id: "enrollment-intake", dom: "Employer", t: "Enrollment Intake", s: "834 full · change", o: [220, 140, 160] },
-  { id: "eligibility", dom: "Employer", t: "Eligibility", s: "members · coverage", o: [410, 140, 170], v: { Claims: [430, 30, 130] } },
+  { id: "employer-portal", dom: "Employer", t: "Employer Portal", s: "approvals · views", o: [220, 50, 160], v: { Employer: [220, 150, 185] } },
+  { id: "plan-design", dom: "Employer", t: "Plan Design", s: "per-customer benefits", o: [410, 50, 170], v: { Claims: [580, 30, 130], Employer: [450, 150, 190] } },
+  { id: "enrollment-intake", dom: "Employer", t: "Enrollment Intake", s: "834 full · change", o: [220, 140, 160], v: { Employer: [220, 290, 185] } },
+  { id: "eligibility", dom: "Employer", t: "Eligibility", s: "members · coverage", o: [410, 140, 170], v: { Claims: [430, 30, 130], Employer: [450, 290, 190] } },
+  // Who is covered, sent to each outside processor so it can adjudicate
+  // its claims. Shown only inside the domain.
+  { id: "eligibility-feed", dom: "Employer", t: "Eligibility Feed", s: "members · coverage out", v: { Employer: [710, 290, 180] } },
   // Each employer's funding arrangement, funding requests with their claims
   // register, and our invoices (admin fees, stop-loss premiums).
-  { id: "billing-funding", dom: "Employer", t: "Billing & Funding", s: "funding · admin fees", o: [660, 140, 180], v: { Claims: [760, 30, 130] } },
+  { id: "billing-funding", dom: "Employer", t: "Billing & Funding", s: "funding · admin fees", o: [660, 140, 180], v: { Claims: [760, 30, 130], Employer: [710, 150, 180] } },
   // Claims: the pipeline across the middle. Reference data, disputes,
   // overpayments and the two halves of externally processed claims show
   // only inside the domain.
   { id: "claims-intake", dom: "Claims", t: "Claims Intake", s: "837 · 999", o: [220, 292, 160], v: { Claims: [220, 250, 185] } },
-  { id: "adjudication", dom: "Claims", t: "Claim Adjudication", s: "price · pend · adjust · void", o: [410, 292, 190], v: { Claims: [430, 250, 190] } },
+  { id: "adjudication", dom: "Claims", t: "Claim Adjudication", s: "price · pend · adjust · void", o: [410, 292, 190], v: { Claims: [430, 250, 190], Employer: [470, 460, 150] } },
   { id: "remittance", dom: "Claims", t: "Remittance & EOBs", s: "835 · EOP · EOB", o: [660, 292, 180], v: { Claims: [710, 250, 180] } },
-  { id: "settlement", dom: "Claims", t: "Settlement", s: "payee · funds · netting", o: [660, 392, 180], v: { Claims: [710, 390, 180] } },
+  { id: "settlement", dom: "Claims", t: "Settlement", s: "payee · funds · netting", o: [660, 392, 180], v: { Claims: [710, 390, 180], Employer: [980, 60, 150] } },
   // Claims someone else adjudicates and pays: one component in the
   // overview, its two halves inside the domain.
   { id: "external-claims", dom: "Claims", t: "Externally Processed Claims", s: "claims in · accumulators in and out", o: [220, 392, 245] },
   { id: "accumulator-exchange", dom: "Claims", t: "Accumulator Exchange", s: "ours out · theirs in", v: { Claims: [220, 390, 185] } },
   { id: "external-claims-intake", dom: "Claims", t: "Paid Claims Intake", s: "as sent · not adjudicated", v: { Claims: [220, 490, 185] } },
-  { id: "service-definitions", dom: "Claims", t: "Service Definitions", s: "procedure code groups", v: { Claims: [710, 150, 180] } },
+  { id: "service-definitions", dom: "Claims", t: "Service Definitions", s: "procedure code groups", v: { Claims: [710, 150, 180], Employer: [470, 30, 150] } },
   { id: "disputes", dom: "Claims", t: "Disputes", s: "reconsiderations · appeals", v: { Claims: [220, 150, 185] } },
   // What a payee holds beyond what an adjusted or voided claim now owes them.
   { id: "overpayments", dom: "Claims", t: "Overpayments", s: "payee · amount · reason", v: { Claims: [710, 490, 180] } },
@@ -214,7 +218,7 @@ const NODES = [
   { id: "medical-policy", dom: "Medical Management", t: "Medical Policy", s: "criteria · auth lists", o: [220, 822, 160] },
   { id: "authorization", dom: "Medical Management", t: "Authorization", s: "prior auth · UM review", o: [410, 822, 190], v: { Claims: [710, 650, 130] } },
   // Finance
-  { id: "disbursement", dom: "Finance", t: "Disbursement", s: "funding · EFT · checks", o: [920, 392, 175], v: { Claims: [950, 390, 140] } },
+  { id: "disbursement", dom: "Finance", t: "Disbursement", s: "funding · EFT · checks", o: [920, 392, 175], v: { Claims: [950, 390, 140], Employer: [980, 160, 150] } },
   // Working an overpayment until it is offset, refunded or written off.
   { id: "recoveries", dom: "Finance", t: "Recoveries", s: "offset · refund", o: [920, 492, 175], v: { Claims: [950, 490, 140] } },
   { id: "stop-loss", dom: "Finance", t: "Stop-Loss", s: "specific · aggregate", o: [920, 592, 175], v: { Claims: [950, 560, 140] } },
@@ -229,21 +233,25 @@ const NODES = [
 // domain's frame. A domain's view shows all of its lines.
 const EDGES = [
   // Employer
-  { f: "enrollment", t: "employer-portal", o: ["M180,113 H200 V86 H220"] },
-  { f: "enrollment", t: "enrollment-intake", o: ["M180,149 H200 V176 H220"] },
-  { f: "employer-portal", t: "plan-design", both: true, o: ["M380,74 H410"] },
-  { f: "employer-portal", t: "eligibility", both: true, o: ["M380,100 H395 V158 H410"] },
-  { f: "enrollment-intake", t: "eligibility", o: ["M380,176 H410"] },
-  { f: "eligibility", t: "adjudication", l: "members", o: ["M495,212 V292", 501, 240], v: { Claims: ["M500,82 V250", 506, 104] } },
-  { f: "plan-design", t: "adjudication", l: "plans", o: ["M580,100 H620 V276 H560 V292", 626, 240], v: { Claims: ["M595,82 V250", 601, 104] } },
+  { f: "enrollment", t: "employer-portal", o: ["M180,113 H200 V86 H220"], v: { Employer: ["M180,240 H190 V186 H220"] } },
+  { f: "enrollment", t: "enrollment-intake", o: ["M180,149 H200 V176 H220"], v: { Employer: ["M180,272 H190 V326 H220"] } },
+  { f: "employer-portal", t: "plan-design", both: true, o: ["M380,74 H410"], v: { Employer: ["M405,174 H450"] } },
+  { f: "employer-portal", t: "eligibility", both: true, o: ["M380,100 H395 V158 H410"], v: { Employer: ["M405,200 H428 V308 H450"] } },
+  { f: "enrollment-intake", t: "eligibility", o: ["M380,176 H410"], v: { Employer: ["M405,326 H450"] } },
+  // The feed shows only inside the domain: in the overview its line to the
+  // processors starts at the domain's frame.
+  { f: "eligibility", t: "eligibility-feed", v: { Employer: ["M640,340 H710"] } },
+  { f: "eligibility-feed", t: "external-processors", l: "eligibility", o: ["M200,215 H190 V410 H180", 128, 262], v: { Employer: ["M890,326 H980", 918, 320] } },
+  { f: "eligibility", t: "adjudication", l: "members", o: ["M495,212 V292", 501, 240], v: { Claims: ["M500,82 V250", 506, 104], Employer: ["M510,362 V460", 516, 440] } },
+  { f: "plan-design", t: "adjudication", l: "plans", o: ["M580,100 H620 V276 H560 V292", 626, 240], v: { Claims: ["M595,82 V250", 601, 104], Employer: ["M640,200 H660 V436 H580 V460", 600, 430] } },
   // Funding: member counts for admin fees; the employer sees each request
   // and its claims register; funded cycles release payments.
-  { f: "eligibility", t: "billing-funding", l: "counts", o: ["M580,176 H660", 600, 170] },
-  { f: "employer-portal", t: "billing-funding", both: true, o: ["M340,50 V30 H750 V140"] },
-  { f: "settlement", t: "billing-funding", l: "needs", o: ["M840,446 H850 V200 H840", 812, 244], v: { Claims: ["M890,400 H900 V56 H890", 866, 104] } },
-  { f: "billing-funding", t: "disbursement", l: "funded", o: ["M840,176 H1030 V392", 1036, 300] },
+  { f: "eligibility", t: "billing-funding", l: "counts", o: ["M580,176 H660", 600, 170], v: { Employer: ["M640,310 H685 V204 H710", 690, 252] } },
+  { f: "employer-portal", t: "billing-funding", both: true, o: ["M360,50 V30 H750 V140"], v: { Employer: ["M312,150 V128 H800 V150"] } },
+  { f: "settlement", t: "billing-funding", l: "needs", o: ["M840,446 H850 V200 H840", 812, 244], v: { Claims: ["M890,400 H900 V56 H890", 866, 104], Employer: ["M980,86 H940 V168 H890", 945, 132] } },
+  { f: "billing-funding", t: "disbursement", l: "funded", o: ["M840,176 H1030 V392", 1036, 300], v: { Employer: ["M890,190 H980", 918, 205] } },
   // Claims. Plan design names service definitions ("burn treatment: 20%").
-  { f: "service-definitions", t: "plan-design", l: "service definitions", o: ["M600,250 V86 H580", 606, 80], v: { Claims: ["M740,150 V128 H700 V82"] } },
+  { f: "service-definitions", t: "plan-design", l: "service definitions", o: ["M600,250 V86 H580", 606, 80], v: { Claims: ["M740,150 V128 H700 V82"], Employer: ["M545,82 V150", 551, 104] } },
   { f: "service-definitions", t: "adjudication", v: { Claims: ["M710,204 H665 V268 H620"] } },
   { f: "clearinghouse", t: "claims-intake", o: ["M180,328 H220"], v: { Claims: ["M180,286 H220"] } },
   { f: "claims-intake", t: "adjudication", o: ["M380,328 H410"], v: { Claims: ["M405,286 H430"] } },

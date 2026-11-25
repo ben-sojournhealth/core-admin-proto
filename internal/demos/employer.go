@@ -7,6 +7,9 @@ const (
 	EmployerPortal   = "employer-portal"
 	PlanDesign       = "plan-design"
 	Eligibility      = "eligibility"
+	// Who is covered, sent to each outside processor (PBM, behavioral, dental,
+	// vision) so it can adjudicate its claims.
+	EligibilityFeed = "eligibility-feed"
 	// Funding arrangements, funding requests and claims registers, and
 	// admin-fee billing.
 	BillingFunding = "billing-funding"
