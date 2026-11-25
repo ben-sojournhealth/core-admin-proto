@@ -4,11 +4,17 @@
 //
 //   chip click   select it, and show its pane: opening one unless four are open
 //   chip ✕       close its pane (open ones only)
+//   pane focus   selects the checkout that pane is in
 //   Open/Close   a pane in that checkout running claude (resumes its last
 //                conversation); closing the pane leaves the checkout alone
 //   Merge        merge its commits into the local main branch (fast-forward
 //                when possible); uncommitted changes stay behind. Then SETUP
-//                on main. A conflict aborts and leaves main as it was.
+//                on main. A conflict aborts and leaves main as it was; a
+//                trial merge on every refresh marks the chip "⚠ conflicts"
+//                beforehand and turns Merge off.
+//   Demo         open its demo server's page in the browser, starting the
+//                server (background terminal demo-<checkout>) if it isn't
+//                up; each checkout has its own port, shown on its chip
 //   Delete       remove the checkout and its branch (asks again first)
 //   New          a branch and checkout from main, SETUP, then open it
 //   Sync all     fast-forward every clean checkout that is only behind main,
@@ -19,12 +25,17 @@
 
 import { View, div } from "gpui-kit";
 import { h_flex, InputState, Input } from "gpui-base";
-import { run, spaces, panes, exec, home, appHome, readTextFile, theme, notify, checking } from "herdr";
+import { run, spaces, panes, focused, exec, hc, home, appHome, readTextFile, theme, notify, checking } from "herdr";
 
 // After a checkout is made or moved, and on main after a merge.
 const SETUP = "make gen && go build ./...";
 // What an opened checkout runs: its last conversation there, else a new one.
 const AGENT = ["sh", "-c", "claude --continue || exec claude"];
+// A checkout's demo server: started with this in the checkout, it serves on
+// the checkout's own port, kept in PORTS in git's common directory
+// (cmd/demo/checkout.go).
+const DEMO = ["make", "demo"];
+const PORTS = "coreadmin-demo-ports.json";
 const MAX_OPEN = 4;
 const TAB = "worktrees";
 const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false"];
@@ -39,6 +50,13 @@ async function setup(cwd) {
   const r = await exec("sh", ["-c", `${SETUP} 2>&1`], { cwd, timeout: 600_000 });
   return r.code === 0 ? "" : (r.stdout || r.stderr || "").trim().split("\n").slice(-6).join("\n") || `${SETUP} failed`;
 }
+
+// {checkout path: port}; {} when absent or mid-write.
+async function demoPorts(repo) {
+  try { return JSON.parse((await readTextFile(`${repo.main}/.git/${PORTS}`)) || "{}"); } catch { return {}; }
+}
+const url = (port) => `http://localhost:${port}/`;
+const serving = async (port) => (await exec("curl", ["-s", "-o", "/dev/null", "-m", "1", url(port)])).code === 0;
 
 const slug = (branch) => branch.replace(/[^\p{L}\p{M}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "");
 const inside = (p, dir) => p === dir || p.startsWith(dir + "/");
@@ -94,6 +112,7 @@ export default class Worktrees extends View {
           list.push({ path, branch, main: list.length === 0 });
         }
         repo.base = list[0]?.branch ?? "main";
+        const ports = await demoPorts(repo);
         await Promise.all(list.map(async (w) => {
           const status = await git(w.path, [...READ, "status", "--porcelain"]);
           w.dirty = status.ok && status.out !== "";
@@ -101,6 +120,9 @@ export default class Worktrees extends View {
           const range = w.main ? "@{upstream}...HEAD" : `${repo.base}...${w.branch}`;
           const counts = w.branch ? await git(w.main ? w.path : repo.main, ["rev-list", "--left-right", "--count", range]) : { ok: false };
           [w.behind, w.ahead] = counts.ok ? counts.out.split(/\s+/).map(Number) : [0, 0];
+          w.conflicts = w.main || !w.ahead || !w.behind ? [] : await this.conflicts(repo, w.branch);
+          w.port = ports[w.path] ?? null;
+          w.serving = w.port ? await serving(w.port) : false;
         }));
         this.repo = repo;
         this.list = list;
@@ -113,6 +135,16 @@ export default class Worktrees extends View {
         cx.notify();
       }
     });
+  }
+
+  // The files a merge of branch into main would conflict in: a trial merge
+  // (git merge-tree) that writes no checkout, index or ref.
+  async conflicts(repo, branch) {
+    const r = await exec("git", ["merge-tree", "--write-tree", "--name-only", repo.base, branch], { cwd: repo.main, timeout: 60_000 });
+    if (r.code !== 1) return []; // 0: merges cleanly; anything else: couldn't tell
+    const lines = (r.stdout ?? "").split("\n");
+    const end = lines.indexOf("", 1);
+    return lines.slice(1, end < 0 ? undefined : end).filter(Boolean);
   }
 
   async repoOf(folder) {
@@ -156,6 +188,7 @@ export default class Worktrees extends View {
   select(w) {
     this.selected = w.path;
     this.confirm = null;
+    if (w.conflicts?.length) this.say(`${w.branch} conflicts with ${this.repo.base} in ${w.conflicts.join(", ")}: merge ${this.repo.base} into it there`);
     const g = this.grid(), p = this.paneOf(w, g);
     if (p) {
       run("tab.select", { id: g.tab.id });
@@ -221,6 +254,45 @@ export default class Worktrees extends View {
     });
   }
 
+  // Opens the checkout's demo in the browser, starting its server first if
+  // it isn't running (a background terminal, `demo-<checkout>`).
+  demo(cx, w) {
+    const repo = this.repo;
+    const name = `demo-${w.main ? "main" : w.path.split("/").pop()}`.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").slice(0, 32);
+    this.act(cx, `demo ${w.branch ?? ""}`, async () => {
+      const port = async () => (await demoPorts(repo))[w.path] ?? null;
+      let p = await port();
+      if (!(p && (await serving(p)))) {
+        // A checkout from before per-checkout ports would take main's 8080.
+        if ((await readTextFile(`${w.path}/cmd/demo/checkout.go`)) === null) {
+          return this.say(`${w.branch}'s demo has no port of its own yet: Sync it (or merge ${repo.base} into it) first`, true);
+        }
+        const state = async () => {
+          const r = await hc(["get", name, "--json"]);
+          try { return r.code === 0 ? JSON.parse(r.stdout).state : null; } catch { return null; }
+        };
+        if ((await state()) !== "live") {
+          const r = await hc(["run", "--bg", "--no-parent", "--name", name, "--cwd", w.path, "--", ...DEMO]);
+          if (r.code !== 0) return this.say(`couldn't start the demo: ${(r.stderr || r.stdout).trim()}`, true);
+        }
+        // It builds first (make gen, go run): up to two minutes, unless it exits.
+        this.busy = `starting demo ${w.branch ?? ""}`;
+        for (let i = 0; i < 120; i++) {
+          p = await port();
+          if (p && (await serving(p))) break;
+          if ((await state()) !== "live") {
+            const out = (await hc(["read", name])).stdout.trim().split("\n").slice(-3).join(" · ");
+            return this.say(`the demo stopped: ${out}`, true);
+          }
+          await exec("sleep", ["1"]);
+        }
+        if (!(p && (await serving(p)))) return this.say(`the demo didn't come up in two minutes: hc read ${name}`, true);
+      }
+      await exec("open", [url(p)]);
+      this.say(`demo ${w.branch ?? ""} on :${p}`);
+    });
+  }
+
   push(cx) {
     const repo = this.repo;
     this.act(cx, "pushing", async () => {
@@ -270,7 +342,30 @@ export default class Worktrees extends View {
     });
   }
 
+  // The checkout a folder is in (the deepest that holds it).
+  worktreeAt(folder) {
+    if (!folder) return null;
+    return this.list.filter((w) => inside(folder, w.path)).sort((a, b) => b.path.length - a.path.length)[0] ?? null;
+  }
+
+  // Focusing a pane selects its checkout, so the bar's buttons act on the
+  // checkout you're looking at. Only on a focus change: a chip clicked
+  // without opening (four open) keeps its selection until focus moves.
+  followFocus() {
+    if (!this.list.length) return; // not read yet: follow once it is
+    const f = focused();
+    const key = f?.pane ?? f?.terminal ?? null;
+    if (key === this.lastFocus) return;
+    this.lastFocus = key;
+    const w = this.worktreeAt(f?.cwd);
+    if (w && w.path !== this.selected) {
+      this.selected = w.path;
+      this.confirm = null;
+    }
+  }
+
   render(cx) {
+    this.followFocus();
     const t = theme();
     const statusColor = { working: t.working, blocked: t.blocked, done: t.done, idle: t.idle };
     const grid = this.grid();
@@ -295,6 +390,8 @@ export default class Worktrees extends View {
         .when(w.behind > 0, (el) => el.child(div().text_size(11).text_color(t.dim).child(`↓${w.behind}`)))
         .when(w.ahead > 0, (el) => el.child(div().text_size(11).text_color(t.accent).child(`↑${w.ahead}`)))
         .when(w.dirty, (el) => el.child(div().text_size(11).text_color(t.blocked).child("●")))
+        .when(w.conflicts?.length > 0, (el) => el.child(div().text_size(11).text_color(t.blocked).child("⚠ conflicts")))
+        .when(w.serving, (el) => el.child(div().text_size(11).text_color(t.done).child(`:${w.port}`)))
         // Open: a little x closes its pane (the checkout stays).
         .when(Boolean(pane), (el) => el.child(div().id(`x-${w.path}`).ml(2).w(16).h(16).flex().items_center().justify_center()
           .rounded(4).text_size(11).text_color(t.dim).cursor_pointer().hover((s) => s.bg(t.raised).text_color(t.foreground))
@@ -313,7 +410,8 @@ export default class Worktrees extends View {
         .child(h_flex().id("chips").flex_1().min_w(0).gap(6).items_center().overflow_x_scrollbar().children(this.list.map(chip)))
         .child(sep())
         .child(button("open", selOpen ? "Close" : "Open", idle && Boolean(sel), () => (selOpen ? this.close(sel) : this.open(sel))))
-        .child(button("merge", "Merge", idle && Boolean(sel && !sel.main && sel.ahead), (cx) => this.merge(cx, sel)))
+        .child(button("demo", "Demo", idle && Boolean(sel), (cx) => this.demo(cx, sel)))
+        .child(button("merge", "Merge", idle && Boolean(sel && !sel.main && sel.ahead && !sel.conflicts?.length), (cx) => this.merge(cx, sel)))
         .child(button("delete", this.confirm && this.confirm === sel?.path ? "Delete!" : "Delete", idle && Boolean(sel && !sel.main), (cx) => this.remove(cx, sel), true))
         .child(sep())
         .when(this.naming, (el) => el.child(div().id("name").flex_none().w(170).h(26).px(8).flex().items_center().rounded(6).border_1().border_color(t.accent).bg(t.background)

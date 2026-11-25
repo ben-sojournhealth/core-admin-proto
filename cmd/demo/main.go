@@ -1,8 +1,12 @@
 // Command demo serves the interactive demos. The landing page is the
 // domain map; components with a demo link into it.
 //
-//	go run ./cmd/demo            # then open http://localhost:8080
-//	go run ./cmd/demo -addr localhost:8081   # a second copy, e.g. in another worktree
+//	go run ./cmd/demo            # http://localhost:8080 in the main checkout
+//	go run ./cmd/demo -addr localhost:9000   # another address
+//
+// Each checkout has its own port (checkout.go): the main checkout 8080, a
+// worktree 8081 and up, kept from its first start. Every page shows which
+// checkout it comes from.
 //
 // Each demo lives under its own path (/claims-lifecycle/ and its API at
 // /claims-lifecycle/api/), and registers its routes from its own file
@@ -17,6 +21,7 @@ import (
 	"embed"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -61,8 +66,15 @@ func writeJSON(w http.ResponseWriter, v any, err error) {
 }
 
 func main() {
-	addr := flag.String("addr", "localhost:8080", "listen address")
+	addr := flag.String("addr", "", "listen address (default: this checkout's port, see checkout.go)")
 	flag.Parse()
+	here, err := thisCheckout()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if *addr == "" {
+		*addr = fmt.Sprintf("localhost:%d", here.Port)
+	}
 	// Everything runs on the local Postgres (see pgdb); this starts it if
 	// it isn't running, and leaves it running.
 	if _, err := pgdb.Pool(context.Background()); err != nil {
@@ -75,7 +87,7 @@ func main() {
 		log.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	mux.Handle("GET /", http.FileServerFS(web))
+	mux.Handle("GET /", withCheckout(web, here, http.FileServerFS(web)))
 	mux.HandleFunc("GET /api/demos", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(demos.Catalog())
