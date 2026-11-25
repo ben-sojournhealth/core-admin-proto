@@ -40,6 +40,7 @@ var registrations = []func(*http.ServeMux) error{
 	registerEnrollment,
 	registerRemittance,
 	registerProviderIntake,
+	registerServiceDefinitions,
 }
 
 // newRepos gives a long-lived sandbox its schema in the demo database,

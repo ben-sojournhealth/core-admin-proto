@@ -4,3 +4,6 @@
 .DS_Store
 /gen/*
 !/gen/embed.go
+
+# Personal Claude Code settings
+.claude/settings.local.json

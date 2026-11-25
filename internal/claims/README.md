@@ -14,7 +14,7 @@ Claims intake (837), adjudication, remittance (835), and the claims operations: 
 
 ## How claims works
 
-`/claims/`: clicking the Claims domain's title on the map opens a walkthrough of the domain, a slide at a time: the ClaimsService endpoints (read from the proto, each marked built or declared only), the Claim record's fields grouped by who writes them, the tables, how a provider's corrected claim differs from an adjustment we make, what an adjustment does to later claims, the adjustment delta, and how 835s net reversals. It shows the release of the payment run as the dividing line: reopening before, replacing after. It also shows a claim's four separate facts (status, outcome, superseded, payment) and how the outcome follows from the lines.
+`/claims/`: clicking the Claims domain's title on the map opens the domain on its own, with every component in it (service definitions, disputes, overpayments, and the two halves of externally processed claims, which the overview leaves out). "How it works" beside the title there opens a walkthrough of the domain, a slide at a time: the ClaimsService endpoints (read from the proto, each marked built or declared only), the Claim record's fields grouped by who writes them, the tables, how a provider's corrected claim differs from an adjustment we make, what an adjustment does to later claims, the adjustment delta, and how 835s net reversals. It shows the release of the payment run as the dividing line: reopening before, replacing after. It also shows a claim's four separate facts (status, outcome, superseded, payment) and how the outcome follows from the lines.
 
 Every example is played on a fresh sandbox when the page loads, by calling the real operations (`claimsdemo.BuildTour`); the slides draw what came back, each call with its request, response and every claim's state after it. `TestTour` holds the slides to the code: every service method and every `Claim` field must be placed, every built operation must be called by an example, and each story must end as the slides say. What the payment system would do is the stand-in in `payment.go`, drawn dashed.
 
@@ -50,6 +50,20 @@ What is real and what is simplified:
 ## Remittance
 
 `/remittance/`: from adjudication result to 835. Each sample adjudicates its claims on a fresh sandbox and builds the remittance: a copay, a preventive visit, everything to the deductible, two lines, a denial and a partial denial, a batch of claims on one payment, a corrected claim and a void reversing what an earlier 835 reported, and a void with nothing to net against. The adjudication results sit beside the 835; hovering a service line lights up its segments. Payments go by ACH or check. Nothing is kept between runs.
+
+## Service definitions
+
+`/service-definitions/`: named groups of services ("Advanced imaging", "Emergency room"), each defined by the codes a claim line carries. `ServiceDefinitionService` (`proto/coreadmin/claims/v1/service_definitions.proto`, `internal/claims/servicedefs`) lists, gets, creates and updates definitions, returns every earlier version of one, and answers `MatchServiceDefinitions`: which groups a line falls in on its date of service, and the entries that put it there.
+
+- **Entries** are a code or an inclusive range in one of three code systems (procedure, revenue, place of service). Nothing about the provider or the diagnosis is tested: a definition is about the service performed and where, each with the dates of service it counts for.
+- **Matching:** a line is in a group when, for every code system the group has entries in effect for on that date, the line's code is in one of them. A group with nothing in effect matches nothing. A line can be in several groups.
+- **Updates** send the whole definition back at the revision it was read at; every version is kept.
+
+The page calls the service itself, mounted as Connect serves it (JSON over POST), over a sandbox seeded with the categories the seeded plans carry. Pick a group to see the codes that count for a service today, densely, by code system. Most count on every date; one that doesn't carries its dates in parentheses, as years where it can: `10 (2022–)`. Codes that no longer count, or don't yet, sit behind "not current". Which codes count today is what `GetServiceDefinition` with `effective_on` answers. Click a code to change its range or dates or remove it; type a code or range to add one. When the group was edited is the revision beside its name: clicking it opens the edit history (`ListServiceDefinitionRevisions`), newest first, each revision with when, by whom and what it changed; clicking a revision shows the group as it stood then, read-only. `MatchServiceDefinitions` has no place on the page; its tests exercise it.
+
+The "How it works" tab explains it in five cards: a group is a name and its codes; a line is in a group when it has a code of every kind the group lists; the two kinds of time (date of service, and when we edited it); the rows the table holds, one per save; and the endpoints. Its examples are the real service's answers on a fresh sandbox (`servicedefsdemo.BuildTour`), pinned by a test.
+
+Nothing refers to a definition yet. Plans still carry their own service categories, and adjudication matches against those. Plan benefits, pricing contracts and claim edits are expected to refer to definitions by id; what a change to a definition does to each of them is not designed.
 
 ## Claim lifecycle
 

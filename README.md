@@ -22,6 +22,8 @@ internal/claims/claimsintake/            837P claims intake: maps files to claim
 internal/claims/adjudication/            Claims pipeline (eligibility → pricing → cost share), pends, denials, remark codes
 internal/claims/remittance/              835s from adjudicated claims: build, balance, reverse, render; previews
 internal/claims/remittancedemo/          Remittance demo: samples that adjudicate claims and build their 835
+internal/claims/servicedefs/             Service definitions: named groups of services by code; which groups a line is in
+internal/claims/servicedefsdemo/         Service Definitions demo: the starting set of definitions, and the How it works examples
 internal/claims/claimsdemo/              "How claims works": the walkthrough behind the Claims domain on the map
 
 internal/network/                        Network domain. NetworkService: what other domains may ask it
@@ -56,7 +58,7 @@ Each domain is a folder under `internal/`. A domain's code uses only its own tab
 make demo        # then open http://localhost:8080
 ```
 
-The landing page is the domain map. Components with a demo are solid and clickable; dashed ones have a demo planned. Clicking a component opens its demo filtered to the relevant scenarios (e.g. Accumulators opens `/claims-lifecycle/?group=Accumulators`). Every line between domains is shown by default; unchecking *Show all connections* (remembered per browser) shows only a hovered component's lines. Lines with a protobuf interface are drawn in teal; clicking one opens the service, which methods each caller uses over that line, and the source of every message those calls carry, grouped by protobuf package (`demos.Interfaces` lists them; a test checks every method exists and every domain-service method is on some line). Lines without one (X12 files, interfaces not defined yet) aren't clickable.
+The landing page is the domain map. It has two levels: the overview shows each domain's main components, and clicking a domain's title (Claims, so far) opens that domain on its own, with every component in it and the ones it talks to elsewhere drawn small around it. Components with a demo are solid and clickable; dashed ones have a demo planned. Clicking a component opens its demo filtered to the relevant scenarios (e.g. Accumulators opens `/claims-lifecycle/?group=Accumulators`). Every line between domains is shown by default; unchecking *Show all connections* (remembered per browser) shows only a hovered component's lines. Lines with a protobuf interface are drawn in teal; clicking one opens the service, which methods each caller uses over that line, and the source of every message those calls carry, grouped by protobuf package (`demos.Interfaces` lists them; a test checks every method exists and every domain-service method is on some line). Lines without one (X12 files, interfaces not defined yet) aren't clickable.
 
 To add a demo: add it to its domain's file in `internal/demos/` (`claims.go`, `employer.go`, ...) with the components it covers (set `Status: Planned` until it exists), serve its API from a file of its own in `cmd/demo/` registered in `registrations`, and put its page in `cmd/demo/web/<id>/`. Components are the node ids in `cmd/demo/web/index.html`.
 
@@ -82,7 +84,7 @@ Each domain has a README of its own:
 | Domain | | Key resources |
 |---|---|---|
 | Employer | [internal/employer](internal/employer/README.md) | Customer, Group, Plan → PlanVersion, Member, CoverageSpan, EnrollmentTransaction, EligibilityInput, MemberVersion |
-| Claims | [internal/claims](internal/claims/README.md) | Claim, ClaimLine, Adjudication, LineAdjudication, ClaimPayment, FamilyAccumulators, FeeSchedule, Remittance |
+| Claims | [internal/claims](internal/claims/README.md) | Claim, ClaimLine, Adjudication, LineAdjudication, ClaimPayment, FamilyAccumulators, FeeSchedule, Remittance, ServiceDefinition |
 | Network | [internal/network](internal/network/README.md) | Provider, NetworkParticipation, Network, UnderlyingNetwork, Contract, ProviderUpdate |
 | Finance | [internal/finance](internal/finance/README.md) | StopLossPolicy, exposures, filings |
 
@@ -100,7 +102,7 @@ Each domain has a README of its own:
 Everything runs on Postgres: the demo, the tests, and the throwaway sandboxes the Remittance demo and the walkthrough build per request. There is no in-memory store. One local Postgres serves them all (`internal/common/pgdb`): an embedded one on port 5433, shared by every checkout and worktree, its data outside all of them (`~/Library/Application Support/coreadmin/pg` on macOS). `make pg` starts it, and the demo or a test run starts it if it isn't running; it keeps running until `make pg-stop`. Each checkout has its own databases: `coreadmin` and `coreadmin_test` in the main checkout, `coreadmin_<worktree>` and `coreadmin_test_<worktree>` in a worktree, so demos and tests in different worktrees never touch each other's data. Each domain owns a schema holding its tables, and reads and writes only that schema (each domain declares its tables in its own `<domain>db` package; `repo.Tables` collects them):
 
 - `employer`: customers, groups, plans, members, the 834 ingestion jobs, enrollment transactions, eligibility inputs and member versions
-- `claims`: claims, family accumulators, fee schedules, the 837 ingestion jobs, remittances and claim number blocks
+- `claims`: claims, family accumulators, fee schedules, service definitions, the 837 ingestion jobs, remittances and claim number blocks
 - `network`: providers, participations (NPI to TIN), networks, underlying networks, contracts, vendor files and their updates
 - `finance`: stop-loss policies, exposures and filings
 

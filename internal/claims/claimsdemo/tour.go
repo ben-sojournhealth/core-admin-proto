@@ -136,6 +136,7 @@ var tableHolds = map[string]string{
 	"family_accumulators": "FamilyAccumulators: one ledger per subscriber unit, plan and benefit period",
 	"fee_schedules":       "FeeSchedule: allowed amounts by procedure code",
 	"ingestion_jobs":      "IngestionJob: each 837 file received, and its 999",
+	"service_definitions": "ServiceDefinition: named groups of services by code",
 	"remittances":         "Remittance: each 835 as sent",
 	"claim_number_blocks": "Claim numbers reserved per file; never reused",
 }

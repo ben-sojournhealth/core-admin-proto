@@ -1,4 +1,4 @@
-.PHONY: gen lint breaking test check demo screenshot pg pg-stop
+.PHONY: gen lint breaking test check demo screenshot herdr pg pg-stop
 
 # Go code, plus a descriptor set that keeps the .proto comments (the Go
 # code drops them) for field explanations in the demos. gen/ isn't
@@ -36,6 +36,12 @@ screenshot:
 	"$(CHROME)" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
 		--window-size=1200,1250 --virtual-time-budget=3000 \
 		--screenshot=docs/domain-map.png $(SHOT_URL) 2>/dev/null
+
+# The worktrees bar in the Herdr app (tools/herdr): every worktree as a chip,
+# new / open / merge to main / push main / sync all / delete, and up to four
+# open side by side.
+herdr:
+	sh tools/herdr/install.sh
 
 # The local Postgres (embedded, port 5433; data outside every checkout, see
 # internal/common/pgdb). Tests and the demo start it if it isn't running;

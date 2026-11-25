@@ -1,0 +1,174 @@
+syntax = "proto3";
+
+package coreadmin.claims.v1;
+
+import "coreadmin/common/v1/common.proto";
+
+// ServiceDefinitionService maintains service definitions and answers which
+// of them a claim line falls in. Whatever names a group of services (plan
+// benefits, pricing contracts, claim edits) refers to a definition by id
+// and asks here which lines belong to it.
+service ServiceDefinitionService {
+  // ListServiceDefinitions returns every definition, ordered by id,
+  // optionally only those that list a given code.
+  rpc ListServiceDefinitions(ListServiceDefinitionsRequest) returns (ListServiceDefinitionsResponse);
+
+  // GetServiceDefinition returns one definition, optionally with only the
+  // entries in effect on a date.
+  rpc GetServiceDefinition(GetServiceDefinitionRequest) returns (GetServiceDefinitionResponse);
+
+  // CreateServiceDefinition stores a new definition. The id is chosen by
+  // the caller and never changes: it is what consumers refer to.
+  rpc CreateServiceDefinition(CreateServiceDefinitionRequest) returns (CreateServiceDefinitionResponse);
+
+  // UpdateServiceDefinition replaces a definition's name, intent and
+  // entries. The definition sent must carry the revision it was read at;
+  // if someone else changed it since, the update is refused. Every earlier
+  // version is kept.
+  rpc UpdateServiceDefinition(UpdateServiceDefinitionRequest) returns (UpdateServiceDefinitionResponse);
+
+  // ListServiceDefinitionRevisions returns every version of a definition
+  // as it was stored, newest first: what the group was at each point it
+  // was edited. This is when we changed it, not which dates of service a
+  // code counts for.
+  rpc ListServiceDefinitionRevisions(ListServiceDefinitionRevisionsRequest) returns (ListServiceDefinitionRevisionsResponse);
+
+  // MatchServiceDefinitions returns the definitions a claim line falls in
+  // on its date of service, with the entries that matched. Nothing is
+  // saved.
+  rpc MatchServiceDefinitions(MatchServiceDefinitionsRequest) returns (MatchServiceDefinitionsResponse);
+}
+
+// ServiceDefinition is a named group of services, such as "Advanced
+// imaging" or "Emergency room", defined by the codes a claim line carries.
+// It is about the service performed and where: nothing about the provider
+// or the patient's diagnosis is tested.
+//
+// A line is in the group on its date of service when, for every code
+// system the definition has entries in effect for on that date, the line's
+// code of that system is in one of those entries. A system with no
+// entries in effect is not checked. A definition with no entries in effect
+// at all matches nothing.
+message ServiceDefinition {
+  // Chosen when the definition is created and never changed, e.g.
+  // "advanced-imaging". Lowercase letters, digits and hyphens.
+  string id = 1;
+  // What people call the group, e.g. "Advanced imaging (CT/MRI)".
+  string name = 2;
+  // What the group is meant to cover, in a sentence. The codes are how
+  // that is recognized on a claim; this is what they should add up to.
+  string intent = 3;
+  // The codes that put a line in the group.
+  repeated CodeEntry entries = 4;
+  // When and by whom this version was stored, and its revision.
+  common.v1.AuditInfo audit = 5;
+}
+
+// CodeEntry is one code, or an inclusive range of codes, of one code
+// system, and the dates of service it counts for.
+message CodeEntry {
+  // Which kind of code this is.
+  CodeSystem system = 1;
+  // The first code of the range, as it appears on a claim, e.g. "70450".
+  string start = 2;
+  // The last code of the range, compared as text. Equal to start for a
+  // single code.
+  string end = 3;
+  // The dates of service the entry counts for, inclusive. No start means
+  // from the beginning; no end means until further notice.
+  common.v1.DateRange effective = 4;
+}
+
+// CodeSystem is a kind of code on a claim line that a definition can test.
+enum CodeSystem {
+  CODE_SYSTEM_UNSPECIFIED = 0;
+  // CPT or HCPCS procedure code on the line.
+  CODE_SYSTEM_PROCEDURE = 1;
+  // UB-04 revenue code on an institutional line.
+  CODE_SYSTEM_REVENUE = 2;
+  // CMS place-of-service code, e.g. "11" office, "23" emergency room.
+  CODE_SYSTEM_PLACE_OF_SERVICE = 3;
+}
+
+message ListServiceDefinitionsRequest {
+  // With code: only definitions that have an entry of this system
+  // containing it, on any date.
+  CodeSystem system = 1;
+  // The code to look for. Empty lists every definition.
+  string code = 2;
+}
+
+message ListServiceDefinitionsResponse {
+  // The definitions, ordered by id.
+  repeated ServiceDefinition definitions = 1;
+}
+
+message GetServiceDefinitionRequest {
+  // The definition's id.
+  string id = 1;
+  // If set, only the entries in effect on this date are returned.
+  common.v1.Date effective_on = 2;
+}
+
+message GetServiceDefinitionResponse {
+  // The definition.
+  ServiceDefinition definition = 1;
+}
+
+message CreateServiceDefinitionRequest {
+  // The definition to store. Its id must not be in use.
+  ServiceDefinition definition = 1;
+}
+
+message CreateServiceDefinitionResponse {
+  // The definition as stored.
+  ServiceDefinition definition = 1;
+}
+
+message UpdateServiceDefinitionRequest {
+  // The whole definition as it should now be, with audit.revision set to
+  // the revision it was read at.
+  ServiceDefinition definition = 1;
+}
+
+message UpdateServiceDefinitionResponse {
+  // The definition as stored, at its new revision.
+  ServiceDefinition definition = 1;
+}
+
+message ListServiceDefinitionRevisionsRequest {
+  // The definition's id.
+  string id = 1;
+}
+
+message ListServiceDefinitionRevisionsResponse {
+  // Every version, newest first. Each is the whole definition as stored
+  // at that revision; its audit gives the revision number, and when and by
+  // whom it was saved. A version stood until the next one was saved.
+  repeated ServiceDefinition revisions = 1;
+}
+
+message MatchServiceDefinitionsRequest {
+  // The line's CPT or HCPCS procedure code.
+  string procedure_code = 1;
+  // The line's revenue code, on an institutional claim.
+  string revenue_code = 2;
+  // The line's place-of-service code.
+  string place_of_service_code = 3;
+  // The line's date of service. Required: membership depends on it.
+  common.v1.Date date_of_service = 4;
+}
+
+message MatchServiceDefinitionsResponse {
+  // The definitions the line falls in, ordered by id.
+  repeated ServiceDefinitionMatch matches = 1;
+}
+
+// ServiceDefinitionMatch is one definition a line falls in, and why.
+message ServiceDefinitionMatch {
+  // The definition, as stored.
+  ServiceDefinition definition = 1;
+  // The entries the line's codes were found in, one or more per code
+  // system the definition checks on that date.
+  repeated CodeEntry matched_entries = 2;
+}

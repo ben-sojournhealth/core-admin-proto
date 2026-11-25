@@ -18,6 +18,20 @@ const (
 	// the claim, previewable before it is adjudicated; the payment cycle nets
 	// recorded lines across claims.
 	Settlement = "settlement"
+	// What a payee holds beyond what a claim now owes them, after an
+	// adjustment or void of a reported claim: payee, customer, amount, reason.
+	Overpayments = "overpayments"
+	// Whoever adjudicates and pays a benefit's claims instead of us: the
+	// PBM, and behavioral, dental and vision vendors.
+	ExternalProcessors = "external-processors"
+	// Claims someone else adjudicates and pays. One component on the map's
+	// overview; inside the Claims domain it is its two halves.
+	ExternalClaims = "external-claims"
+	// Their paid claims, stored as sent and never adjudicated by us.
+	ExternalClaimsIntake = "external-claims-intake"
+	// What each side applied to a shared accumulator: ours sent out, theirs
+	// posted to the accumulator ledger.
+	AccumulatorExchange = "accumulator-exchange"
 	// Providers dispute claim decisions (reconsiderations, appeals) from the
 	// provider portal; disputes are worked in claims.
 	Disputes = "disputes"
@@ -50,9 +64,27 @@ func claimsDemos() []Demo {
 			Links:   []Link{{Component: Remittance}},
 		},
 		{
+			ID: "service-definitions", Title: "Service Definitions", Status: Live, Path: "/service-definitions/",
+			Summary: "Named groups of services by code: view and edit a group's codes and their dates.",
+			Links:   []Link{{Component: ServiceDefinitions}},
+		},
+		{
 			ID: "settlement", Title: "Settlement", Status: Planned,
 			Summary: "What each claim will pay, to whom and from whose funds, before it is adjudicated; payment cycles net recoveries across claims.",
 			Links:   []Link{{Component: Settlement}},
+		},
+		{
+			ID: "overpayments", Title: "Overpayments", Status: Planned,
+			Summary: "What a payee holds beyond what an adjusted or voided claim now owes them.",
+			Links:   []Link{{Component: Overpayments}},
+		},
+		{
+			ID: "external-claims", Title: "Externally Processed Claims", Status: Planned,
+			Summary: "Claims a PBM or other vendor adjudicates and pays: their paid claims in, and shared accumulators exchanged both ways.",
+			Links: []Link{
+				{Component: ExternalProcessors}, {Component: ExternalClaims},
+				{Component: ExternalClaimsIntake}, {Component: AccumulatorExchange},
+			},
 		},
 	}
 }

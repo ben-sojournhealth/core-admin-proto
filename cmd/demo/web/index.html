@@ -54,7 +54,19 @@ svg { display: block; width: 100%; min-width: 860px; height: auto; }
 .domain text { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; fill: var(--muted); }
 /* A domain with a page of its own: its title is a link. */
 .domain .dlink { cursor: pointer; fill: var(--accent); }
-.domain .dlink .more { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.domain .more { text-transform: none; letter-spacing: 0; font-weight: 600; }
+/* A labelled frame around components inside an open domain. */
+.group rect { fill: none; stroke: var(--edge); stroke-width: 1.1; stroke-dasharray: 2 4; }
+.group text { font-size: 11.5px; font-weight: 650; fill: var(--muted); }
+/* Another domain's component, beside the open domain. */
+.node.stub .t { font-size: 13px; }
+.node.stub .s { font-size: 11px; }
+#arch.in { animation: step .22s ease-out; }
+@keyframes step { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #arch.in { animation: none; } }
+.tools #back { color: var(--accent); font-weight: 600; text-decoration: none; }
+.tools #back:hover { text-decoration: underline; }
+.tools #back[hidden] { display: none; }
 .domain .dlink:hover { text-decoration: underline; }
 /* Contracted out, not built for '28. */
 .node.oos rect { stroke: var(--oos); }
@@ -113,10 +125,11 @@ a.demo:hover, .demo.hl { border-color: var(--accent); }
 <main>
   <div class="card diagram">
     <div class="tools">
+      <a id="back" href="#" hidden>← All domains</a>
       <label><input type="checkbox" id="all" checked> Show all connections</label>
       <span class="l-proto">proto interface · click to inspect</span>
     </div>
-    <svg id="arch" viewBox="0 0 1100 1068" role="img" aria-label="System architecture"></svg></div>
+    <svg id="arch" viewBox="0 0 1130 988" role="img" aria-label="System architecture"></svg></div>
   <h2>Demos</h2>
   <div class="demos" id="demos"></div>
 </main>
@@ -126,97 +139,159 @@ a.demo:hover, .demo.hl { border-color: var(--accent); }
 // Components, grouped by domain: Employer on top, Claims in the middle as
 // a left-to-right pipeline, Network below it; outside sources on the left.
 // Ids match internal/demos.
-// Room above the diagram for the admin portal bar.
+//
+// The map has two levels. The overview shows each domain's main components.
+// A domain with an entry in VIEWS opens on its own (click its title): every
+// component of the domain, with the components it talks to elsewhere drawn
+// small around it. Components and lines are listed once, each with where it
+// sits in the overview (o) and in a domain's view (v).
+
+// Room above the overview for the admin portal bar.
 const TOP = 70;
-// Domains: a box drawn around the components that belong together.
+const OVERVIEW = [1130, 988];
+// Domains: a frame around the components that belong together. o: x, y, w, h.
 const DOMAINS = [
-  { t: "Employer", x: 200, y: 8, w: 660, h: 222 },
-  // href: the domain's own page, one level in; its title becomes a link.
-  { t: "Claims", x: 200, y: 250, w: 660, h: 330, href: "/claims/", more: "how it works" },
-  { t: "Network", x: 200, y: 600, w: 660, h: 240 },
-  { t: "Finance", x: 875, y: 450, w: 205, h: 230 },
+  { t: "Employer", o: [200, 8, 660, 222] },
+  { t: "Claims", o: [200, 250, 660, 250] },
+  { t: "Network", o: [200, 520, 660, 240] },
+  { t: "Finance", o: [905, 350, 205, 330] },
   // TPAs usually contract this out: shown, but out of scope for '28.
-  { t: "Medical Management", x: 200, y: 860, w: 400, h: 130, oos: true },
+  { t: "Medical Management", o: [200, 780, 400, 130], oos: true },
 ];
+// A domain opened on its own. href: the domain's walkthrough page, linked
+// beside its title. groups: a labelled frame around components inside it.
+const VIEWS = {
+  Claims: {
+    size: [1110, 722], top: 10, frame: [200, 110, 710, 496],
+    href: "/claims/", more: "how it works",
+    groups: [{ t: "Externally Processed Claims", at: [210, 362, 205, 212] }],
+  },
+  Employer: { size: [1140, 540], top: 10, frame: [200, 110, 710, 300] },
+};
+// o: x, y, w (and h) in the overview; absent for a component shown only
+// inside its domain. v: x, y, w in a domain's view, as one of its own
+// components or, for another domain's, as a small one beside it.
 const NODES = [
-  { id: "enrollment",    x: 20,  y: 95,  w: 160, t: "Employers",        s: "HR · 834 enrollment", ext: true },
-  { id: "clearinghouse", x: 20,  y: 392, w: 160, t: "Clearinghouses",   s: "837 claims", ext: true },
-  { id: "network-vendors", x: 20, y: 642, w: 160, t: "Network vendors", s: "network · provider files", ext: true },
-  { id: "rosters",       x: 20,  y: 732, w: 160, t: "Providers",        s: "rosters · contracts", ext: true },
+  { id: "enrollment", t: "Employers", s: "HR · 834 enrollment", ext: true, o: [20, 95, 160], v: { Employer: [20, 220, 160] } },
+  { id: "clearinghouse", t: "Clearinghouses", s: "837 claims", ext: true, o: [20, 292, 160], v: { Claims: [20, 250, 160] } },
+  // Whoever adjudicates and pays a benefit's claims instead of us.
+  { id: "external-processors", t: "Other processors", s: "PBM · behavioral", s2: "dental · vision", ext: true, o: [20, 392, 160], v: { Claims: [20, 440, 160], Employer: [980, 290, 150] } },
+  { id: "network-vendors", t: "Network vendors", s: "network · provider files", ext: true, o: [20, 562, 160] },
+  { id: "rosters", t: "Providers", s: "rosters · contracts", ext: true, o: [20, 652, 160] },
   // Employer
-  { id: "employer-portal",   x: 220, y: 50,  w: 160, t: "Employer Portal",   s: "approvals · views" },
-  { id: "plan-design",       x: 410, y: 50,  w: 170, t: "Plan Design",       s: "per-customer benefits" },
-  { id: "enrollment-intake", x: 220, y: 140, w: 160, t: "Enrollment Intake", s: "834 full · change" },
-  { id: "eligibility",       x: 410, y: 140, w: 170, t: "Eligibility",       s: "members · coverage" },
+  { id: "employer-portal", dom: "Employer", t: "Employer Portal", s: "approvals · views", o: [220, 50, 160], v: { Employer: [220, 150, 185] } },
+  { id: "plan-design", dom: "Employer", t: "Plan Design", s: "per-customer benefits", o: [410, 50, 170], v: { Claims: [580, 30, 130], Employer: [450, 150, 190] } },
+  { id: "enrollment-intake", dom: "Employer", t: "Enrollment Intake", s: "834 full · change", o: [220, 140, 160], v: { Employer: [220, 290, 185] } },
+  { id: "eligibility", dom: "Employer", t: "Eligibility", s: "members · coverage", o: [410, 140, 170], v: { Claims: [430, 30, 130], Employer: [450, 290, 190] } },
+  // Who is covered, sent to each outside processor so it can adjudicate
+  // its claims. Shown only inside the domain.
+  { id: "eligibility-feed", dom: "Employer", t: "Eligibility Feed", s: "members · coverage out", v: { Employer: [710, 290, 180] } },
   // Each employer's funding arrangement, funding requests with their claims
   // register, and our invoices (admin fees, stop-loss premiums).
-  { id: "billing-funding",   x: 660, y: 140, w: 180, t: "Billing & Funding", s: "funding · admin fees" },
-  // Claims: the pipeline across the middle, reference data above it,
-  // disputes feeding back in below.
-  { id: "service-definitions", x: 660, y: 292, w: 180, t: "Service Definitions", s: "procedure code groups" },
-  { id: "claims-intake", x: 220, y: 392, w: 160, t: "Claims Intake",    s: "837 · 999" },
-  { id: "adjudication",  x: 410, y: 392, w: 190, t: "Claim Adjudication", s: "price · pend · adjust · void" },
-  { id: "remittance",    x: 660, y: 392, w: 180, t: "Remittance & EOBs", s: "835 · EOP · EOB" },
-  { id: "disputes",      x: 220, y: 492, w: 160, t: "Disputes",         s: "reconsiderations · appeals" },
-  { id: "settlement",    x: 660, y: 492, w: 180, t: "Settlement",       s: "payee · funds · netting" },
+  { id: "billing-funding", dom: "Employer", t: "Billing & Funding", s: "funding · admin fees", o: [660, 140, 180], v: { Claims: [760, 30, 130], Employer: [710, 150, 180] } },
+  // Claims: the pipeline across the middle. Reference data, disputes,
+  // overpayments and the two halves of externally processed claims show
+  // only inside the domain.
+  { id: "claims-intake", dom: "Claims", t: "Claims Intake", s: "837 · 999", o: [220, 292, 160], v: { Claims: [220, 250, 185] } },
+  { id: "adjudication", dom: "Claims", t: "Claim Adjudication", s: "price · pend · adjust · void", o: [410, 292, 190], v: { Claims: [430, 250, 190], Employer: [470, 460, 150] } },
+  { id: "remittance", dom: "Claims", t: "Remittance & EOBs", s: "835 · EOP · EOB", o: [660, 292, 180], v: { Claims: [710, 250, 180] } },
+  { id: "settlement", dom: "Claims", t: "Settlement", s: "payee · funds · netting", o: [660, 392, 180], v: { Claims: [710, 390, 180], Employer: [980, 60, 150] } },
+  // Claims someone else adjudicates and pays: one component in the
+  // overview, its two halves inside the domain.
+  { id: "external-claims", dom: "Claims", t: "Externally Processed Claims", s: "claims in · accumulators in and out", o: [220, 392, 245] },
+  { id: "accumulator-exchange", dom: "Claims", t: "Accumulator Exchange", s: "ours out · theirs in", v: { Claims: [220, 390, 185] } },
+  { id: "external-claims-intake", dom: "Claims", t: "Paid Claims Intake", s: "as sent · not adjudicated", v: { Claims: [220, 490, 185] } },
+  { id: "service-definitions", dom: "Claims", t: "Service Definitions", s: "procedure code groups", v: { Claims: [710, 150, 180], Employer: [470, 30, 150] } },
+  { id: "disputes", dom: "Claims", t: "Disputes", s: "reconsiderations · appeals", v: { Claims: [220, 150, 185] } },
+  // What a payee holds beyond what an adjusted or voided claim now owes them.
+  { id: "overpayments", dom: "Claims", t: "Overpayments", s: "payee · amount · reason", v: { Claims: [710, 490, 180] } },
   // Network. oos: out of scope for '28 (contracted out).
-  // What providers do through it, on two lines; s2oos: the second line is
-  // out of scope for '28.
-  { id: "provider-portal", x: 220, y: 732, w: 160, t: "Provider Portal", s: "claim status · disputes", s2: "prior auths", s2oos: true },
-  { id: "provider-data", x: 410, y: 642, w: 190, t: "Provider Data",    s: "management · directory" },
-  { id: "contracting",   x: 660, y: 642, w: 180, t: "Contracting",      s: "provider contracts", oos: true },
-  { id: "vendor-intake", x: 220, y: 642, w: 160, t: "Vendor Intake",    s: "network vendor files" },
-  { id: "roster-intake", x: 410, y: 732, w: 190, t: "Roster Intake",    s: "roster loads", oos: true },
-  { id: "credentialing", x: 660, y: 732, w: 180, t: "Credentialing",    s: "verification · sanctions", oos: true },
+  // What providers do through the portal, on two lines; s2oos: the second
+  // line is out of scope for '28.
+  { id: "provider-portal", dom: "Network", t: "Provider Portal", s: "claim status · disputes", s2: "prior auths", s2oos: true, o: [220, 652, 160], v: { Claims: [20, 160, 160] } },
+  { id: "provider-data", dom: "Network", t: "Provider Data", s: "management · directory", o: [410, 562, 190], v: { Claims: [420, 650, 130] } },
+  { id: "contracting", dom: "Network", t: "Contracting", s: "provider contracts", oos: true, o: [660, 562, 180], v: { Claims: [565, 650, 130] } },
+  { id: "vendor-intake", dom: "Network", t: "Vendor Intake", s: "network vendor files", o: [220, 562, 160] },
+  { id: "roster-intake", dom: "Network", t: "Roster Intake", s: "roster loads", oos: true, o: [410, 652, 190] },
+  { id: "credentialing", dom: "Network", t: "Credentialing", s: "verification · sanctions", oos: true, o: [660, 652, 180] },
   // Medical management
-  { id: "medical-policy", x: 220, y: 902, w: 160, t: "Medical Policy",   s: "criteria · auth lists" },
-  { id: "authorization",  x: 410, y: 902, w: 190, t: "Authorization",    s: "prior auth · UM review" },
+  { id: "medical-policy", dom: "Medical Management", t: "Medical Policy", s: "criteria · auth lists", o: [220, 822, 160] },
+  { id: "authorization", dom: "Medical Management", t: "Authorization", s: "prior auth · UM review", o: [410, 822, 190], v: { Claims: [710, 650, 130] } },
   // Finance
-  { id: "disbursement",  x: 890, y: 492, w: 175, t: "Disbursement",     s: "funding · EFT · checks" },
-  { id: "stop-loss",     x: 890, y: 592, w: 175, t: "Stop-Loss",        s: "specific · aggregate" },
+  { id: "disbursement", dom: "Finance", t: "Disbursement", s: "funding · EFT · checks", o: [920, 392, 175], v: { Claims: [950, 390, 140], Employer: [980, 160, 150] } },
+  // Working an overpayment until it is offset, refunded or written off.
+  { id: "recoveries", dom: "Finance", t: "Recoveries", s: "offset · refund", o: [920, 492, 175], v: { Claims: [950, 490, 140] } },
+  { id: "stop-loss", dom: "Finance", t: "Stop-Loss", s: "specific · aggregate", o: [920, 592, 175], v: { Claims: [950, 560, 140] } },
   // Over everything we run, not one component: drawn as a bar above the rest.
-  { id: "journey",       x: 200, y: -62, w: 880, h: 48, t: "Journey",      s: "admin portal", app: true, top: true },
+  { id: "journey", t: "Journey", s: "admin portal", app: true, top: true, o: [200, -62, 910, 48] },
 ];
-// Edges: [from, to, path, label?, label x, label y, ends?]. ends "both"
-// draws an arrow at each end. Edges within a domain (or from an outside
-// source) always show; the rest show when one of their ends is hovered.
+// Lines. f → t is the direction data flows; both: an arrow at each end.
+// o and v: the line's path in the overview and in a domain's view, then its
+// label (l) position. In the overview, lines within a domain (or from an
+// outside source) always show and the rest show when one of their ends is
+// hovered; a line to a component shown only inside its domain stops at the
+// domain's frame. A domain's view shows all of its lines.
 const EDGES = [
   // Employer
-  ["enrollment", "employer-portal", "M180,113 H200 V86 H220"], ["enrollment", "enrollment-intake", "M180,149 H200 V176 H220"],
-  ["employer-portal", "plan-design", "M380,74 H410", "", 0, 0, "both"], ["employer-portal", "eligibility", "M380,100 H395 V158 H410", "", 0, 0, "both"],
-  ["enrollment-intake", "eligibility", "M380,176 H410"],
-  ["eligibility", "adjudication", "M495,212 V392", "members", 501, 240],
-  ["plan-design", "adjudication", "M580,100 H620 V376 H560 V392", "plans", 626, 250],
+  { f: "enrollment", t: "employer-portal", o: ["M180,113 H200 V86 H220"], v: { Employer: ["M180,240 H190 V186 H220"] } },
+  { f: "enrollment", t: "enrollment-intake", o: ["M180,149 H200 V176 H220"], v: { Employer: ["M180,272 H190 V326 H220"] } },
+  { f: "employer-portal", t: "plan-design", both: true, o: ["M380,74 H410"], v: { Employer: ["M405,174 H450"] } },
+  { f: "employer-portal", t: "eligibility", both: true, o: ["M380,100 H395 V158 H410"], v: { Employer: ["M405,200 H428 V308 H450"] } },
+  { f: "enrollment-intake", t: "eligibility", o: ["M380,176 H410"], v: { Employer: ["M405,326 H450"] } },
+  // The feed shows only inside the domain: in the overview its line to the
+  // processors starts at the domain's frame.
+  { f: "eligibility", t: "eligibility-feed", v: { Employer: ["M640,340 H710"] } },
+  { f: "eligibility-feed", t: "external-processors", l: "eligibility", o: ["M200,215 H190 V410 H180", 128, 262], v: { Employer: ["M890,326 H980", 918, 320] } },
+  { f: "eligibility", t: "adjudication", l: "members", o: ["M495,212 V292", 501, 240], v: { Claims: ["M500,82 V250", 506, 104], Employer: ["M510,362 V460", 516, 440] } },
+  { f: "plan-design", t: "adjudication", l: "plans", o: ["M580,100 H620 V276 H560 V292", 626, 240], v: { Claims: ["M595,82 V250", 601, 104], Employer: ["M640,200 H660 V436 H580 V460", 600, 430] } },
   // Funding: member counts for admin fees; the employer sees each request
   // and its claims register; funded cycles release payments.
-  ["eligibility", "billing-funding", "M580,176 H660", "counts", 600, 170],
-  ["employer-portal", "billing-funding", "M340,50 V30 H750 V140", "", 0, 0, "both"],
-  ["settlement", "billing-funding", "M840,546 H850 V200 H840", "needs", 790, 380],
-  ["billing-funding", "disbursement", "M840,176 H1000 V492", "funded", 1006, 300],
+  { f: "eligibility", t: "billing-funding", l: "counts", o: ["M580,176 H660", 600, 170], v: { Employer: ["M640,310 H685 V204 H710", 690, 252] } },
+  { f: "employer-portal", t: "billing-funding", both: true, o: ["M360,50 V30 H750 V140"], v: { Employer: ["M312,150 V128 H800 V150"] } },
+  { f: "settlement", t: "billing-funding", l: "needs", o: ["M840,446 H850 V200 H840", 812, 244], v: { Claims: ["M890,400 H900 V56 H890", 866, 104], Employer: ["M980,86 H940 V168 H890", 945, 132] } },
+  { f: "billing-funding", t: "disbursement", l: "funded", o: ["M840,176 H1030 V392", 1036, 300], v: { Employer: ["M890,190 H980", 918, 205] } },
   // Claims. Plan design names service definitions ("burn treatment: 20%").
-  ["service-definitions", "plan-design", "M660,310 H645 V80 H580"],
-  ["service-definitions", "adjudication", "M660,346 H640 V410 H600"],
-  ["clearinghouse", "claims-intake", "M180,428 H220"], ["claims-intake", "adjudication", "M380,428 H410"],
-  ["adjudication", "remittance", "M600,442 H660", "preview", 609, 456],
-  ["disputes", "adjudication", "M380,528 H395 V452 H410"],
+  { f: "service-definitions", t: "plan-design", l: "service definitions", o: ["M600,250 V86 H580", 606, 80], v: { Claims: ["M740,150 V128 H700 V82"], Employer: ["M545,82 V150", 551, 104] } },
+  { f: "service-definitions", t: "adjudication", v: { Claims: ["M710,204 H665 V268 H620"] } },
+  { f: "clearinghouse", t: "claims-intake", o: ["M180,328 H220"], v: { Claims: ["M180,286 H220"] } },
+  { f: "claims-intake", t: "adjudication", o: ["M380,328 H410"], v: { Claims: ["M405,286 H430"] } },
+  { f: "adjudication", t: "remittance", l: "preview", o: ["M600,342 H660", 609, 356], v: { Claims: ["M620,286 H710", 640, 280] } },
+  { f: "disputes", t: "adjudication", v: { Claims: ["M405,186 H418 V268 H430"] } },
   // Settlement can be previewed before the claim is adjudicated, like the 835.
-  ["adjudication", "settlement", "M580,464 V528 H660", "preview", 600, 522],
-  ["settlement", "disbursement", "M840,528 H890"],
-  ["disbursement", "remittance", "M978,492 V428 H840", "paid", 984, 470],
-  ["adjudication", "stop-loss", "M595,464 V478 H870 V628 H890"],
-  ["disbursement", "stop-loss", "M978,564 V592", "paid dates", 984, 584],
+  { f: "adjudication", t: "settlement", l: "preview", o: ["M580,364 V428 H660", 600, 422], v: { Claims: ["M605,322 V426 H710", 625, 420] } },
+  { f: "settlement", t: "disbursement", o: ["M840,428 H920"], v: { Claims: ["M890,416 H950"] } },
+  { f: "disbursement", t: "remittance", l: "paid", o: ["M1008,392 V328 H840", 1014, 370], v: { Claims: ["M1020,390 V286 H890", 1026, 340] } },
+  { f: "adjudication", t: "stop-loss", o: ["M595,364 V378 H870 V628 H920"], v: { Claims: ["M620,310 H680 V578 H950"] } },
+  { f: "disbursement", t: "stop-loss", l: "paid dates", o: ["M1095,428 H1103 V628 H1095", 1042, 582] },
+  // An adjustment or void of a reported claim can leave the payee overpaid.
+  // Recoveries works the overpayment; an offset is taken by Settlement.
+  { f: "adjudication", t: "overpayments", l: "overpaid", v: { Claims: ["M580,322 V476 H800 V490", 625, 470] } },
+  { f: "overpayments", t: "recoveries", l: "overpayments", o: ["M800,500 V510 H898 V528 H920", 722, 514], v: { Claims: ["M890,516 H950"] } },
+  { f: "recoveries", t: "settlement", l: "offset", o: ["M920,546 H880 V410 H840", 846, 405], v: { Claims: ["M950,500 H922 V444 H890", 926, 474] } },
+  // Externally processed claims: their paid claims come in as sent; what
+  // each side applied to a shared accumulator is exchanged both ways.
+  { f: "external-processors", t: "external-claims", both: true, o: ["M180,428 H220"] },
+  { f: "external-claims", t: "adjudication", both: true, l: "accumulators", o: ["M440,392 V364", 360, 382] },
+  { f: "external-claims", t: "stop-loss", l: "paid claims", o: ["M450,464 V490 H890 V610 H920", 600, 486] },
+  { f: "external-processors", t: "accumulator-exchange", both: true, v: { Claims: ["M180,462 H192 V426 H220"] } },
+  { f: "external-processors", t: "external-claims-intake", v: { Claims: ["M180,490 H192 V526 H220"] } },
+  { f: "accumulator-exchange", t: "adjudication", both: true, l: "accumulators", v: { Claims: ["M405,417 H455 V322", 411, 433] } },
+  { f: "external-claims-intake", t: "stop-loss", l: "paid claims", v: { Claims: ["M312,562 V590 H950", 610, 586] } },
   // Network
-  ["network-vendors", "vendor-intake", "M180,678 H220"], ["rosters", "provider-portal", "M180,768 H220"],
-  ["rosters", "roster-intake", "M180,768 H205 V826 H495 V804"], ["rosters", "credentialing", "M180,768 H205 V826 H750 V804"],
-  ["rosters", "contracting", "M180,768 H205 V826 H850 V678 H840"],
-  ["vendor-intake", "provider-data", "M380,678 H410"], ["roster-intake", "provider-data", "M495,732 V714"],
-  ["credentialing", "provider-data", "M660,768 H620 V696 H600"],
-  ["provider-portal", "disputes", "M380,750 H395 V546 H380"],
-  ["provider-data", "adjudication", "M480,642 V464", "providers", 486, 620],
-  ["contracting", "adjudication", "M750,642 V583 H565 V464", "contracts", 756, 620],
-  ["provider-portal", "authorization", "M380,790 H403 V920 H410"],
-  ["medical-policy", "authorization", "M380,938 H410"],
-  ["authorization", "adjudication", "M600,920 H630 V597 H525 V464", "auths", 636, 880],
+  { f: "network-vendors", t: "vendor-intake", o: ["M180,598 H220"] },
+  { f: "rosters", t: "provider-portal", o: ["M180,688 H220"] },
+  { f: "rosters", t: "roster-intake", o: ["M180,688 H205 V746 H495 V724"] },
+  { f: "rosters", t: "credentialing", o: ["M180,688 H205 V746 H750 V724"] },
+  { f: "rosters", t: "contracting", o: ["M180,688 H205 V746 H850 V598 H840"] },
+  { f: "vendor-intake", t: "provider-data", o: ["M380,598 H410"] },
+  { f: "roster-intake", t: "provider-data", o: ["M495,652 V634"] },
+  { f: "credentialing", t: "provider-data", o: ["M660,688 H620 V616 H600"] },
+  { f: "provider-portal", t: "disputes", l: "disputes", o: ["M380,670 H395 V500", 401, 514], v: { Claims: ["M180,186 H220"] } },
+  { f: "provider-data", t: "adjudication", l: "providers", o: ["M480,562 V364", 486, 540], v: { Claims: ["M490,650 V322"] } },
+  { f: "contracting", t: "adjudication", l: "contracts", o: ["M750,562 V505 H565 V364", 756, 540], v: { Claims: ["M580,650 V634 H520 V322"] } },
+  { f: "provider-portal", t: "authorization", o: ["M380,710 H403 V840 H410"] },
+  { f: "medical-policy", t: "authorization", o: ["M380,858 H410"] },
+  { f: "authorization", t: "adjudication", l: "auths", o: ["M600,840 H630 V515 H525 V364", 636, 800], v: { Claims: ["M725,650 V626 H550 V322"] } },
 ];
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -233,54 +308,88 @@ function target(component) {
   return d.path + (groups.length ? "?group=" + encodeURIComponent(groups.join(",")) : "");
 }
 
-// The domain a component sits in (by position), "ext:<id>" for an outside
-// source, "" for a component outside every domain.
+// The domain a component sits in, "ext:<id>" for an outside source, "" for
+// a component outside every domain.
 function domainOf(id) {
   const n = NODES.find((n) => n.id === id);
-  if (n.ext) return "ext:" + id;
-  const d = DOMAINS.find((d) => n.x >= d.x && n.x + n.w <= d.x + d.w && n.y >= d.y && n.y <= d.y + d.h);
-  return d ? d.t : "";
+  return n.ext ? "ext:" + id : n.dom || "";
 }
-// Edges inside one domain, and from outside sources, always show; edges
-// between domains show only when one of their ends is hovered.
+// In the overview, lines inside one domain, and from outside sources,
+// always show; lines between domains show only when one of their ends is
+// hovered.
 const alwaysShown = (from, to) => domainOf(from).startsWith("ext:") || domainOf(from) === domainOf(to);
 
+// The domain opened on its own, from the address ("#claims"); null for the
+// overview.
+const viewFromHash = () => Object.keys(VIEWS).find((k) => "#" + k.toLowerCase() === location.hash) || null;
+let view = viewFromHash();
+
 function draw() {
+  const V = view ? VIEWS[view] : null;
+  const el = document.getElementById("arch");
+  const [W, H] = V ? V.size : OVERVIEW;
+  el.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  el.setAttribute("aria-label", V ? `${view} domain` : "System architecture");
+  document.getElementById("back").hidden = !V;
   let svg = `<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
     <path class="arrow" d="M0,0 L10,5 L0,10 z"/></marker>
     <marker id="ah-on" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
     <path class="arrow on" d="M0,0 L10,5 L0,10 z"/></marker>
     <marker id="ah-proto" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-    <path class="arrow proto" d="M0,0 L10,5 L0,10 z"/></marker></defs><g transform="translate(0,${TOP})">`;
-  for (const d of DOMAINS) {
-    svg += `<g class="domain${d.oos ? " oos" : ""}"><rect x="${d.x}" y="${d.y}" width="${d.w}" height="${d.h}" rx="14"/>
-      ${d.href ? `<text class="dlink" x="${d.x + 14}" y="${d.y + 24}" data-href="${esc(d.href)}" tabindex="0" role="link"><title>${esc(d.t)} · ${esc(d.more)}</title>${esc(d.t)}<tspan class="more" dx="8">${esc(d.more)} →</tspan></text>`
-        : `<text x="${d.x + 14}" y="${d.y + 24}">${esc(d.t)}</text>`}
-      ${d.oos ? `<text class="oos-tag" x="${d.x + d.w - 14}" y="${d.y + 24}" text-anchor="end">out of scope for '28</text>` : ""}</g>`;
+    <path class="arrow proto" d="M0,0 L10,5 L0,10 z"/></marker></defs><g transform="translate(0,${V ? V.top : TOP})">`;
+  // Frames: every domain in the overview, the one domain in its own view.
+  const frames = V ? [{ t: view, at: V.frame, href: V.href, more: V.more }] : DOMAINS.map((d) => ({ ...d, at: d.o, opens: VIEWS[d.t] ? d.t : null }));
+  for (const d of frames) {
+    const [x, y, w, h] = d.at;
+    const title = d.opens
+      ? `<text class="dlink" x="${x + 14}" y="${y + 24}" data-view="${esc(d.opens)}" tabindex="0" role="link"><title>${esc(d.t)} · open the domain</title>${esc(d.t)}<tspan class="more" dx="8">open →</tspan></text>`
+      : d.href
+        ? `<text x="${x + 14}" y="${y + 24}">${esc(d.t)}<tspan class="dlink more" dx="10" data-href="${esc(d.href)}" tabindex="0" role="link">${esc(d.more)} →</tspan></text>`
+        : `<text x="${x + 14}" y="${y + 24}">${esc(d.t)}</text>`;
+    svg += `<g class="domain${d.oos ? " oos" : ""}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14"/>${title}
+      ${d.oos ? `<text class="oos-tag" x="${x + w - 14}" y="${y + 24}" text-anchor="end">out of scope for '28</text>` : ""}</g>`;
   }
-  for (const [from, to, d, label, lx, ly, ends] of EDGES) {
-    const quiet = !alwaysShown(from, to);
-    const proto = protoLines.has(from + ">" + to);
-    svg += `<g class="link${quiet ? " quiet" : ""}${proto ? " proto" : ""}" data-from="${from}" data-to="${to}"${proto ? " data-opens-panel" : ""}>
-      ${proto ? `<title>${esc(nameOf(from))} → ${esc(nameOf(to))} · inspect the interface</title><path class="hit" d="${d}"/>` : ""}
-      <path class="edge" d="${d}" marker-end="url(#ah)" ${ends === "both" ? `marker-start="url(#ah)"` : ""}/>
-      ${label ? `<text class="edge-label" x="${lx}" y="${ly}">${esc(label)}</text>` : ""}</g>`;
+  for (const g of V?.groups || []) {
+    const [x, y, w, h] = g.at;
+    svg += `<g class="group"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12"/><text x="${x + 10}" y="${y + 17}">${esc(g.t)}</text></g>`;
+  }
+  for (const e of EDGES) {
+    const at = V ? e.v?.[view] : e.o;
+    if (!at) continue;
+    const [d, lx, ly] = at;
+    const quiet = !V && !alwaysShown(e.f, e.t);
+    const proto = protoLines.has(e.f + ">" + e.t);
+    svg += `<g class="link${quiet ? " quiet" : ""}${proto ? " proto" : ""}" data-from="${e.f}" data-to="${e.t}"${proto ? " data-opens-panel" : ""}>
+      ${proto ? `<title>${esc(nameOf(e.f))} → ${esc(nameOf(e.t))} · inspect the interface</title><path class="hit" d="${d}"/>` : ""}
+      <path class="edge" d="${d}" marker-end="url(#ah)" ${e.both ? `marker-start="url(#ah)"` : ""}/>
+      ${e.l && lx ? `<text class="edge-label" x="${lx}" y="${ly}">${esc(e.l)}</text>` : ""}</g>`;
   }
   for (const n of NODES) {
-    const h = n.h || 72;
+    const at = V ? n.v?.[view] : n.o;
+    if (!at) continue;
+    // Another domain's component beside the open domain: small, and named
+    // by its domain.
+    const stub = !!V && !n.ext && n.dom !== view;
+    const [x, y, w] = at;
+    const h = at[3] || (stub ? 52 : 72);
     const href = n.ext ? null : target(n.id);
-    const cls = (n.ext ? "ext" : href ? "live" : "planned") + (n.app ? " app" : "") + (n.oos ? " oos" : "");
-    const ty = n.top ? n.y + h / 2 + 5 : n.h ? n.y + h / 2 - 3 : n.s2 ? n.y + 26 : n.y + 32;
-    const cx = n.x + n.w / 2;
-    const anchor = n.ext ? `x="${n.x + 16}"` : `x="${cx}" text-anchor="middle"`;
+    const cls = (n.ext ? "ext" : href ? "live" : "planned") + (n.app ? " app" : "") + (n.oos ? " oos" : "") + (stub ? " stub" : "");
+    const sub = stub ? n.dom : n.s;
+    const s2 = stub ? null : n.s2;
+    const ty = stub ? y + 22 : n.top ? y + h / 2 + 5 : at[3] ? y + h / 2 - 3 : s2 ? y + 26 : y + 32;
+    const anchor = n.ext ? `x="${x + 16}"` : `x="${x + w / 2}" text-anchor="middle"`;
     svg += `<g class="node ${cls}" data-c="${n.id}" ${href ? `data-href="${esc(href)}" tabindex="0" role="link"` : ""}>
       <title>${esc(n.t)}${href ? " · open demo" : n.ext ? "" : " · demo planned"}</title>
-      <rect x="${n.x}" y="${n.y}" width="${n.w}" height="${h}" rx="10"/>
-      <text class="t" ${anchor} y="${ty}">${esc(n.t)}${n.top ? `<tspan class="s" dx="10">${esc(n.s)}</tspan>` : ""}</text>
-      ${n.top ? "" : `<text class="s" ${anchor} y="${ty + 19}">${esc(n.s)}</text>`}
-      ${n.s2 ? `<text class="s${n.s2oos ? " oos-text" : ""}" ${anchor} y="${ty + 35}">${esc(n.s2)}</text>` : ""}</g>`;
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10"/>
+      <text class="t" ${anchor} y="${ty}">${esc(n.t)}${n.top ? `<tspan class="s" dx="10">${esc(sub)}</tspan>` : ""}</text>
+      ${n.top ? "" : `<text class="s" ${anchor} y="${ty + (stub ? 17 : 19)}">${esc(sub)}</text>`}
+      ${s2 ? `<text class="s${n.s2oos ? " oos-text" : ""}" ${anchor} y="${ty + 35}">${esc(s2)}</text>` : ""}</g>`;
   }
-  document.getElementById("arch").innerHTML = svg + "</g>";
+  el.innerHTML = svg + "</g>";
+  // Replay the fade so moving between levels reads as stepping in or out.
+  el.classList.remove("in");
+  void el.getBoundingClientRect();
+  el.classList.add("in");
 
   document.getElementById("demos").innerHTML = demos.map((d) => d.status === "live"
     ? `<a class="card demo" href="${esc(d.path)}" data-demo="${esc(d.id)}"><b>${esc(d.title)}</b><p>${esc(d.summary)}</p>
@@ -313,9 +422,18 @@ document.addEventListener("mouseover", (ev) => {
   highlight([], []);
 });
 const follow = (ev) => {
+  if (ev.type !== "click" && ev.key !== "Enter") return;
   const el = ev.target.closest("[data-href]");
-  if (el && (ev.type === "click" || ev.key === "Enter")) location.href = el.dataset.href;
+  if (el) return void (location.href = el.dataset.href);
+  // A domain's title opens the domain on its own.
+  const dom = ev.target.closest("[data-view]");
+  if (dom) location.hash = dom.dataset.view.toLowerCase();
 };
+window.addEventListener("hashchange", () => {
+  view = viewFromHash();
+  InterfacePanel.close();
+  draw();
+});
 document.addEventListener("click", follow);
 document.addEventListener("keydown", follow);
 
