@@ -342,7 +342,7 @@ const SLIDES = [
   },
 
   () => {
-    const m = T.model, wide = new Set(["As submitted"]);
+    const m = T.model, wide = new Set(["As submitted", "Also submitted"]);
     const run = last(T.examples.reopen).claims[0];
     const doc = field ? m.flatMap((g) => g.fields).find((f) => f.name === field) : null;
     return `<div class="kicker">Data model</div><h1>One record per claim, every version kept</h1>

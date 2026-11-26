@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package coreadmin.claims.v1;
 
+import "coreadmin/claims/v1/claim_submission.proto";
 import "coreadmin/common/v1/common.proto";
 import "coreadmin/plan/v1/plan.proto";
 import "coreadmin/provider/v1/provider.proto";
@@ -161,6 +162,80 @@ message Claim {
   // version. This claim's status and outcome stay as they were.
   SupersededBy superseded_by = 41;
 
+  // The rest of what the claim carried, as sent (837P; see
+  // claim_submission.proto). None of it is read by adjudication yet, and
+  // all of it is situational.
+
+  // The 837 transaction set the claim arrived in (BHT, loops 1000A and
+  // 1000B). The same for every claim in the set.
+  SubmittedTransaction submitted_transaction = 42;
+  // The coverage the claim was billed under (837: SBR of loop 2000B).
+  SubmittedCoverage submitted_coverage = 43;
+  // The payer the claim was addressed to (837: loop 2010BB).
+  SubmittedPayer submitted_payer = 44;
+  // Where the billing provider wants payment sent, when not its own
+  // address (837: loop 2010AB).
+  common.v1.Address pay_to_address = 45;
+  // The plan to be paid instead of the provider, on a subrogation demand
+  // (837: loop 2010AC).
+  SubmittedPayer pay_to_plan = 46;
+  // Place of service for the claim (837: CLM05-1). Each line carries its
+  // own when it differs.
+  string place_of_service_code = 47;
+  // Signature, assignment and release indicators (837: CLM06 to CLM20).
+  ClaimIndicators indicators = 48;
+  // Accident and employment causes (837: CLM11).
+  RelatedCauses related_causes = 49;
+  // Claim-level dates other than service dates (837: DTP of loop 2300).
+  ClaimDates dates = 50;
+  // Supporting paperwork (837: PWK of loop 2300).
+  repeated Attachment attachments = 51;
+  // Contract terms the provider says apply (837: CN1).
+  ContractInformation contract = 52;
+  // What the patient has already paid the provider (837: AMT*F5).
+  common.v1.Money patient_paid = 53;
+  // Reference numbers (837: REF of loop 2300).
+  ClaimReferences references = 54;
+  // Free-form file information (837: K3).
+  repeated string file_information = 55;
+  // Claim notes (837: NTE of loop 2300).
+  repeated SubmittedNote notes = 56;
+  // Ambulance transport (837: CR1 of loop 2300).
+  AmbulanceTransport ambulance_transport = 57;
+  // Spinal manipulation (837: CR2).
+  SpinalManipulation spinal_manipulation = 58;
+  // Ambulance certification, vision, homebound and EPSDT conditions
+  // (837: CRC of loop 2300).
+  repeated ConditionInformation conditions = 59;
+  // The code list each diagnosis came from, in the same order as
+  // diagnosis_codes (837: HI qualifiers, ABK and ABF for ICD-10-CM, BK and
+  // BF for ICD-9-CM).
+  repeated string diagnosis_code_qualifiers = 60;
+  // Surgical procedures the anesthesia was for (837: HI*BP, BO).
+  repeated string anesthesia_procedure_codes = 61;
+  // Condition codes (837: HI*BG).
+  repeated string condition_codes = 62;
+  // What a repricer priced the claim at (837: HCP of loop 2300).
+  Repricing repricing = 63;
+  // The primary care provider, when sent beside the referring provider
+  // (837: loop 2310A, NM1*P3).
+  ProviderRef primary_care_provider = 64;
+  // Where the services were rendered, when not the billing provider's
+  // address (837: loop 2310C).
+  ProviderRef service_facility = 65;
+  // The supervising provider (837: loop 2310D).
+  ProviderRef supervising_provider = 66;
+  // Ambulance pick-up location (837: loop 2310E).
+  AmbulanceLocation ambulance_pickup = 67;
+  // Ambulance drop-off location (837: loop 2310F).
+  AmbulanceLocation ambulance_dropoff = 68;
+  // Other payers on the claim and what they did with it (837: loop 2320).
+  repeated OtherInsurance other_insurance = 69;
+  // Segments of the claim that intake did not map to a field, exactly as
+  // sent, so nothing a provider sends is lost. Includes unmapped segments
+  // of the billing provider, subscriber and patient loops above the claim.
+  repeated string unmapped_segments = 70;
+
   common.v1.AuditInfo audit = 31;
 
   reserved 29, 30;
@@ -198,6 +273,26 @@ message SubmittedPerson {
   // Social Security number, if sent (REF*SY). Never put it in a log, an
   // error or a pend message.
   string ssn = 6;
+  // How member_number is qualified (NM108): MI member id, II standard
+  // unique health identifier.
+  string member_number_qualifier = 7;
+  // The person's address (N3, N4).
+  common.v1.Address address = 8;
+  // The person's relationship to the subscriber: SBR02 for the subscriber
+  // (self, when the subscriber is the patient), PAT01 for a patient.
+  PatientRelationship relationship = 9;
+  // The relationship code as sent.
+  string relationship_code = 10;
+  // Date of death (PAT06).
+  common.v1.Date death_date = 11;
+  // Weight in pounds, as sent (PAT08).
+  string weight_pounds = 12;
+  // Y when the patient is pregnant (PAT09).
+  string pregnancy_indicator = 13;
+  // Property and casualty claim number (REF*Y4).
+  string property_casualty_claim_number = 14;
+  // The person's contact for a property and casualty claim (PER).
+  SubmittedContact contact = 15;
 
   reserved 5;
   reserved "card_id", "dependent_loop";
@@ -281,6 +376,25 @@ message ProviderRef {
   string taxonomy_code = 4;
   // Resolved by provider lookup during adjudication.
   string provider_id = 5;
+
+  // The rest is as sent, and situational.
+
+  // 1 for a person, 2 for an organization (NM102).
+  string entity_type_code = 6;
+  // A person's name in parts (NM103 to NM107). `name` holds it joined, or
+  // the organization's name.
+  common.v1.PersonName person_name = 7;
+  // The provider's address (N3, N4).
+  common.v1.Address address = 8;
+  // The provider's contacts (PER).
+  repeated SubmittedContact contacts = 9;
+  // How `tin` is qualified: EI employer identification number, SY Social
+  // Security number. When SY, treat `tin` like an SSN: never put it in a
+  // log, an error or a pend message.
+  string tax_id_qualifier = 10;
+  // Other identifiers (REF), e.g. 0B state license, 1G UPIN, G2 commercial
+  // number, LU location number.
+  repeated SubmittedId secondary_ids = 11;
 }
 
 message InstitutionalInfo {
@@ -312,6 +426,88 @@ message ClaimLine {
   string ndc = 10;
 
   LineAdjudication adjudication = 11;
+
+  // The rest of what the line carried, as sent (837P loop 2400; see
+  // claim_submission.proto). None of it is read by adjudication yet, and
+  // all of it is situational.
+
+  // The code list procedure_code came from (SV101-1): HC HCPCS/CPT, ER
+  // Jurisdiction Specific Procedure and Supply Codes, IV HIEC, WK advanced
+  // billing concepts.
+  string procedure_code_qualifier = 12;
+  // The provider's description of the service (SV101-7), required for
+  // not-otherwise-classified codes.
+  string procedure_description = 13;
+  // What units_milli counts (SV103): UN units, MJ minutes.
+  string unit_basis_code = 14;
+  // Y when the service was an emergency (SV109).
+  string emergency_indicator = 15;
+  // Y when the service was EPSDT (SV111).
+  string epsdt_indicator = 16;
+  // Y when the service was family planning (SV112).
+  string family_planning_indicator = 17;
+  // 0 when the patient is exempt from copay (SV115).
+  string copay_status_code = 18;
+  // Durable medical equipment rental or purchase terms (SV5).
+  DurableMedicalEquipment dme = 19;
+  // Supporting paperwork for the line (PWK).
+  repeated Attachment attachments = 20;
+  // Ambulance transport for the line (CR1).
+  AmbulanceTransport ambulance_transport = 21;
+  // Durable medical equipment certification (CR3).
+  DmeCertification dme_certification = 22;
+  // Ambulance certification, hospice employee and DME conditions (CRC).
+  repeated ConditionInformation conditions = 23;
+  // Line dates other than service dates (DTP).
+  LineDates dates = 24;
+  // Number of patients in the ambulance, as sent (QTY*PT).
+  string ambulance_patient_count = 25;
+  // Additional obstetric anesthesia units, as sent (QTY*FL).
+  string obstetric_anesthesia_units = 26;
+  // Test results (MEA).
+  repeated TestResult test_results = 27;
+  // Contract terms the provider says apply to the line (CN1).
+  ContractInformation contract = 28;
+  // Reference numbers (REF).
+  LineReferences references = 29;
+  // Sales tax on the line (AMT*T).
+  common.v1.Money sales_tax = 30;
+  // Postage claimed (AMT*F4).
+  common.v1.Money postage_claimed = 31;
+  // Free-form file information (K3).
+  repeated string file_information = 32;
+  // Line notes, including third party organization notes (NTE).
+  repeated SubmittedNote notes = 33;
+  // A service bought from another provider (PS1).
+  PurchasedService purchased_service = 34;
+  // What a repricer priced the line at (HCP).
+  Repricing repricing = 35;
+  // Drug quantity and prescription (loop 2410). The NDC is `ndc`.
+  LineDrug drug = 36;
+  // Providers for this line, when they differ from the claim's (loops
+  // 2420A to F): rendering, purchased service, service facility,
+  // supervising, ordering, referring and primary care.
+  ProviderRef rendering_provider = 37;
+  // Who a purchased service was bought from (loop 2420B).
+  ProviderRef purchased_service_provider = 38;
+  // Where the line's service was rendered (loop 2420C).
+  ProviderRef service_facility = 39;
+  // The line's supervising provider (loop 2420D).
+  ProviderRef supervising_provider = 40;
+  // The provider who ordered the service or item (loop 2420E).
+  ProviderRef ordering_provider = 41;
+  // The line's referring provider (loop 2420F, NM1*DN).
+  ProviderRef referring_provider = 42;
+  // The line's primary care provider (loop 2420F, NM1*P3).
+  ProviderRef primary_care_provider = 43;
+  // Ambulance pick-up location for the line (loop 2420G).
+  AmbulanceLocation ambulance_pickup = 44;
+  // Ambulance drop-off location for the line (loop 2420H).
+  AmbulanceLocation ambulance_dropoff = 45;
+  // What other payers did with this line (loop 2430).
+  repeated OtherPayerLineAdjudication other_payer_adjudications = 46;
+  // Supporting forms and their answers (loop 2440).
+  repeated FormIdentification forms = 47;
 }
 
 // ClaimPayment is the claim's copy of its payment and remittance, owned and
