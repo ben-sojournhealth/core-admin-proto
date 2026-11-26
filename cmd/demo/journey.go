@@ -29,14 +29,11 @@ func newJourney() (*journeyServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	s, err := journey.NewIn(repos)
+	s, intake, err := journey.NewWithIntake(repos)
 	if err != nil {
 		return nil, err
 	}
-	return &journeyServer{sim: s, intake: &claimsintake.Processor{
-		Repos: s.Repos, Claims: s.Claims, Now: s.Claims.Now, Logf: s.Claims.Logf,
-		Files: map[string][]byte{}, ReceiverID: claimsintake.OurID,
-	}}, nil
+	return &journeyServer{sim: s, intake: intake}, nil
 }
 
 type sampleView struct {

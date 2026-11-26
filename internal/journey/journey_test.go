@@ -23,7 +23,7 @@ func TestWorkload(t *testing.T) {
 		for _, p := range c.Pends {
 			pends[p.Code]++
 		}
-		t.Logf("%-10s %-9s %-10s pays %6d %v", c.ID, c.Status, c.Member, c.Paid, c.Pends)
+		t.Logf("%-16s %-11s %-16s %-8s allowed %6d pays %6d owes %6d %v", c.Number, c.Status, c.Outcome, c.Member, c.Allowed, c.Paid, c.Member_, c.Pends)
 	}
 	want := map[string]int{"PRIOR_AUTH_REQUIRED": 2, "POSSIBLE_DUPLICATE": 1, "NO_BENEFIT_MATCH": 1, "NO_ELIGIBILITY": 1, "REOPENED": 1}
 	for code, n := range want {
@@ -32,7 +32,7 @@ func TestWorkload(t *testing.T) {
 		}
 	}
 	// Every claim has a UUIDv7 id and a claim number; the adjustment of
-	// 26063-A-00001 is version 2 of the same number.
+	// 26063-E-00001 is version 2 of the same number.
 	uuid7 := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 	byNumber := map[string]string{}
 	for _, c := range st.Claims {
@@ -41,13 +41,13 @@ func TestWorkload(t *testing.T) {
 		}
 		byNumber[c.Number] = c.ID
 	}
-	for _, n := range []string{"26061-A-00001", "26062-A-00002", "26063-A-00001", "26063-A-00001-2", "26075-A-00001"} {
+	for _, n := range []string{"26061-E-00001", "26062-E-00002", "26063-E-00001", "26063-E-00001-2", "26075-E-00001"} {
 		if byNumber[n] == "" {
 			t.Errorf("no claim numbered %s", n)
 		}
 	}
 
-	d, err := journey.GetDetail(s, byNumber["26065-A-00001"])
+	d, err := journey.GetDetail(s, byNumber["26065-E-00001"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,9 +128,9 @@ func TestAdmin(t *testing.T) {
 	if sl.Deductible != 10000000 || sl.RunOutMonths != 3 || len(sl.Lasers) != 1 || sl.Lasers[0].Member != "Sam Rivera" || len(sl.Factors) != 4 {
 		t.Errorf("stop-loss: %+v", sl)
 	}
-	// Nothing posts paid claims to stop-loss yet, and the workload loads
-	// no files.
-	if len(sl.Specific) != 0 || len(a.Files) != 0 {
-		t.Errorf("%d exposures, %d files; want none", len(sl.Specific), len(a.Files))
+	// Nothing posts paid claims to stop-loss yet. The workload's claims
+	// arrived in eleven 837 files, each answered with a 999.
+	if len(sl.Specific) != 0 || len(a.Files) != 22 {
+		t.Errorf("%d exposures, %d files; want 0 and 22", len(sl.Specific), len(a.Files))
 	}
 }

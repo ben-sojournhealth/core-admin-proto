@@ -232,8 +232,10 @@ message Claim {
   // Other payers on the claim and what they did with it (837: loop 2320).
   repeated OtherInsurance other_insurance = 69;
   // Segments of the claim that intake did not map to a field, exactly as
-  // sent, so nothing a provider sends is lost. Includes unmapped segments
-  // of the billing provider, subscriber and patient loops above the claim.
+  // sent, so nothing a provider sends is lost: a segment intake does not
+  // know, or one carrying an element it has no field for. Includes such
+  // segments from the header and the billing provider, subscriber and
+  // patient loops above the claim.
   repeated string unmapped_segments = 70;
 
   common.v1.AuditInfo audit = 31;

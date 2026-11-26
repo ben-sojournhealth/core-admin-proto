@@ -2,7 +2,9 @@
 // examiner's workbench, and tabs for members, employers, the network,
 // finance and files (admin.go). It runs its own sandbox, separate from
 // Claims Lifecycle, pre-loaded with two weeks of claims for several
-// families so the work queues start with real work in them.
+// families so the work queues start with real work in them. The claims
+// arrive as 837 files through claims intake, as they would from a
+// clearinghouse.
 package journey
 
 import (
@@ -15,7 +17,9 @@ import (
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
 	commonv1 "coreadmin/gen/coreadmin/common/v1"
 	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
+	ingestionv1 "coreadmin/gen/coreadmin/ingestion/v1"
 	"coreadmin/internal/claims"
+	"coreadmin/internal/claims/claimsintake"
 	"coreadmin/internal/common/repo"
 	"coreadmin/internal/common/store"
 	"coreadmin/internal/sim"
@@ -23,8 +27,6 @@ import (
 
 // Today is the date the workbench opens on.
 var Today = time.Date(2026, 3, 16, 9, 0, 0, 0, time.UTC)
-
-const ortiz = "1987654321"
 
 type family struct {
 	subscriber string
@@ -55,27 +57,60 @@ var families = []family{
 
 // NewIn plays the workload into repos, which must be empty.
 func NewIn(repos *repo.Repos) (*sim.Sim, error) {
+	s, _, err := NewWithIntake(repos)
+	return s, err
+}
+
+// NewWithIntake is NewIn, also returning the intake that loaded the
+// workload's 837 files, which holds those files and takes in more.
+func NewWithIntake(repos *repo.Repos) (*sim.Sim, *claimsintake.Processor, error) {
 	s, err := sim.NewIn(repos)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	intake := &claimsintake.Processor{
+		Repos: s.Repos, Claims: s.Claims, Now: s.Claims.Now, Logf: s.Claims.Logf,
+		Files: map[string][]byte{}, ReceiverID: claimsintake.OurID,
+	}
+	files := map[int]claimsintake.WorkloadFile{}
+	for _, f := range claimsintake.Workload() {
+		files[f.Day] = f
 	}
 	// Every claim gets a UUIDv7 id and is named by its claim number.
 	s.UseShortIDs(false)
 	if err := addFamilies(s); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	s.SetClock(time.Date(2026, 3, 2, 8, 30, 0, 0, time.UTC))
 	for _, day := range workload {
 		s.SetClock(time.Date(2026, 3, day.day, 8, 30, 0, 0, time.UTC))
+		// The day's claims arrive first, in one 837 file.
+		if f, ok := files[day.day]; ok {
+			s.Advance(37 * time.Minute)
+			res := s.Do("clearinghouse", "Loaded 837 file "+f.Filename, func(ctx context.Context) error {
+				job, err := intake.Ingest(ctx, f.Filename, []byte(f.Text))
+				if err == nil && job.GetStatus() != ingestionv1.IngestionStatus_INGESTION_STATUS_COMPLETED {
+					err = fmt.Errorf("the file ended %s", job.GetStatus())
+				}
+				return err
+			})
+			if !res.OK {
+				return nil, nil, fmt.Errorf("journey workload, March %d, %s: %s", day.day, res.Title, res.Error)
+			}
+			delete(files, day.day)
+		}
 		for _, a := range day.actions {
 			s.Advance(37 * time.Minute)
 			if res := s.Apply(a); !res.OK {
-				return nil, fmt.Errorf("journey workload, March %d, %s: %s", day.day, res.Title, res.Error)
+				return nil, nil, fmt.Errorf("journey workload, March %d, %s: %s", day.day, res.Title, res.Error)
 			}
 		}
 	}
+	if len(files) > 0 {
+		return nil, nil, fmt.Errorf("journey workload: %d files have no day in the workload", len(files))
+	}
 	s.SetClock(Today)
-	return s, nil
+	return s, intake, nil
 }
 
 func addFamilies(s *sim.Sim) error {
@@ -114,63 +149,32 @@ func addFamilies(s *sim.Sim) error {
 	return nil
 }
 
-func claim(member, procedure string, dollars int64, dos string) sim.Action {
-	return sim.Action{Type: "process", Claim: &sim.ClaimSpec{Member: member, Procedure: procedure, Charge: dollars * 100, DOS: dos}}
-}
-
-func with(a sim.Action, f func(*sim.ClaimSpec)) sim.Action {
-	f(a.Claim)
-	return a
-}
-
-// workload is two weeks of claims. Later actions refer to earlier claims
-// by claim number (two-digit year, day of year received, sequence); the
-// comments give each claim's number.
+// workload is two weeks of work. Each day's claims arrive in that day's
+// 837 file (claimsintake.Workload, which gives every claim's number);
+// these are what happens to them afterwards, by claim number.
 var workload = []struct {
 	day     int
 	actions []sim.Action
 }{
-	{2, []sim.Action{
-		claim("mem_1001", "99213", 180, "2026-02-26"), // 26061-A-00001 approved
-	}},
-	{3, []sim.Action{
-		claim("mem_3001", "99213", 180, "2026-03-02"), // 26062-A-00001 approved
-		claim("mem_4001", "99214", 250, "2026-03-02"), // 26062-A-00002 denied: coverage ended 2/28
-	}},
-	{4, []sim.Action{
-		claim("mem_1001", "29881", 2500, "2026-03-03"), // 26063-A-00001 surgery, adjusted on the 12th
-	}},
+	{2, nil},
+	{3, nil},
+	{4, nil},
 	{5, []sim.Action{
-		claim("mem_2001", "99214", 250, "2026-03-04"), // 26064-A-00001 approved
 		{Type: "select"},
 		{Type: "release"},
 	}},
-	{6, []sim.Action{
-		with(claim("mem_1001", "70551", 900, "2026-03-05"), func(c *sim.ClaimSpec) { c.Auth = "PA-1001" }), // 26065-A-00001: decided against the deductible the surgery met, before the surgery was adjusted on the 12th
-	}},
-	{9, []sim.Action{
-		claim("mem_1002", "70551", 900, "2026-03-06"), // 26068-A-00001 pend: prior auth
-	}},
-	{10, []sim.Action{
-		claim("mem_3001", "99213", 180, "2026-03-02"),                                                 // 26069-A-00001 pend: duplicate of 26062-A-00001
-		with(claim("mem_3002", "99284", 1800, "2026-03-08"), func(c *sim.ClaimSpec) { c.POS = "23" }), // 26069-A-00002 ER, approved
-	}},
-	{11, []sim.Action{
-		claim("mem_2002", "97110", 120, "2026-03-09"), // 26070-A-00001 pend: no benefit match
-	}},
+	{6, nil},
+	{9, nil},
+	{10, nil},
+	{11, nil},
 	{12, []sim.Action{
-		claim("mem_1004", "99213", 180, "2026-03-10"), // 26071-A-00001 pend: newborn not enrolled
-		{Type: "adjust", ClaimID: "26063-A-00001", Reason: "Provider corrected the procedure code", Claim: &sim.ClaimSpec{Procedure: "99213", Charge: 18000}},
+		{Type: "adjust", ClaimID: "26063-E-00001", Reason: "Provider corrected the procedure code", Claim: &sim.ClaimSpec{Procedure: "99213", Charge: 18000}},
 	}},
 	{13, []sim.Action{
-		with(claim("mem_3001", "29881", 2500, "2026-03-11"), func(c *sim.ClaimSpec) { c.Provider = ortiz }), // 26072-A-00001 out-of-network
-		claim("mem_1003", "99214", 250, "2026-03-12"),                                                       // 26072-A-00002 reopened out of the payment run
-		{Type: "select", ClaimID: "26072-A-00002"},
-		{Type: "reopen", ClaimID: "26072-A-00002", Reason: "Visit level in question"},
+		{Type: "select", ClaimID: "26072-E-00002"},
+		{Type: "reopen", ClaimID: "26072-E-00002", Reason: "Visit level in question"},
 	}},
-	{16, []sim.Action{
-		claim("mem_2001", "70551", 900, "2026-03-13"), // 26075-A-00001 pend: prior auth
-	}},
+	{16, nil},
 }
 
 // State is what the workbench list needs.

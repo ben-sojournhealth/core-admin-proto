@@ -34,7 +34,7 @@ func (f failingUpdates) Update(ctx context.Context, c *claimsv1.Claim) (*claimsv
 func TestReplacementIsAllOrNothing(t *testing.T) {
 	s := sandbox(t)
 	ctx := context.Background()
-	orig := find(t, s, "26063-A-00001-2")
+	orig := find(t, s, "26063-E-00001-2")
 	accID := orig.GetAdjudication().GetFamilyAccumulatorsId()
 	accBefore, err := s.Repos.FamilyAccumulators.Get(ctx, accID)
 	if err != nil {
@@ -44,7 +44,7 @@ func TestReplacementIsAllOrNothing(t *testing.T) {
 
 	real := s.Repos.Claims
 	s.Repos.Claims = failingUpdates{real, orig.GetId()}
-	in := correcting(submitted("PAT-40711", "ACM200101", "99214", 250, 2), replacement, "26063-A-00001")
+	in := correcting(submitted("PAT-40711", "ACM200101", "99214", 250, 2), replacement, "26063-E-00001")
 	if _, err := s.Claims.Receive(ctx, in); !errors.Is(err, errDisk) {
 		t.Fatalf("err = %v, want the injected failure", err)
 	}
@@ -54,7 +54,7 @@ func TestReplacementIsAllOrNothing(t *testing.T) {
 	if len(after) != len(before) {
 		t.Errorf("claims: %d before, %d after a failed replacement", len(before), len(after))
 	}
-	if o := find(t, s, "26063-A-00001-2"); o.GetStatus() != orig.GetStatus() || o.GetAudit().GetRevision() != orig.GetAudit().GetRevision() {
+	if o := find(t, s, "26063-E-00001-2"); o.GetStatus() != orig.GetStatus() || o.GetAudit().GetRevision() != orig.GetAudit().GetRevision() {
 		t.Errorf("original changed: %s rev %d", o.GetStatus(), o.GetAudit().GetRevision())
 	}
 	accAfter, _ := s.Repos.FamilyAccumulators.Get(ctx, accID)
@@ -65,13 +65,13 @@ func TestReplacementIsAllOrNothing(t *testing.T) {
 
 	// With the failure gone, the same claim goes through, and nothing
 	// from the failed attempt is left over to conflict with it. The failed
-	// attempt spent 26075-E-00001: a gap that means a claim didn't load.
+	// attempt spent 26075-E-00002: a gap that means a claim didn't load.
 	out := receive(t, s, in)
-	if got := describe(out); got != "26075-E-00002 APPROVED" || out.GetOriginalClaimId() != find(t, s, "26063-A-00001-2").GetId() {
+	if got := describe(out); got != "26075-E-00003 APPROVED" || out.GetOriginalClaimId() != find(t, s, "26063-E-00001-2").GetId() {
 		t.Errorf("retry: %s", got)
 	}
 	// The original's result was never reported: closed, not superseded.
-	if o := find(t, s, "26063-A-00001-2"); describe(o) != "26063-A-00001-2 DENIED" || o.GetSupersededBy() != nil {
+	if o := find(t, s, "26063-E-00001-2"); describe(o) != "26063-E-00001-2 DENIED" || o.GetSupersededBy() != nil {
 		t.Errorf("original after retry: %s, superseded by %v", describe(o), o.GetSupersededBy())
 	}
 }
@@ -81,7 +81,7 @@ func TestReplacementIsAllOrNothing(t *testing.T) {
 func TestVoidIsAllOrNothing(t *testing.T) {
 	s := sandbox(t)
 	ctx := context.Background()
-	orig := find(t, s, "26064-A-00001")
+	orig := find(t, s, "26064-E-00001")
 	accID := orig.GetAdjudication().GetFamilyAccumulatorsId()
 	accBefore, _ := s.Repos.FamilyAccumulators.Get(ctx, accID)
 
@@ -92,7 +92,7 @@ func TestVoidIsAllOrNothing(t *testing.T) {
 	if !errors.Is(err, errDisk) {
 		t.Fatalf("err = %v", err)
 	}
-	if o := find(t, s, "26064-A-00001"); o.GetStatus() != orig.GetStatus() {
+	if o := find(t, s, "26064-E-00001"); o.GetStatus() != orig.GetStatus() {
 		t.Errorf("original is %s", o.GetStatus())
 	}
 	if voids, _, _ := s.Repos.Claims.List(ctx, store.ListOptions[*claimsv1.Claim]{Filter: func(c *claimsv1.Claim) bool {
@@ -139,9 +139,9 @@ func (w *interleave) List(ctx context.Context, opts store.ListOptions[*claimsv1.
 func TestRacingCorrectionsOneOpenReplacement(t *testing.T) {
 	s := sandbox(t)
 	ctx := context.Background()
-	orig := find(t, s, "26063-A-00001-2")
-	a := correcting(submitted("PAT-40711", "ZZZ999", "99214", 250, 2), replacement, "26063-A-00001")
-	b := correcting(submitted("PAT-40711", "ZZZ999", "99215", 300, 2), replacement, "26063-A-00001")
+	orig := find(t, s, "26063-E-00001-2")
+	a := correcting(submitted("PAT-40711", "ZZZ999", "99214", 250, 2), replacement, "26063-E-00001")
+	b := correcting(submitted("PAT-40711", "ZZZ999", "99215", 300, 2), replacement, "26063-E-00001")
 
 	done := make(chan *claimsv1.Claim)
 	w := &interleave{Store: s.Repos.Claims, origID: orig.GetId()}
