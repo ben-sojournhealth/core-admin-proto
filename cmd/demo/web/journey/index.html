@@ -160,6 +160,17 @@ table.lines { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.lines th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 0 8px 8px 0; }
 table.lines td { padding: 8px 8px 8px 0; border-top: 1px solid var(--line); vertical-align: top; }
 table.lines .r { text-align: right; }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 16px 20px; }
+.fact small { display: block; font-size: 12px; color: var(--muted); }
+.fact b { display: block; font-size: 14px; overflow-wrap: anywhere; }
+.fact .sub { display: block; }
+.fact .chip { margin-top: 5px; }
+.codes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; }
+.codes > small { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.codes > small:not(:first-child) { margin-left: 12px; }
+.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; background: var(--bg); white-space: nowrap; }
+.code.first { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
+.box .pair .mono { font-size: 12px; }
 .cas { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--muted); }
 
 /* side */
@@ -295,7 +306,7 @@ const PEND_HELP = {
   NO_ELIGIBILITY: "Waiting on enrollment. Reprocess once coverage is loaded.",
   NO_BENEFIT_MATCH: "The plan has no benefit for this service. It needs a plan design change; claims can't be denied by hand yet.",
   NO_PRICE: "Waiting on a rate for this service.",
-  MEMBER_NOT_FOUND: "Find the member from the patient as sent (see Received). Linking by hand isn't built yet.",
+  MEMBER_NOT_FOUND: "Find the member from the patient and subscriber as sent. Linking by hand isn't built yet.",
   ORIGINAL_NOT_FOUND: "Find the original with the provider, from the patient control number or the EOP. Linking by hand isn't built yet.",
   ORIGINAL_NOT_FINALIZED: "The claim it corrects hasn't been decided. Resolve that claim first, then reprocess this one.",
   REOPENED: "Reopened before anything was reported. Reprocess it when it's ready to be decided again.",
@@ -469,13 +480,72 @@ function workHTML(c) {
   return html;
 }
 
+// ---------- the claim as submitted ----------
+const daySpan = (from, to) => to ? `${day(from)} – ${day(to)}` : day(from);
+// ICD-10-CM is sent without its decimal point.
+const dx = (code) => code.length > 3 && !code.includes(".") ? code.slice(0, 3) + "." + code.slice(3) : code;
+const pair = (k, v, mono) => v ? `<div class="pair"><span>${k}</span><span${mono ? ` class="mono"` : ""}>${esc(v)}</span></div>` : "";
+const GENDER = { F: "Female", M: "Male", U: "Unknown" };
+const SOURCE = { EDI_837: "EDI 837", PAPER: "Paper", PORTAL: "Portal", API: "API" };
+
+function partyBox(title, p, chips) {
+  return `<div class="box"><small>${title}</small><b>${esc(p.name || "–")}</b>
+    ${pair("NPI", p.npi, true)}${pair("TIN", p.tin, true)}${pair("Taxonomy", p.taxonomy, true)}${chips || ""}</div>`;
+}
+
+const FREQUENCY = { ORIGINAL: "Original", REPLACEMENT: "Corrected claim", VOID: "Void" };
+const fact = (label, main, ...subs) => `<div class="fact"><small>${label}</small><b>${main || "–"}</b>${subs.filter(Boolean).map((x) => `<span class="sub">${x}</span>`).join("")}</div>`;
+const born = (p) => [p.born && "Born " + day(p.born), GENDER[p.gender] || p.gender].filter(Boolean).map(esc).join(" · ");
+
+// The claim as submitted, top down: the claim itself (who, when, what
+// kind, how it reached us), then the providers on it. Lines follow below.
+function submittedHTML(c) {
+  const s = c.submitted;
+  if (!s) return "";
+  const match = c.memberId
+    ? `<span class="chip APPROVED" title="Matched member">✓ ${esc(c.member)}</span>`
+    : `<span class="chip todo">No member matched</span>`;
+  const number = (p) => p.memberNumber ? `<span class="mono">${esc(p.memberNumber)}</span>` : "";
+  let who;
+  if (s.patient) who = fact("Patient", esc(s.patient.name), born(s.patient), match) + (s.subscriber ? fact("Subscriber", esc(s.subscriber.name), number(s.subscriber), born(s.subscriber)) : "");
+  else if (s.subscriber) who = fact("Patient (the subscriber)", esc(s.subscriber.name), number(s.subscriber), born(s.subscriber), match);
+  else who = fact("Patient", esc(c.member), D.card ? `<span class="mono">${esc(D.card)}</span>` : "", c.memberId ? "" : match);
+  const pos = [...new Set(c.lines.map((l) => l.pos).filter(Boolean))];
+  const i = s.institutional, in_ = c.intake;
+  const facts = who +
+    fact("Service dates", esc(daySpan(s.from, s.to)), pos.length ? "Place of service " + esc(pos.join(", ")) : "") +
+    fact("Claim type", esc(words(s.type).replace(/^./, (x) => x.toUpperCase())), esc(FREQUENCY[c.frequency] || "")) +
+    fact("Received", esc(day(c.received.slice(0, 10))), s.timelyFiling ? "Timely filing from " + esc(day(s.timelyFiling)) : "") +
+    fact("Submitted by", esc(SOURCE[s.source] || "–"), in_ && in_.clearinghouse ? "via " + esc(in_.clearinghouse) : "") +
+    (s.pcn ? fact("Patient control #", `<span class="mono">${esc(s.pcn)}</span>`) : "") +
+    (i ? fact("Type of bill", `<span class="mono">${esc(i.typeOfBill)}</span>`, i.drg ? "DRG " + esc(i.drg) : "") +
+      fact("Stay", esc(daySpan(i.admitted, i.discharged)), i.admissionType ? "Admission type " + esc(i.admissionType) : "", i.dischargeStatus ? "Discharge status " + esc(i.dischargeStatus) : "") : "");
+  const codes = (s.diagnoses.length ? `<small>Diagnoses</small>` + s.diagnoses.map((d, n) => `<span class="code ${n ? "" : "first"}" title="${n ? "" : "Principal"}">${esc(dx(d))}</span>`).join("") : "") +
+    (s.auths.length ? `<small>Authorization</small>` + s.auths.map((a) => `<span class="code">${esc(a)}</span>`).join("") : "");
+  let providers = "";
+  if (s.billing) {
+    const tier = c.tier === "INN" ? `<span class="chip APPROVED">In-network</span>` : c.tier === "OON" ? `<span class="chip todo">Out-of-network</span>` : "";
+    providers += partyBox("Billing", s.billing, (s.billing.matched ? "" : `<span class="chip todo">Not in provider data</span> `) + tier);
+  }
+  if (s.rendering) providers += partyBox("Rendering", s.rendering);
+  if (s.referring) providers += partyBox("Referring", s.referring);
+  if (s.facility) providers += partyBox("Facility", s.facility);
+  return `<div class="panel" style="margin-bottom:12px">
+    <div class="section"><div class="label">Claim as submitted</div><div class="facts">${facts}</div>${codes ? `<div class="codes">${codes}</div>` : ""}</div>
+    ${providers ? `<div class="section"><div class="label">Providers</div><div class="boxes">${providers}</div></div>` : ""}</div>`;
+}
+
 function linesHTML(c) {
+  const s = c.submitted || {};
   return `<table class="lines"><thead><tr><th>Line</th><th>Service</th><th class="r">Billed</th><th class="r">Allowed</th><th>Member</th><th class="r">Plan pays</th></tr></thead><tbody>` +
     c.lines.map((l) => {
       const decided = l.status === "PAYABLE";
       const member = decided ? (l.shares.length ? l.shares.map((s) => `${usd(s.amount)} <span class="sub">${esc(s.type)}</span>`).join("<br>") : `<span class="sub">none</span>`) : "";
       return `<tr><td>${l.number}</td>
-        <td>${esc(l.procedure)} <span class="sub">· POS ${esc(l.pos)}</span>${l.benefit ? `<div class="sub">${esc(l.benefit)}</div>` : ""}${l.cas.length ? `<div class="cas">${l.cas.map(esc).join(" · ")}</div>` : ""}</td>
+        <td><b>${esc(l.procedure)}</b>${l.modifiers.map((m) => ` <span class="code" title="Modifier">${esc(m)}</span>`).join("")} <span class="sub">${l.units ? `× ${esc(l.units)} ` : ""}· POS ${esc(l.pos)}${l.revenue ? ` · rev ${esc(l.revenue)}` : ""}</span>
+          ${l.from && (l.from !== s.from || (l.to || "") !== (s.to || "")) ? `<div class="sub">${daySpan(l.from, l.to)}</div>` : ""}
+          ${l.diagnoses.length || l.ndc ? `<div class="codes" style="margin-top:4px">${l.diagnoses.map((d) => `<span class="code">${esc(dx(d))}</span>`).join("")}${l.ndc ? `<span class="code" title="NDC">NDC ${esc(l.ndc)}</span>` : ""}</div>` : ""}
+          ${l.benefit ? `<div class="sub">${esc(l.benefit)}</div>` : ""}${l.cas.length || l.remarks.length ? `<div class="cas">${l.cas.concat(l.remarks).map(esc).join(" · ")}</div>` : ""}</td>
         <td class="r num">${usd(l.charge)}</td>
         <td class="r num">${decided ? usd(l.allowed) : "–"}${l.pricing ? `<div class="sub" style="white-space:nowrap">${esc(l.pricing.split(",")[0])}</div>` : ""}</td>
         <td class="num">${decided ? member : `<span class="chip ${l.status === "DENIED" ? "DENIED" : "PENDED"}">${words(l.status)}</span>`}</td>
@@ -510,8 +580,7 @@ function sideHTML(d) {
   const intake = i ? `<div class="section"><div class="label">Received</div>
     ${kv("File", `<a href="/claims-intake/#/job/${esc(i.jobId)}" target="_blank">${esc(i.filename)}</a> <span class="sub">set ${esc(i.set)}</span>`)}
     ${kv("From", esc(i.clearinghouse) + (i.clearinghouseReceived ? ` <span class="sub">${esc(new Date(i.clearinghouseReceived).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" }))}</span>` : ""))}
-    ${kv("Patient control #", `<span class="mono">${esc(i.pcn)}</span>`)}
-    ${kv("Patient as sent", `${esc(i.patient)} <span class="sub">${esc(i.born)}</span><div class="sub mono">${esc(i.card)}${i.dependent ? " · patient loop" : ""}</div>`)}
+    ${kv("Trace #", i.trace ? `<span class="mono">${esc(i.trace)}</span>` : "")}
     ${kv("Quoted claim #", i.quoted ? `<span class="mono">${esc(i.quoted)}</span>` : "")}
   </div>` : "";
   return `<div class="panel">${meters ? `<div class="section">${meters}</div>` : ""}${rel}${intake}<div class="section"><div class="label">Activity</div>${tl}</div></div>`;
@@ -547,6 +616,7 @@ function renderClaim() {
     <div class="cols">
       <div>
         ${workHTML(c)}
+        ${submittedHTML(c)}
         <div class="panel ${fresh.has(c.id) ? "changed" : ""}">
           <div class="section">
             <div class="money">

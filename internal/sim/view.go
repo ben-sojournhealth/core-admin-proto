@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
 	claimsv1 "coreadmin/gen/coreadmin/claims/v1"
+	commonv1 "coreadmin/gen/coreadmin/common/v1"
 	eligibilityv1 "coreadmin/gen/coreadmin/eligibility/v1"
 	planv1 "coreadmin/gen/coreadmin/plan/v1"
 	providerv1 "coreadmin/gen/coreadmin/provider/v1"
@@ -112,6 +114,8 @@ type ClaimView struct {
 	Intake *IntakeView `json:"intake,omitempty"`
 	// For a replacement or void: what it corrects, or that it isn't linked.
 	Correction *CorrectionView `json:"correction,omitempty"`
+	// The claim as submitted: what the 837 (or other source) carried.
+	Submitted *SubmittedView `json:"submitted,omitempty"`
 	// Buttons the UI should offer for this claim.
 	Actions []string        `json:"actions"`
 	Raw     json.RawMessage `json:"raw,omitempty"`
@@ -150,6 +154,63 @@ type IntakeView struct {
 	Dependent bool   `json:"dependent"`
 }
 
+// SubmittedView is the claim as the provider sent it, beside what
+// adjudication matched it to.
+type SubmittedView struct {
+	// PROFESSIONAL, INSTITUTIONAL or DENTAL.
+	Type string `json:"type"`
+	// EDI_837, PAPER, PORTAL or API.
+	Source string `json:"source"`
+	// Patient control number (CLM01).
+	PCN string `json:"pcn,omitempty"`
+	// The claim's service dates; To is empty for a single day.
+	From string `json:"from"`
+	To   string `json:"to,omitempty"`
+	// The date the timely filing limit is checked against.
+	TimelyFiling string `json:"timelyFiling,omitempty"`
+	// ICD-10-CM codes as sent, principal first.
+	Diagnoses []string `json:"diagnoses"`
+	// Prior authorization and referral numbers.
+	Auths []string `json:"auths"`
+	// Subscriber is always sent; Patient only when the patient is a
+	// dependent sent in a loop of their own.
+	Subscriber *PersonView `json:"subscriber,omitempty"`
+	Patient    *PersonView `json:"patient,omitempty"`
+	Billing    *PartyView  `json:"billing,omitempty"`
+	Rendering  *PartyView  `json:"rendering,omitempty"`
+	Referring  *PartyView  `json:"referring,omitempty"`
+	Facility   *PartyView  `json:"facility,omitempty"`
+	// Institutional claims only.
+	Institutional *InstitutionalView `json:"institutional,omitempty"`
+}
+
+// PersonView is a subscriber or patient as sent. It leaves out the SSN.
+type PersonView struct {
+	Name         string `json:"name"`
+	MemberNumber string `json:"memberNumber,omitempty"`
+	Born         string `json:"born,omitempty"`
+	Gender       string `json:"gender,omitempty"`
+}
+
+// PartyView is a provider as identified on the claim.
+type PartyView struct {
+	Name     string `json:"name"`
+	NPI      string `json:"npi,omitempty"`
+	TIN      string `json:"tin,omitempty"`
+	Taxonomy string `json:"taxonomy,omitempty"`
+	// Whether adjudication found the provider in our provider data.
+	Matched bool `json:"matched"`
+}
+
+type InstitutionalView struct {
+	TypeOfBill      string `json:"typeOfBill,omitempty"`
+	Admitted        string `json:"admitted,omitempty"`
+	Discharged      string `json:"discharged,omitempty"`
+	AdmissionType   string `json:"admissionType,omitempty"`
+	DischargeStatus string `json:"dischargeStatus,omitempty"`
+	DRG             string `json:"drg,omitempty"`
+}
+
 type PendView struct {
 	Code        string `json:"code"`
 	Message     string `json:"message"`
@@ -160,6 +221,17 @@ type PendView struct {
 type LineView struct {
 	Number    int32    `json:"number"`
 	Procedure string   `json:"procedure"`
+	Modifiers []string `json:"modifiers"`
+	// Units as billed, e.g. "1" or "2.5".
+	Units string `json:"units,omitempty"`
+	// The line's service dates; To is empty for a single day.
+	From string `json:"from,omitempty"`
+	To   string `json:"to,omitempty"`
+	// The diagnosis codes the line points to, in pointer order.
+	Diagnoses []string `json:"diagnoses"`
+	Revenue   string   `json:"revenue,omitempty"`
+	NDC       string   `json:"ndc,omitempty"`
+	Remarks   []string `json:"remarks"`
 	POS       string   `json:"pos"`
 	Status    string   `json:"status"`
 	Denial    string   `json:"denial,omitempty"`
@@ -474,6 +546,7 @@ func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 		}
 	}
 	v.Raw, _ = protojson.Marshal(c)
+	v.Submitted = submittedView(c)
 
 	for _, p := range adj.GetPends() {
 		v.Pends = append(v.Pends, PendView{Code: p.GetCode(), Message: p.GetMessage(), Line: p.GetLineNumber(), Overridable: adjudication.Overridable(p.GetCode())})
@@ -488,6 +561,19 @@ func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 			Status: trimEnum(la.GetStatus().String(), "LINE_STATUS_"),
 			Charge: l.GetCharge().GetCents(), Allowed: la.GetPricing().GetAllowed().GetCents(), Paid: la.GetPaid().GetCents(),
 			Shares: []Share{}, CAS: []string{},
+			Modifiers: append([]string{}, l.GetModifiers()...),
+			Diagnoses: []string{},
+			Revenue:   l.GetRevenueCode(), NDC: l.GetNdc(),
+			Remarks: append([]string{}, la.GetRemarkCodes()...),
+		}
+		if u := l.GetUnitsMilli(); u != 0 {
+			lv.Units = strconv.FormatFloat(float64(u)/1000, 'f', -1, 64)
+		}
+		lv.From, lv.To = dateRange(l.GetServiceDates())
+		for _, ptr := range l.GetDiagnosisPointers() {
+			if i := int(ptr) - 1; i >= 0 && i < len(c.GetDiagnosisCodes()) {
+				lv.Diagnoses = append(lv.Diagnoses, c.GetDiagnosisCodes()[i])
+			}
 		}
 		if d := la.GetDenial(); d != nil {
 			lv.Denial = d.GetCode() + ": " + d.GetMessage()
@@ -564,6 +650,55 @@ func (s *Sim) claimView(c *claimsv1.Claim) *ClaimView {
 	case claimsv1.PaymentState_PAYMENT_STATE_RETURNED:
 		if final {
 			v.Actions = append(v.Actions, "reissue")
+		}
+	}
+	return v
+}
+
+// dateRange renders a range's start and, when it spans more than one
+// day, its end.
+func dateRange(r *commonv1.DateRange) (from, to string) {
+	from, to = dates.Format(r.GetStart()), dates.Format(r.GetEnd())
+	if to == from {
+		to = ""
+	}
+	return from, to
+}
+
+// submittedView collects what the claim carried as sent. Names from an 837
+// arrive in capitals and are shown in title case.
+func submittedView(c *claimsv1.Claim) *SubmittedView {
+	v := &SubmittedView{
+		Type:         trimEnum(c.GetType().String(), "CLAIM_TYPE_"),
+		Source:       trimEnum(c.GetSource().String(), "CLAIM_SOURCE_"),
+		PCN:          c.GetPatientControlNumber(),
+		TimelyFiling: dates.Format(c.GetTimelyFilingDate()),
+		Diagnoses:    append([]string{}, c.GetDiagnosisCodes()...),
+		Auths:        append([]string{}, c.GetAuthorizationNumbers()...),
+	}
+	v.From, v.To = dateRange(c.GetServiceDates())
+	person := func(p *claimsv1.SubmittedPerson) *PersonView {
+		if p == nil {
+			return nil
+		}
+		return &PersonView{
+			Name:         titleCase(p.GetName().GetFirst() + " " + p.GetName().GetLast()),
+			MemberNumber: p.GetMemberNumber(), Born: dates.Format(p.GetBirthDate()), Gender: p.GetGenderCode(),
+		}
+	}
+	party := func(p *claimsv1.ProviderRef) *PartyView {
+		if p == nil {
+			return nil
+		}
+		return &PartyView{Name: titleCase(p.GetName()), NPI: p.GetNpi(), TIN: p.GetTin(), Taxonomy: p.GetTaxonomyCode(), Matched: p.GetProviderId() != ""}
+	}
+	v.Subscriber, v.Patient = person(c.GetSubmittedSubscriber()), person(c.GetSubmittedPatient())
+	v.Billing, v.Rendering = party(c.GetBillingProvider()), party(c.GetRenderingProvider())
+	v.Referring, v.Facility = party(c.GetReferringProvider()), party(c.GetFacility())
+	if in := c.GetInstitutional(); in != nil {
+		v.Institutional = &InstitutionalView{
+			TypeOfBill: in.GetTypeOfBill(), Admitted: dates.Format(in.GetAdmissionDate()), Discharged: dates.Format(in.GetDischargeDate()),
+			AdmissionType: in.GetAdmissionTypeCode(), DischargeStatus: in.GetDischargeStatusCode(), DRG: in.GetDrg(),
 		}
 	}
 	return v
