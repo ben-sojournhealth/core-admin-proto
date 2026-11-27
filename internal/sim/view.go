@@ -159,7 +159,7 @@ type IntakeView struct {
 type SubmittedView struct {
 	// PROFESSIONAL, INSTITUTIONAL or DENTAL.
 	Type string `json:"type"`
-	// EDI_837, PAPER, PORTAL or API.
+	// EDI_837, PAPER or PORTAL.
 	Source string `json:"source"`
 	// Patient control number (CLM01).
 	PCN string `json:"pcn,omitempty"`

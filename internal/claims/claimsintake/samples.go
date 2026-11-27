@@ -24,7 +24,11 @@ type Sample struct {
 	Text     string `json:"text"`
 }
 
-type prov struct{ last, first, org, npi, tin, taxonomy string }
+type prov struct {
+	last, first, org, npi, tin, taxonomy string
+	// The billing address: street, city, state, ZIP; 100 Main St when empty.
+	addr [4]string
+}
 
 var (
 	chen  = prov{last: "CHEN", first: "MEI", npi: "1234567893", tin: "311234567", taxonomy: "207Q00000X"}
@@ -67,11 +71,45 @@ type extras struct {
 	// related cause OA.
 	onset, accident string
 	referring       *prov
-	referral        string // REF*9F
-	mrn             string // REF*EA
-	note            string
-	emergency       bool
-	other           *cob
+	// The rendering provider, when a group bills for one of its clinicians.
+	rendering *prov
+	// Where the service was performed, sent (loop 2310C) only when that
+	// is not the billing provider's address.
+	facility  *site
+	referral  string // REF*9F
+	mrn       string // REF*EA
+	note      string
+	emergency bool
+	other     *cob
+	// The first line's charge in cents, when it is not whole dollars.
+	cents int64
+	// Send the rendering provider (NM1*82) for an organization too.
+	renderOrg bool
+}
+
+// site is a service facility location: street, city, state, ZIP.
+type site struct {
+	name, npi string
+	addr      [4]string
+}
+
+// An organization's NPI is not a site: it can cover many sites or only
+// part of one, and need not be sent at all. The office and the imaging
+// center send none, and the hospital sends its health system's.
+var (
+	// Where Dr. Chen sees patients; the practice bills from 100 Main St.
+	office        = site{"WESTSIDE FAMILY MEDICINE", "", [4]string{"3150 W ILES AVE", "SPRINGFIELD", "IL", "627110000"}}
+	surgeryCenter = site{"LAKESIDE SURGERY CENTER", "1555666785", [4]string{"2200 LAKESIDE DR", "SPRINGFIELD", "IL", "627120000"}}
+	imagingCenter = site{"PRAIRIE RADIOLOGY ASSOCIATES", "", [4]string{"640 W MONROE ST", "SPRINGFIELD", "IL", "627040000"}}
+	hospital      = site{"PRAIRIE GENERAL HOSPITAL", "1555666801", [4]string{"1 HOSPITAL PLAZA", "SPRINGFIELD", "IL", "627010000"}}
+)
+
+// x12Amount writes cents as an X12 decimal: 180, 180.5 as 180.50.
+func x12Amount(cents int64) string {
+	if cents%100 == 0 {
+		return fmt.Sprint(cents / 100)
+	}
+	return fmt.Sprintf("%d.%02d", cents/100, cents%100)
 }
 
 type clm struct {
@@ -120,8 +158,13 @@ func file(icn, bhtDate, bhtTime string, sets ...txn) string {
 			} else {
 				w.Seg("NM1", "85", "1", c.billing.last, c.billing.first, "", "", "", "XX", c.billing.npi)
 			}
-			w.Seg("N3", "100 MAIN ST")
-			w.Seg("N4", "SPRINGFIELD", "IL", "627010000")
+			if a := c.billing.addr; a[0] != "" {
+				w.Seg("N3", a[0])
+				w.Seg("N4", a[1], a[2], a[3])
+			} else {
+				w.Seg("N3", "100 MAIN ST")
+				w.Seg("N4", "SPRINGFIELD", "IL", "627010000")
+			}
 			w.Seg("REF", "EI", c.billing.tin)
 			hl++
 			sub := hl
@@ -160,11 +203,17 @@ func file(icn, bhtDate, bhtTime string, sets ...txn) string {
 				home()
 				w.Seg("DMG", "D8", c.patient.dob, c.patient.sex)
 			}
-			total := 0
-			for _, l := range c.lines {
-				total += l.dollars
+			amount := func(i int) int64 {
+				if i == 0 && c.cents != 0 {
+					return c.cents
+				}
+				return int64(c.lines[i].dollars) * 100
 			}
-			charge := fmt.Sprint(total)
+			total := int64(0)
+			for i := range c.lines {
+				total += amount(i)
+			}
+			charge := x12Amount(total)
 			if c.noCharge {
 				charge = ""
 			}
@@ -206,9 +255,24 @@ func file(icn, bhtDate, bhtTime string, sets ...txn) string {
 			if r := c.referring; r != nil {
 				w.Seg("NM1", "DN", "1", r.last, r.first, "", "", "", "XX", r.npi)
 			}
-			if c.billing.org == "" {
+			if r := c.rendering; r != nil {
+				w.Seg("NM1", "82", "1", r.last, r.first, "", "", "", "XX", r.npi)
+				w.Seg("PRV", "PE", "PXC", r.taxonomy)
+			} else if c.billing.org == "" {
 				w.Seg("NM1", "82", "1", c.billing.last, c.billing.first, "", "", "", "XX", c.billing.npi)
 				w.Seg("PRV", "PE", "PXC", c.billing.taxonomy)
+			} else if c.renderOrg {
+				w.Seg("NM1", "82", "2", c.billing.org, "", "", "", "", "XX", c.billing.npi)
+				w.Seg("PRV", "PE", "PXC", c.billing.taxonomy)
+			}
+			if f := c.facility; f != nil {
+				if f.npi != "" {
+					w.Seg("NM1", "77", "2", f.name, "", "", "", "", "XX", f.npi)
+				} else {
+					w.Seg("NM1", "77", "2", f.name)
+				}
+				w.Seg("N3", f.addr[0])
+				w.Seg("N4", f.addr[1], f.addr[2], f.addr[3])
 			}
 			if o := c.other; o != nil {
 				w.Seg("SBR", "P", o.relationship, o.group, "", "", "", "", "", "CI")
@@ -230,7 +294,7 @@ func file(icn, bhtDate, bhtTime string, sets ...txn) string {
 			}
 			for i, l := range c.lines {
 				w.Seg("LX", fmt.Sprint(i+1))
-				w.Seg("SV1", "HC:"+l.proc, fmt.Sprint(l.dollars), "UN", "1", "", "", pointers, "", emergency)
+				w.Seg("SV1", "HC:"+l.proc, x12Amount(amount(i)), "UN", "1", "", "", pointers, "", emergency)
 				w.Seg("DTP", "472", "D8", l.dos)
 			}
 		}
@@ -258,6 +322,15 @@ var (
 	lucia  = person{"MORALES", "LUCIA", "19680714", "F", ""}
 
 	okonkwo = prov{last: "OKONKWO", first: "NGOZI", npi: "1122334455"}
+	// An emergency physician group, in network, and one of its physicians.
+	prairieEM = prov{org: "PRAIRIE EMERGENCY PHYSICIANS", npi: "1456789012", tin: "371234567", taxonomy: "207P00000X",
+		addr: [4]string{"1 HOSPITAL PLAZA STE 120", "SPRINGFIELD", "IL", "627010000"}}
+	// A radiology group, in network, and one of its radiologists. It bills
+	// from its business office and scans at its imaging office.
+	prairieRad = prov{org: "PRAIRIE RADIOLOGY ASSOCIATES", npi: "1678901234", tin: "372345678", taxonomy: "2085R0202X",
+		addr: [4]string{"200 COMMERCE CT STE 4", "SPRINGFIELD", "IL", "627080000"}}
+	marsh = prov{last: "MARSH", first: "HELEN", npi: "1789012346", taxonomy: "2085R0202X"}
+	reyes = prov{last: "REYES", first: "DANIEL", npi: "1345678909", taxonomy: "207P00000X"}
 )
 
 // homes are the families' addresses, by last name: street, city, state,

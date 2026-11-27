@@ -124,7 +124,7 @@ message Claim {
 
   // The claim number people see (examiners, providers, the 835), assigned
   // at intake as YYJJJ-S-NNNNN: two-digit year, Julian day received, source
-  // (E = EDI, P = paper, A = API or portal) and a daily sequence, e.g.
+  // (E = EDI, P = paper, W = web portal) and a daily sequence, e.g.
   // 26075-E-00012. `id` is the internal key and is never shown.
   //
   // Every version of a claim shares its number: a replacement or void
@@ -152,8 +152,8 @@ message Claim {
   SourceRecord source_record = 38;
   // For a replacement or void: the original, when it is known rather than
   // matched from payer_claim_control_number. Set when the system creates
-  // the version (AdjustClaim, VoidClaim), when an API submitter names it,
-  // or by an examiner. An input to adjudication, like pend_overrides.
+  // the version (AdjustClaim, VoidClaim), when the submitter names it by
+  // id, or by an examiner. An input to adjudication, like pend_overrides.
   ClaimLink original_link = 39;
 
   // Output only: set once a replacement or void of this claim is
@@ -365,8 +365,13 @@ enum ClaimSource {
   CLAIM_SOURCE_UNSPECIFIED = 0;
   CLAIM_SOURCE_EDI_837 = 1;
   CLAIM_SOURCE_PAPER = 2;
+  // Keyed into our portal by a provider or member.
   CLAIM_SOURCE_PORTAL = 3;
-  CLAIM_SOURCE_API = 4;
+
+  // Claims are not taken through a payer-specific API: electronic claims
+  // are 837s.
+  reserved 4;
+  reserved "CLAIM_SOURCE_API";
 }
 
 // ProviderRef is a provider as identified on the claim, plus the internal

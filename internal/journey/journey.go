@@ -68,10 +68,7 @@ func NewWithIntake(repos *repo.Repos) (*sim.Sim, *claimsintake.Processor, error)
 	if err != nil {
 		return nil, nil, err
 	}
-	intake := &claimsintake.Processor{
-		Repos: s.Repos, Claims: s.Claims, Now: s.Claims.Now, Logf: s.Claims.Logf,
-		Files: map[string][]byte{}, ReceiverID: claimsintake.OurID,
-	}
+	intake := s.Intake
 	files := map[int]claimsintake.WorkloadFile{}
 	for _, f := range claimsintake.Workload() {
 		files[f.Day] = f
