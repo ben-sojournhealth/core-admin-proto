@@ -1,0 +1,8 @@
+{
+  "id": "prov_prairie_em",
+  "npi": "1456789012",
+  "kind": "PROVIDER_KIND_ORGANIZATION",
+  "organizationName": "Prairie Emergency Physicians",
+  "taxonomyCodes": ["207P00000X"],
+  "status": "PROVIDER_STATUS_ACTIVE"
+}

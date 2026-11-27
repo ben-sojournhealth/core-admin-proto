@@ -21,8 +21,8 @@ Any of these can replace one of the three or make a fourth.
 
 ## Clean up before any capture
 
-- [ ] Hide the worktree badge (the green "project :port" chip, bottom left of every page).
-- [ ] Hide the "not built" labels in the Journey side menus (Disputes, Billing & funding).
+- [x] Hide the worktree badge (the green "project :port" chip, bottom left of every page): add `?capture` to the URL.
+- [ ] Hide the "not built" labels in the Journey side menus (Disputes, Billing & funding). Done for the Claims tab with `?capture`, which also hides Architecture and Reset; the other tabs are not done.
 - [ ] Hide the "not in order" and "listed, not ordered" captions on the adjudication map.
 - [ ] Hide "demo planned" and "out of scope for '28" anywhere they appear in frame.
 - [ ] Richer sample data in the Journey sandbox: multi-line claims, more than one provider, full member names, a claim with deductible and coinsurance (today every claim is one line from "Dr. Chen").
@@ -44,7 +44,7 @@ Useful URLs:
 | Page | URL |
 |---|---|
 | Examiner queue | `/journey/#/q/pended` |
-| Claim page | `/journey/#/claim/<claim number>` |
+| Claim page | `/journey/?capture#/claim/<claim number>` (the showcase claim is `26072-E-00003`; use `--window-size=1440,1440`) |
 | Employer page | `/journey/#/employers` |
 | Adjudication map | `/adjudication/` |
 | Domain map | `/` |

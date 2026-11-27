@@ -112,12 +112,12 @@ func TestAdmin(t *testing.T) {
 	for _, p := range a.Providers {
 		in[p.NPI] = p.InNetwork
 	}
-	if len(in) != 2 || !in["1234567893"] || in["1987654321"] {
+	if len(in) != 4 || !in["1234567893"] || !in["1456789012"] || !in["1678901234"] || in["1987654321"] {
 		t.Errorf("providers in network: %v", in)
 	}
 	// The underlying networks: direct contracts (no providers yet) and the
 	// rented PPO.
-	if len(a.Networks) != 2 || a.Networks[0].ID != "net_direct" || a.Networks[0].Providers != 0 || a.Networks[1].Providers != 1 || len(a.Contracts) != 1 || len(a.Contracts[0].Terms) != 2 {
+	if len(a.Networks) != 2 || a.Networks[0].ID != "net_direct" || a.Networks[0].Providers != 0 || a.Networks[1].Providers != 3 || len(a.Contracts) != 1 || len(a.Contracts[0].Terms) != 2 {
 		t.Errorf("networks %+v, contracts %+v", a.Networks, a.Contracts)
 	}
 

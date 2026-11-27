@@ -14,8 +14,10 @@
   --flash: #fff3bf; --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
   color-scheme: light;
 }
+/* Dark follows the system setting unless the URL says ?theme=light or
+   ?theme=dark (screenshots for people outside tech use light). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #101418; --panel: #171c22; --nav: #13181d; --ink: #e6eaef; --muted: #93a0b0; --line: #262e37;
     --brand: #2dd4bf; --brand-ink: #062320; --brand-soft: #123532;
     --plan: #2dd4bf; --member: #f0a04b; --writeoff: #2a323c;
@@ -24,6 +26,15 @@
     --flash: #3f3814; --shadow: none;
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #101418; --panel: #171c22; --nav: #13181d; --ink: #e6eaef; --muted: #93a0b0; --line: #262e37;
+  --brand: #2dd4bf; --brand-ink: #062320; --brand-soft: #123532;
+  --plan: #2dd4bf; --member: #f0a04b; --writeoff: #2a323c;
+  --amber: #f3c969; --amber-soft: #2e2611; --amber-line: #5c4a1c;
+  --red: #ff8f85; --red-soft: #3a1d1b; --green: #6fdc9f; --green-soft: #15301f; --gray-soft: #232a33;
+  --flash: #3f3814; --shadow: none;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -161,6 +172,8 @@ table.lines th { text-align: left; color: var(--muted); font-weight: 600; font-s
 table.lines td { padding: 8px 8px 8px 0; border-top: 1px solid var(--line); vertical-align: top; }
 table.lines .r { text-align: right; }
 .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 16px 20px; }
+/* ?capture in the URL: a clean frame for screenshots (docs/demo-checklist.md). */
+.capture .q .tag, .capture #reset, .capture .right a { display: none; }
 .fact small { display: block; font-size: 12px; color: var(--muted); }
 .fact b { display: block; font-size: 14px; overflow-wrap: anywhere; }
 .fact .sub { display: block; }
@@ -287,6 +300,11 @@ dialog input { width: 100%; margin-top: 3px; padding: 6px 9px; font: inherit; co
 <script src="tabs.js"></script>
 <script>
 "use strict";
+if (new URLSearchParams(location.search).has("capture")) document.documentElement.classList.add("capture");
+{
+  const theme = new URLSearchParams(location.search).get("theme");
+  if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+}
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const usd = (c) => (c / 100).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: c % 100 ? 2 : 0 });
@@ -311,7 +329,7 @@ const PEND_HELP = {
   PRIOR_AUTH_REQUIRED: "Confirm the authorization, then override.",
   POSSIBLE_DUPLICATE: "Check with the provider whether these are separate services.",
   NO_ELIGIBILITY: "Waiting on enrollment. Reprocess once coverage is loaded.",
-  NO_BENEFIT_MATCH: "The plan has no benefit for this service. It needs a plan design change; claims can't be denied by hand yet.",
+  NO_BENEFIT_MATCH: "This procedure code needs to be classified to a service category before the claim can process automatically.",
   NO_PRICE: "Waiting on a rate for this service.",
   MEMBER_NOT_FOUND: "Find the member from the patient and subscriber as sent. Linking by hand isn't built yet.",
   ORIGINAL_NOT_FOUND: "Find the original with the provider, from the patient control number or the EOP. Linking by hand isn't built yet.",
@@ -323,6 +341,9 @@ const pendName = (code) => PEND[code] || words(code);
 
 let S = null, D = null, prevClaims = {}, fresh = new Set();
 let lastQueue = "pended";
+// False until a queue has been opened: a claim opened straight from a link
+// goes back to the queue it belongs in.
+let queueVisited = false;
 
 const QUEUES = [
   { id: "pended", label: "Pended", work: true, test: (c) => c.status === "PENDED" },
@@ -391,6 +412,7 @@ async function route() {
   if (kind === "search") return renderList({ label: "Search", test: matches(decodeURIComponent(a || "")) }, null, true);
   const q = QUEUES.find((x) => x.id === a) || QUEUES[0];
   lastQueue = q.id + (b ? "/" + b : "");
+  queueVisited = true;
   renderList(q, b);
 }
 window.addEventListener("hashchange", route);
@@ -475,11 +497,12 @@ function workHTML(c) {
   let html = "";
   for (const [i, p] of c.pends.entries()) {
     const help = PEND_HELP[p.code] || p.message;
+    // Reprocess itself is in the page's top right; a pend only adds its override.
     const act = p.overridable
-      ? `<input data-note="${i}" placeholder="Note, e.g. auth PA-7731 confirmed by phone"><button class="btn primary small" data-override="${i}">Override &amp; reprocess</button>`
-      : `<button class="btn small" data-recheck>Reprocess</button>`;
+      ? `<div class="do"><input data-note="${i}" placeholder="Note, e.g. auth PA-7731 confirmed by phone"><button class="btn primary small" data-override="${i}">Override &amp; reprocess</button></div>`
+      : "";
     html += `<div class="work"><h3>${esc(pendName(p.code))}</h3><p>${esc(p.message)}</p>
-      <div class="do">${act}</div>${help !== p.message ? `<div class="hint" style="margin-top:8px">${esc(help)}</div>` : ""}</div>`;
+      ${act}${help !== p.message ? `<div class="hint" style="margin-top:8px">${esc(help)}</div>` : ""}</div>`;
   }
   if (c.superseded === "REPLACEMENT") html += `<div class="note">Superseded: replaced by ${esc(c.supersededBy || "a later claim")}. Its own decision stands as history.</div>`;
   if (c.superseded === "VOID") html += `<div class="note">Superseded: voided by ${esc(c.supersededBy || "a later claim")}. Its own decision stands as history.</div>`;
@@ -493,7 +516,7 @@ const daySpan = (from, to) => to ? `${day(from)} – ${day(to)}` : day(from);
 const dx = (code) => code.length > 3 && !code.includes(".") ? code.slice(0, 3) + "." + code.slice(3) : code;
 const pair = (k, v, mono) => v ? `<div class="pair"><span>${k}</span><span${mono ? ` class="mono"` : ""}>${esc(v)}</span></div>` : "";
 const GENDER = { F: "Female", M: "Male", U: "Unknown" };
-const SOURCE = { EDI_837: "EDI 837", PAPER: "Paper", PORTAL: "Portal", API: "API" };
+const SOURCE = { EDI_837: "EDI 837", PAPER: "Paper", PORTAL: "Portal" };
 
 // The new fields are read from the stored claim itself (c.raw, the claim
 // as protojson): they are as sent, so there is nothing to derive.
@@ -519,6 +542,23 @@ function partyBox(title, p, chips) {
   return `<div class="box"><small>${title}</small><b>${esc(tc(p.name) || "–")}</b>
     ${pair("NPI", p.npi, true)}${pair("TIN", tin, true)}${pair("Taxonomy", p.taxonomyCode, true)}${chips || ""}
     ${more.length ? `<details class="mini"><summary>Address, contacts, ids</summary>${more.map((x) => `<div class="sub">${esc(x)}</div>`).join("")}</details>` : ""}</div>`;
+}
+
+// Where the service happened: the place of service code with the service
+// facility beside it, so a mismatch shows. The site is its address: an
+// organization's NPI can cover many sites or only part of one, so the NPI
+// is kept behind the click, as sent. An 837P names a facility only when
+// the service was not at the billing provider's address.
+const POS = { "02": "Telehealth", "10": "Telehealth at home", "11": "Office", "12": "Home", "19": "Off-campus outpatient hospital", "20": "Urgent care", "21": "Inpatient hospital", "22": "Outpatient hospital", "23": "Emergency room", "24": "Ambulatory surgery center", "31": "Skilled nursing facility", "49": "Independent clinic", "81": "Independent laboratory" };
+function whereFact(R, pos, institutional) {
+  const f = R.serviceFacility, bill = R.billingProvider;
+  const place = pos.map((p) => POS[p] ? `${POS[p]} (${p})` : "Place of service " + p).join(", ");
+  if (!f && !place) return "";
+  const subs = f ? [tc(f.name), addrText(f.address)]
+    : institutional || !bill ? [] : ["No facility sent: billing provider's address", addrText(bill.address)];
+  const more = f ? [f.npi && "NPI sent " + f.npi, ...(f.contacts || []).map(contactText), ...(f.secondaryIds || []).map((x) => `Id ${x.qualifier} ${x.value}`)].filter(Boolean) : [];
+  return `<div class="fact"><small>Where</small><b>${esc(place || "–")}</b>${subs.filter(Boolean).map((x, n) => `<span class="sub"${f && !n ? ` style="color:inherit"` : ""}>${esc(x)}</span>`).join("")}
+    ${more.length ? `<details class="mini"><summary>Ids sent</summary>${more.map((x) => `<div class="sub mono">${esc(x)}</div>`).join("")}</details>` : ""}</div>`;
 }
 
 const FREQUENCY = { ORIGINAL: "Original", REPLACEMENT: "Corrected claim", VOID: "Void" };
@@ -580,7 +620,7 @@ function submittedHTML(c) {
   const i = s.institutional, in_ = c.intake, txn = R.submittedTransaction || {};
   const kind = { ENCOUNTER: "Encounter (no payment expected)", SUBROGATION_DEMAND: "Subrogation demand" }[en(txn.type, "TRANSACTION_TYPE_")];
   let facts = who +
-    fact("Service dates", esc(daySpan(s.from, s.to)), pos.length ? "Place of service " + esc(pos.join(", ")) : "") +
+    fact("Service dates", esc(daySpan(s.from, s.to))) + whereFact(R, pos, !!i) +
     fact("Claim type", esc(words(s.type).replace(/^./, (x) => x.toUpperCase())), esc(FREQUENCY[c.frequency] || ""), kind ? esc(kind) : "") +
     fact("Received", esc(day(c.received.slice(0, 10))), s.timelyFiling ? "Timely filing from " + esc(day(s.timelyFiling)) : "") +
     fact("Submitted by", esc(SOURCE[s.source] || "–"), in_ && in_.clearinghouse ? "via " + esc(in_.clearinghouse) : "");
@@ -627,7 +667,7 @@ function submittedHTML(c) {
   const billing = R.billingProvider;
   let providers = prov("Billing", billing, billing ? (billing.providerId ? "" : `<span class="chip todo">Not in provider data</span> `) + tier : "") +
     prov("Rendering", R.renderingProvider) + prov("Referring", R.referringProvider) + prov("Primary care", R.primaryCareProvider) +
-    prov("Service facility", R.serviceFacility) + prov("Supervising", R.supervisingProvider) + prov("Facility", R.facility);
+    prov("Supervising", R.supervisingProvider) + prov("Facility", R.facility);
   if (R.payToAddress) providers += `<div class="box"><small>Pay-to address</small><div style="font-size:13px;margin-top:2px">${esc(addrText(R.payToAddress))}</div></div>`;
 
   const unmapped = R.unmappedSegments || [];
@@ -720,18 +760,25 @@ function corrHTML(c) {
   return `<div class="corr">${verb} <a href="${esc(claimHref({ id: k.originalId, number: k.original }))}" class="mono">${esc(k.original)}</a>${how ? ` <span class="sub">${esc(how)}</span>` : ""}</div>`;
 }
 
+// The patient's full name as sent, or the matched member's first name.
+function headName(c) {
+  const R = c.raw || {}, n = (R.submittedPatient || R.submittedSubscriber || {}).name;
+  return n && n.last ? tc([n.first, n.last].filter(Boolean).join(" ")) : c.member;
+}
+
 function renderClaim() {
   const c = D.claim;
   const final = c.actions.includes("adjust");
   const decided = !["PENDED", "RECEIVED"].includes(c.status);
+  if (!queueVisited) lastQueue = (QUEUES.find((q) => q.id !== "all" && q.test(c)) || QUEUES.find((q) => q.id === "all")).id;
   const backQ = QUEUES.find((q) => q.id === lastQueue.split("/")[0]);
   $("#main").innerHTML = `
     <a class="back" href="#/q/${esc(lastQueue)}">← ${esc(backQ ? (lastQueue.includes("/") ? pendName(lastQueue.split("/")[1]) : backQ.label) : "Back")}</a>
     <div class="claimhead">
       <div><h1 class="num">${esc(c.number)} ${decisionChips(c, ` style="vertical-align:4px"`)}</h1>
         ${corrHTML(c)}
-        <div class="who">${[c.member, D.card, c.provider, c.dos].filter(Boolean).map(esc).join(" · ")}</div></div>
-      <div class="tools">${final ? `<button class="btn" data-act="adjust">Adjust…</button><button class="btn" data-act="void">Void…</button>` : ""}${c.actions.includes("reopen") ? `<button class="btn" data-act="reopen" title="Nothing has been reported yet: back to pended, to be re-run in place">Reopen…</button>` : ""}</div>
+        <div class="who">${[headName(c), D.card, c.provider, c.dos && day(c.dos)].filter(Boolean).map(esc).join(" · ")}</div></div>
+      <div class="tools">${c.actions.includes("reprocess") ? `<button class="btn primary" data-recheck title="Run adjudication again on today's data">Reprocess</button>` : ""}${final ? `<button class="btn" data-act="adjust">Adjust…</button><button class="btn" data-act="void">Void…</button>` : ""}${c.actions.includes("reopen") ? `<button class="btn" data-act="reopen" title="Nothing has been reported yet: back to pended, to be re-run in place">Reopen…</button>` : ""}</div>
     </div>
     <div class="cols">
       <div>

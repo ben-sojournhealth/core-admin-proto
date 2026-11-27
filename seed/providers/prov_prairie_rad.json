@@ -1,0 +1,8 @@
+{
+  "id": "prov_prairie_rad",
+  "npi": "1678901234",
+  "kind": "PROVIDER_KIND_ORGANIZATION",
+  "organizationName": "Prairie Radiology Associates",
+  "taxonomyCodes": ["2085R0202X"],
+  "status": "PROVIDER_STATUS_ACTIVE"
+}

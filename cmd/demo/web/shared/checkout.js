@@ -5,6 +5,8 @@
 (() => {
   const c = window.CHECKOUT;
   if (!c) return;
+  // ?capture in the URL: no badge, for screenshots (docs/demo-checklist.md).
+  if (new URLSearchParams(location.search).has("capture")) return;
   let hash = 0;
   for (const ch of c.name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   const color = c.main ? "#8b949e" : `hsl(${hash % 360} 70% 62%)`;
