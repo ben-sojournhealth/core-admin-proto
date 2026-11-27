@@ -27,6 +27,11 @@ var employerDemos = []Demo{
 		Links:   []Link{{Component: Eligibility}},
 	},
 	{
+		ID: "employer-portal", Title: "Employer Portal", Status: Live, Path: "/employer-portal/",
+		Summary: "What one employer sees of its own plan: roster on any date with each member's history, 834 files and what each loop did, a file test, headcount and covered lives. The rest of the scope is stubbed.",
+		Links:   []Link{{Component: EmployerPortal}},
+	},
+	{
 		ID: "plan-design", Title: "Plan Design", Status: Planned,
 		Summary: "Configure a customer's benefits and test the design against claims.",
 		Links:   []Link{{Component: PlanDesign}},

@@ -1,10 +1,11 @@
 // Which checkout this demo comes from (the main one or a worktree), on every
 // page: a badge in the bottom-left corner, colored per checkout, and its
 // name before the tab's title. The server injects window.CHECKOUT into
-// every page (cmd/demo/checkout.go).
+// every page (cmd/demo/checkout.go). A page opened with ?shot, for a
+// screenshot, shows neither.
 (() => {
   const c = window.CHECKOUT;
-  if (!c) return;
+  if (!c || new URLSearchParams(location.search).has("shot")) return;
   let hash = 0;
   for (const ch of c.name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   const color = c.main ? "#8b949e" : `hsl(${hash % 360} 70% 62%)`;

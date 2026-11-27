@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"coreadmin/internal/common/protodoc"
+	"coreadmin/internal/common/repo"
 	"coreadmin/internal/common/store"
 	"coreadmin/internal/common/x12"
 	"coreadmin/internal/employer/eligibility"
@@ -18,12 +19,17 @@ import (
 // enrollmentServer is the Enrollment Intake and Eligibility demos: 834
 // files into a sandbox of their own, applied to eligibility. The sandbox
 // starts with the customers, plans and groups from the seed data, no
-// members, and the open-enrollment full file loaded.
+// members, each client's open-enrollment full file loaded, and then about
+// a hundred more Acme employees and their families, some of whom have
+// left and continue on COBRA.
 type enrollmentServer struct {
-	mu   sync.Mutex
-	proc *enrollmentintake.Processor
-	elig *eligibility.Service
-	now  func() time.Time
+	mu sync.Mutex
+	// The sandbox's stores, for the Employer Portal, which shows the same
+	// sandbox.
+	repos *repo.Repos
+	proc  *enrollmentintake.Processor
+	elig  *eligibility.Service
+	now   func() time.Time
 }
 
 func newEnrollment() (*enrollmentServer, error) {
@@ -35,7 +41,12 @@ func newEnrollment() (*enrollmentServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &enrollmentServer{proc: sb.Intake, elig: sb.Elig, now: sb.Now}, nil
+	// Acme's wider workforce, so the Employer Portal has a roster of a
+	// realistic size.
+	if err := sb.Load(context.Background(), enrollmentintake.LargeRoster()...); err != nil {
+		return nil, err
+	}
+	return &enrollmentServer{repos: sb.Repos, proc: sb.Intake, elig: sb.Elig, now: sb.Now}, nil
 }
 
 type enrollmentSample struct {
@@ -69,6 +80,10 @@ func (e *enrollmentServer) handle(f func(r *http.Request) (any, error)) http.Han
 	}
 }
 
+// enrollment is the sandbox Enrollment Intake, Eligibility and the
+// Employer Portal share; registerEnrollment sets it.
+var enrollment *enrollmentServer
+
 // registerEnrollment serves Enrollment Intake and Eligibility, which share
 // one sandbox.
 func registerEnrollment(mux *http.ServeMux) error {
@@ -77,6 +92,7 @@ func registerEnrollment(mux *http.ServeMux) error {
 	if err != nil {
 		return err
 	}
+	enrollment = en
 	const ei = "/enrollment-intake"
 	mux.HandleFunc("GET "+ei+"/api/state", en.handle(func(r *http.Request) (any, error) { return en.state(r.Context()) }))
 	// Explanations of the enrollment record's fields, from the .proto
@@ -113,7 +129,7 @@ func registerEnrollment(mux *http.ServeMux) error {
 		if err != nil {
 			return nil, err
 		}
-		en.proc, en.elig, en.now = fresh.proc, fresh.elig, fresh.now
+		en.repos, en.proc, en.elig, en.now = fresh.repos, fresh.proc, fresh.elig, fresh.now
 		return en.state(r.Context())
 	}))
 
@@ -161,7 +177,7 @@ func registerEnrollment(mux *http.ServeMux) error {
 		if err != nil {
 			return nil, err
 		}
-		en.proc, en.elig, en.now = fresh.proc, fresh.elig, fresh.now
+		en.repos, en.proc, en.elig, en.now = fresh.repos, fresh.proc, fresh.elig, fresh.now
 		return en.elig.Overview(r.Context(), en.now())
 	}))
 	return nil

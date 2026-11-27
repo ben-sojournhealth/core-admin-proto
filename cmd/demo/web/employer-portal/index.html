@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Employer Portal</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #18202b; --muted: #687384; --line: #e2e6ec;
+  --brand: #0f766e; --brand-ink: #ffffff; --brand-soft: #e3f3f1;
+  --amber: #8a5a00; --amber-soft: #fff4d9; --amber-line: #f2d48b;
+  --red: #b42318; --red-soft: #fdecea; --green: #157347; --green-soft: #e2f4ea; --gray-soft: #edf0f3;
+  --blue: #1d4ed8; --blue-soft: #e6edff;
+  --track: #f3f5f8; --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101418; --panel: #171c22; --ink: #e6eaef; --muted: #93a0b0; --line: #262e37;
+    --brand: #2dd4bf; --brand-ink: #062320; --brand-soft: #123532;
+    --amber: #f3c969; --amber-soft: #2e2611; --amber-line: #5c4a1c;
+    --red: #ff8f85; --red-soft: #3a1d1b; --green: #6fdc9f; --green-soft: #15301f; --gray-soft: #232a33;
+    --blue: #93b4ff; --blue-soft: #1a2440;
+    --track: #12171c; --shadow: none;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: inherit; }
+button, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+
+.top { height: 54px; display: flex; align-items: center; gap: 16px; padding: 0 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 17px; text-decoration: none; white-space: nowrap; }
+.brand svg { width: 22px; height: 22px; color: var(--brand); }
+.who { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.who select { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 5px 8px; font-weight: 600; color: var(--ink); }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.top .right a { text-decoration: none; }
+.top .right a:hover { color: var(--brand); }
+
+.shell { display: grid; grid-template-columns: 224px minmax(0, 1fr); min-height: calc(100vh - 54px); }
+nav { background: var(--panel); border-right: 1px solid var(--line); padding: 12px 10px 40px; }
+nav h4 { margin: 16px 8px 5px; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+nav button { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left; border: 0; background: none; border-radius: 7px; padding: 5px 9px; font-weight: 550; }
+nav button:hover { background: var(--gray-soft); }
+nav button.on { background: var(--brand-soft); color: var(--brand); font-weight: 650; }
+nav button.stub { color: var(--muted); }
+nav button .count { margin-left: auto; }
+nav button .count.warn { background: var(--amber-soft); color: var(--amber); }
+nav button.stub::after { content: ""; margin-left: auto; width: 6px; height: 6px; border-radius: 50%; border: 1.5px dashed var(--muted); }
+.wrap { max-width: 1240px; padding: 22px 26px 60px; }
+@media (max-width: 860px) { .shell { grid-template-columns: 1fr; } nav { border-right: 0; border-bottom: 1px solid var(--line); } }
+.head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.head h1 { font-size: 22px; margin: 0; letter-spacing: -.015em; }
+.head .end { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.head input[type=date], .head input[type=search], .head select { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 4px 8px; }
+.count { font-size: 11.5px; font-weight: 650; background: var(--gray-soft); color: var(--muted); border-radius: 999px; padding: 0 7px; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 5px 12px; font-weight: 600; white-space: nowrap; }
+.btn:hover { border-color: var(--brand); color: var(--brand); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--muted); font-size: 12px; font-weight: 600; text-decoration: underline dotted; }
+.linkbtn:hover { color: var(--brand); }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.ph { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.ph b { font-weight: 650; font-size: 15px; }
+.ph .end { margin-left: auto; color: var(--muted); font-size: 13px; }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; background: var(--gray-soft); color: var(--muted); white-space: nowrap; }
+.chip.active, .chip.accepted, .chip.applied { background: var(--green-soft); color: var(--green); }
+.chip.ended, .chip.rejected, .chip.exception { background: var(--red-soft); color: var(--red); }
+.chip.ending, .chip.partial, .chip.pending, .chip.proposed { background: var(--amber-soft); color: var(--amber); }
+.chip.upcoming, .chip.cobra, .chip.full { background: var(--blue-soft); color: var(--blue); }
+
+.notice { display: flex; align-items: center; gap: 10px; background: var(--amber-soft); border: 1px solid var(--amber-line); color: var(--amber); border-radius: 10px; padding: 9px 14px; margin-bottom: 14px; font-weight: 600; }
+.notice a { margin-left: auto; font-weight: 600; }
+
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+.tile { padding: 14px 16px; }
+.tile .n { font-size: 32px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.tile .l { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.tile.lead .n { color: var(--brand); }
+.cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 14px; align-items: start; }
+@media (max-width: 860px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cols { grid-template-columns: 1fr; } }
+
+.bars { padding: 12px 16px 16px; display: grid; gap: 12px; }
+.bar .lab { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+.bar .lab b { font-weight: 650; }
+.bar .tr { height: 12px; background: var(--track); border-radius: 6px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--brand); border-radius: 6px; min-width: 0; }
+
+.limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 14px 16px; }
+.limit { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.limit .l { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.limit .v { display: flex; gap: 18px; margin-top: 4px; }
+.limit .v div b { display: block; font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.limit .v div span { font-size: 12px; color: var(--muted); }
+details.more { border-top: 1px solid var(--line); }
+details.more summary { padding: 10px 16px; cursor: pointer; font-weight: 600; color: var(--muted); list-style: none; }
+details.more summary::-webkit-details-marker { display: none; }
+details.more summary::before { content: "▸ "; }
+details.more[open] summary::before { content: "▾ "; }
+
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 9px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 10px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tr.fam { cursor: pointer; }
+tr.fam:hover td { background: var(--gray-soft); }
+tr.fam td:first-child::before { content: "▸"; color: var(--muted); margin-right: 8px; }
+tr.fam.open td:first-child::before { content: "▾"; }
+tr.fam b { font-weight: 650; }
+.dots { display: inline-flex; gap: 4px; vertical-align: middle; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.dot.active { background: var(--green); } .dot.ending { background: var(--amber); } .dot.ended { background: var(--red); } .dot.upcoming { background: var(--blue); }
+tr.people td { background: var(--bg); padding: 4px 16px 12px 38px; }
+.person { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.person:last-child { border-bottom: 0; }
+.person .chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.person .chip { font-size: 11px; padding: 0 7px; }
+.track { position: relative; height: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.track .span { position: absolute; top: 3px; bottom: 3px; border-radius: 3px; background: var(--brand); }
+.track .span.cobra { background: var(--blue); }
+.track .today { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--amber); }
+.months { position: relative; height: 15px; font-size: 11px; color: var(--muted); }
+.months span { position: absolute; }
+@media (max-width: 860px) { .person { grid-template-columns: 1fr; } }
+.acts { display: flex; gap: 5px; flex-wrap: wrap; }
+.empty { padding: 48px 20px; text-align: center; color: var(--muted); }
+body.shot .top .right a { display: none; }
+.legend { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; margin-left: 8px; }
+.legend i { width: 18px; height: 8px; border-radius: 3px; background: var(--brand); }
+.legend i.cobra { background: var(--blue); margin-left: 8px; }
+tr.file { cursor: pointer; }
+tr.file:hover td { background: var(--gray-soft); }
+tr.sub td { background: var(--bg); padding: 6px 16px 12px 30px; }
+.loop { display: grid; grid-template-columns: 190px 110px 100px minmax(0, 1fr); gap: 10px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.loop:last-child { border-bottom: 0; }
+.hist { margin: 8px 0 2px; border-left: 2px solid var(--line); padding-left: 12px; display: grid; gap: 7px; font-size: 13px; }
+.hist .v { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#main > .panel + .panel, .cols > div > .panel + .panel { margin-top: 14px; }
+.terms { padding: 4px 16px 10px; }
+.terms div { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.terms div:last-child { border-bottom: 0; }
+.terms .end { margin-left: auto; color: var(--muted); }
+.check { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 1000px) { .check { grid-template-columns: 1fr; } }
+.check textarea { display: block; width: 100%; height: 330px; border: 0; border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; padding: 10px 14px; background: var(--track); color: var(--ink); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; white-space: pre; }
+.cols12 { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; align-items: end; height: 170px; padding: 16px 16px 0; }
+.cols12 .c { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 4px; }
+.cols12 .c b { font-size: 13px; }
+.cols12 .c i { display: block; width: 100%; background: var(--brand); border-radius: 5px 5px 0 0; min-height: 2px; }
+.cols12 .c.future i { background: var(--brand-soft); }
+.cols12 .c.future b { color: var(--muted); }
+.mlab { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; padding: 6px 16px 14px; font-size: 11.5px; color: var(--muted); text-align: center; }
+.big { padding: 16px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.big .n { font-size: 40px; font-weight: 700; letter-spacing: -.02em; color: var(--brand); line-height: 1; }
+/* Not built: the page's shape, with nothing in it. */
+.stubmark { border: 1.5px dashed var(--muted); color: var(--muted); background: none; }
+.ghost .panel { border-style: dashed; box-shadow: none; background: transparent; }
+.ghost .tile .n { color: var(--muted); font-weight: 500; }
+.ghost .bone { height: 10px; border-radius: 5px; background: var(--gray-soft); }
+.ghost td { padding: 13px 16px; }
+.boxes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+.boxes .panel { padding: 14px 16px; margin: 0; }
+.boxes b { display: block; margin-bottom: 6px; }
+@media (max-width: 860px) { .boxes { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="brand" href="#/">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V6l8-3 8 3v15"/><path d="M9 21v-5h6v5"/><path d="M9 9h1M14 9h1M9 12.5h1M14 12.5h1"/></svg>
+    Employer Portal
+  </a>
+  <label class="who">Signed in as <select id="who" title="Choosing an employer stands in for signing in"></select><span id="place"></span></label>
+  <div class="right">
+    <span id="today"></span>
+    <a href="/enrollment-intake/" title="Load an 834 into the same sandbox">Enrollment Intake</a>
+    <a href="/">All demos</a>
+  </div>
+</div>
+<div class="shell">
+  <nav id="nav"></nav>
+  <div class="wrap" id="main"></div>
+</div>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const nice = (s) => String(s).replaceAll("_", " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
+const cap = (s) => String(s).replace(/^./, (c) => c.toUpperCase());
+const day = (iso) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+const when = (iso) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" });
+const usd = (cents) => "$" + (cents / 100).toLocaleString("en-US", { maximumFractionDigits: cents % 100 ? 2 : 0 });
+async function get(p) { const r = await fetch(p); if (!r.ok) throw new Error(await r.text()); return r.json(); }
+async function post(p, b) { const r = await fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }); if (!r.ok) throw new Error(await r.text()); return r.json(); }
+
+// ?shot, for a screenshot: the links to the other demos are left out. The
+// menu stays whole, with what isn't built still marked.
+const SHOT = new URLSearchParams(location.search).has("shot");
+if (SHOT) document.body.classList.add("shot");
+
+let V = null;             // the signed-in employer's view
+let ON = "";              // the roster's date, when it isn't today
+let FIND = "";            // the roster's search
+const open = new Set();   // families expanded on the roster
+const openFiles = new Set();
+const histories = {};     // member id -> history, once asked for
+let checkText = "", checkResult = null;
+
+const TIERS = { EMPLOYEE: "Employee only", EMPLOYEE_SPOUSE: "Employee + spouse", EMPLOYEE_CHILDREN: "Employee + children", FAMILY: "Family" };
+const tier = (t) => TIERS[t] ?? nice(t);
+const head = (title, extra = "") => `<div class="head"><h1>${esc(title)}</h1>${extra}</div>`;
+
+// The menu. Entries with a stub aren't built: their page shows its shape
+// only. phi: shows individual members' claims, so it needs a role that
+// may see them.
+const MENU = [
+  ["", [["overview", "Overview"]]],
+  ["Enrollment", [["roster", "Roster"], ["files", "Files"], ["check", "Test a file"], ["review", "Full-file review"],
+    ["changes", "Add or change a person", { tiles: ["New hire", "Life event", "Termination", "Address change"], cols: ["Person", "Change", "Effective", "Submitted by", "Status"] }],
+    ["cards", "ID cards", { tiles: ["Cards issued", "Reprints requested"], cols: ["Member", "Card number", "Issued", "Reprint"] }]]],
+  ["Plan", [["benefits", "Benefits"],
+    ["documents", "Documents", { cols: ["Document", "Plan", "Effective", "Version"] }],
+    ["modeling", "Design modeling", { tiles: ["Paid under today's design", "Paid under the change", "Difference", "Members affected"], bars: ["Deductible", "Coinsurance", "Out-of-pocket max", "Copays"], cols: ["Benefit", "Today", "Proposed", "Plan pays", "Members pay"] }]]],
+  ["Claims", [
+    ["spend", "Spend", { tiles: ["Paid this year", "Per employee per month", "In-network", "Billed vs allowed"], bars: ["Inpatient", "Outpatient", "Professional", "Other"], cols: ["Month", "Claims", "Billed", "Allowed", "Plan paid", "Members paid"] }],
+    ["claimants", "High-cost claimants", { phi: true, tiles: ["Over $50,000", "Share of spend"], cols: ["Claimant", "Paid this year", "Share of specific deductible", "Open claims"] }],
+    ["pended", "Pended claims", { tiles: ["Pended", "Over 30 days"], cols: ["Reason", "Claims", "Billed", "Oldest"] }],
+    ["retro", "Retro-termination impact", { tiles: ["Retro-terminations", "Claims paid after the end date", "Paid"], cols: ["Member", "Coverage ended", "Recorded", "Claims", "Paid"] }]]],
+  ["Funding", [
+    ["funding", "Funding requests", { tiles: ["Requested this year", "Open request", "Account balance"], cols: ["Payment run", "Claims", "Requested", "Funded", "Status"] }],
+    ["fees", "Admin fees"]]],
+  ["Stop-loss", [
+    ["stoploss", "Stop-loss", { tiles: ["Specific deductible", "At 50% or more", "Reimbursed", "Aggregate attachment"], bars: ["Paid to date vs attachment point"], cols: ["Claimant", "Paid", "Share of deductible", "Laser", "Filed", "Reimbursed"] }]]],
+  ["Compliance", [["compliance", "Reporting"]]],
+  ["Account", [
+    ["users", "Users & access", { tiles: ["Users", "May see PHI"], cols: ["User", "Role", "May see PHI", "Last sign-in"] }],
+    ["activity", "Access log", { cols: ["When", "User", "Viewed", "Member"] }],
+    ["service", "Service performance", { tiles: ["Claim turnaround", "Auto-adjudicated", "Financial accuracy", "Calls answered"], cols: ["Measure", "Target", "This quarter", "Met"] }],
+    ["messages", "Messages", { cols: ["Subject", "From", "Opened", "Status"] }]]],
+];
+const entry = (id) => { for (const [, items] of MENU) for (const it of items) if (it[0] === id) return it; };
+
+function nav(view) {
+  const badge = { roster: V.families.reduce((n, f) => n + f.members.length, 0), files: V.files.length };
+  const pending = V.proposals.filter((p) => !p.approved).length;
+  $("#nav").innerHTML = MENU.map(([group, items]) => (group ? `<h4>${group}</h4>` : "") + items.map(([id, label, stub]) =>
+    `<button class="${id === view ? "on" : ""} ${stub ? "stub" : ""}" data-go="#/${id}" ${stub ? `title="Not built"` : ""}>${label}${
+      id === "review" && pending ? `<span class="count warn num">${pending}</span>` : badge[id] != null ? `<span class="count num">${badge[id]}</span>` : ""}</button>`).join("")).join("");
+}
+
+// A page that isn't built: its shape, with nothing in it.
+function stub(title, s) {
+  $("#main").innerHTML = head(title, `<span class="chip stubmark">Not built</span>${s.phi ? `<span class="chip stubmark" title="Shows individual members' claims: only for users allowed to see them">PHI role</span>` : ""}`) + `<div class="ghost">
+    ${s.tiles ? `<div class="tiles" style="grid-template-columns:repeat(${s.tiles.length},minmax(0,1fr))">${s.tiles.map((t) => `<div class="panel tile"><div class="n">–</div><div class="l">${esc(t)}</div></div>`).join("")}</div>` : ""}
+    ${s.bars ? `<div class="panel" style="margin-bottom:14px"><div class="bars">${s.bars.map((b) => `<div class="bar"><div class="lab"><span>${esc(b)}</span></div><div class="tr"></div></div>`).join("")}</div></div>` : ""}
+    ${s.cols ? `<div class="panel"><div class="tablewrap"><table><thead><tr>${s.cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+      <tbody>${[70, 55, 62].map((w) => `<tr>${s.cols.map((_, i) => `<td><div class="bone" style="width:${i ? w - i * 6 : w + 20}%"></div></td>`).join("")}</tr>`).join("")}</tbody></table></div></div>` : ""}
+  </div>`;
+}
+
+function share(s) {
+  if (!s) return `<span class="muted">–</span>`;
+  if (!s.covered) return `<span class="muted">Not covered</span>`;
+  const parts = [];
+  if (s.copay) parts.push(usd(s.copay) + " copay");
+  if (s.coinsuranceBps) parts.push(s.coinsuranceBps / 100 + "%");
+  if (!parts.length) parts.push("No charge");
+  return esc(parts.join(" + ")) + (s.deductibleApplies ? ` <span class="muted">after deductible</span>` : "");
+}
+
+function plan(p, benefitsOpen) {
+  const pair = (ind, fam) => `<div class="v"><div><b class="num">${ind ? usd(ind) : "–"}</b><span>individual</span></div><div><b class="num">${fam ? usd(fam) : "–"}</b><span>family</span></div></div>`;
+  const inn = p.tiers.find((t) => !t.outOfNetwork) ?? p.tiers[0];
+  return `<div class="panel">
+    <div class="ph"><b>${esc(p.name)}</b><span class="chip">${esc(p.type)}</span><span class="end">${day(p.start)} – ${day(p.end)} · <b class="num">${p.covered}</b> covered</span></div>
+    ${inn ? `<div class="limits">
+      <div class="limit"><div class="l">Deductible</div>${pair(inn.deductibleIndividual, inn.deductibleFamily)}</div>
+      <div class="limit"><div class="l">Out-of-pocket max</div>${pair(inn.oopIndividual, inn.oopFamily)}</div>
+    </div>` : ""}
+    <details class="more" ${benefitsOpen ? "open" : ""}><summary>Benefits</summary><div class="tablewrap"><table>
+      <thead><tr><th>Service</th>${p.tiers.map((t) => `<th>${esc(t.name)}</th>`).join("")}</tr></thead>
+      <tbody>
+        <tr><td class="muted">Deductible</td>${p.tiers.map((t) => `<td class="num">${t.deductibleIndividual ? usd(t.deductibleIndividual) : "–"}${t.deductibleFamily ? " / " + usd(t.deductibleFamily) : ""}</td>`).join("")}</tr>
+        <tr><td class="muted">Out-of-pocket max</td>${p.tiers.map((t) => `<td class="num">${t.oopIndividual ? usd(t.oopIndividual) : "–"}${t.oopFamily ? " / " + usd(t.oopFamily) : ""}</td>`).join("")}</tr>
+        ${p.benefits.map((b) => `<tr><td>${esc(b.category)}</td>${b.shares.map((s) => `<td>${share(s)}</td>`).join("")}</tr>`).join("")}
+      </tbody></table></div></details>
+  </div>`;
+}
+
+const onDate = () => (V.today !== V.now ? `<span class="chip upcoming">On ${day(V.today)}</span>` : "");
+
+function overview() {
+  const max = Math.max(1, ...V.tiers.map((t) => t.subscribers));
+  const exceptions = V.files.reduce((n, f) => n + f.exceptions, 0);
+  $("#main").innerHTML = head(V.employer.name, onDate()) + `
+    ${V.pendingTerms ? `<div class="notice">${V.pendingTerms} termination${V.pendingTerms > 1 ? "s" : ""} from a full file awaiting review<a href="#/review">Review</a></div>` : ""}
+    ${exceptions ? `<div class="notice">${exceptions} member loop${exceptions > 1 ? "s" : ""} could not be applied<a href="#/files">Files</a></div>` : ""}
+    <div class="tiles">
+      <div class="panel tile lead"><div class="n num">${V.covered}</div><div class="l">Covered${V.today === V.now ? " today" : ""}</div></div>
+      <div class="panel tile"><div class="n num">${V.subscribers}</div><div class="l">Employees</div></div>
+      <div class="panel tile"><div class="n num">${V.dependents}</div><div class="l">Dependents</div></div>
+      <div class="panel tile"><div class="n num">${V.cobra}</div><div class="l">On COBRA</div></div>
+    </div>
+    <div class="cols">
+      <div class="panel"><div class="ph"><b>Subscribers by tier</b></div><div class="bars">
+        ${V.tiers.map((t) => `<div class="bar"><div class="lab"><span>${esc(tier(t.tier))}</span><b class="num">${t.subscribers}</b></div>
+          <div class="tr"><div class="fill" style="width:${(t.subscribers / max) * 100}%"></div></div></div>`).join("")}
+      </div></div>
+      <div>${V.plans.map((p) => plan(p)).join("") || `<div class="panel empty">No plan on file</div>`}</div>
+    </div>`;
+}
+
+function benefits() {
+  $("#main").innerHTML = head("Benefits") + (V.plans.map((p) => plan(p, true)).join("") || `<div class="panel empty">No plan on file</div>`);
+}
+
+// The year around the roster's date, for the coverage bars.
+function year() {
+  const y = +V.today.slice(0, 4);
+  return { y, from: Date.UTC(y, 0, 1), to: Date.UTC(y + 1, 0, 1) };
+}
+function track(spans) {
+  const { from, to } = year();
+  const pos = (iso, end) => {
+    const t = Date.parse(iso + "T00:00:00Z") + (end ? 864e5 : 0);
+    return Math.min(100, Math.max(0, ((t - from) / (to - from)) * 100));
+  };
+  return `<div class="track">${spans.map((s) => {
+    const a = pos(s.from), b = s.to ? pos(s.to, true) : 100;
+    return b > a ? `<div class="span ${s.cobra ? "cobra" : ""}" style="left:${a}%;width:${b - a}%" title="${esc(s.plan)} · ${esc(tier(s.tier))}${s.cobra ? " · COBRA" : ""} · ${day(s.from)} – ${s.to ? day(s.to) : "ongoing"}"></div>` : "";
+  }).join("")}<div class="today" style="left:${pos(V.today)}%" title="${day(V.today)}"></div></div>`;
+}
+function monthsAxis() {
+  const { y, from, to } = year();
+  return `<div class="months">${[0, 3, 6, 9].map((mo) => `<span style="left:${((Date.UTC(y, mo, 1) - from) / (to - from)) * 100}%">${new Date(Date.UTC(y, mo, 1)).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })}</span>`).join("")}</div>`;
+}
+const status = (m) => `<span class="chip ${m.status}">${m.status === "ending" ? "Ends " + day(m.ends) : m.status === "ended" && m.ends ? "Ended " + day(m.ends) : m.status === "upcoming" ? "Starts " + day(m.starts) : m.status === "none" ? "No coverage" : nice(m.status)}</span>`;
+
+// A member's history: each version as a bar, with what caused it.
+function history(m) {
+  const h = histories[m.id];
+  if (!h) return "";
+  return `<div class="person"><div class="hist">${h.versions.map((v) => `<div><div class="v"><b>v${v.version}</b><span class="muted">${when(v.recorded)}</span>${v.changes.map((c) => `<span class="chip">${esc(c)}</span>`).join("")}</div>
+      <div class="muted">${esc(v.title)}${v.file ? ` · <span class="mono">${esc(v.file)}</span>` : ""}</div></div>`).join("")}</div>
+    <div style="display:grid;gap:${h.versions.length > 1 ? 21 : 0}px">${h.versions.map((v) => track(v.spans)).join("")}</div></div>`;
+}
+
+function roster() {
+  const tools = `<span class="legend"><i></i>Active<i class="cobra"></i>COBRA</span><span class="end">${onDate()}<input type="search" id="find" placeholder="Find a person" value="${esc(FIND)}"><label>Coverage on <input type="date" id="on" value="${esc(V.today)}"></label>${V.today !== V.now ? `<button class="btn" id="today">Today</button>` : ""}</span>`;
+  if (!V.families.length) { $("#main").innerHTML = head("Roster", tools) + `<div class="panel empty">Nobody enrolled yet</div>`; wireRoster(); return; }
+  $("#main").innerHTML = head("Roster", tools) + `<div class="panel"><div class="tablewrap"><table>
+    <thead><tr><th>Family</th><th>Tier</th><th>Members</th><th>Subscriber</th></tr></thead><tbody>
+    ${V.families.filter(found).map((f) => {
+      const sub = f.members.find((m) => m.relationship === "SELF") ?? f.members[0];
+      const isOpen = open.has(f.subscriberNumber);
+      return `<tr class="fam ${isOpen ? "open" : ""}" data-fam="${esc(f.subscriberNumber)}">
+        <td><b>${esc(f.name)}</b> <span class="mono muted">${esc(f.subscriberNumber)}</span></td>
+        <td>${f.tier ? esc(tier(f.tier)) : ""}</td>
+        <td><span class="dots">${f.members.map((m) => `<span class="dot ${m.status}" title="${esc(m.name)}"></span>`).join("")}</span> <span class="muted num">${f.members.length}</span></td>
+        <td>${status(sub)}${f.members.some((m) => m.cobra) ? ` <span class="chip cobra">COBRA</span>` : ""}${f.members.some((m) => m.pendingEnd) ? ` <span class="chip pending">Review</span>` : ""}</td></tr>
+        ${isOpen ? `<tr class="people"><td colspan="4">
+          <div class="person"><div></div>${monthsAxis()}</div>
+          ${f.members.map((m) => `<div class="person">
+            <div><b>${esc(m.name)}</b> <span class="muted">${esc(m.relationship === "SELF" ? "Subscriber" : nice(m.relationship))}</span> <button class="linkbtn" data-hist="${esc(m.id)}">${histories[m.id] ? "Hide history" : "History"}</button>
+              <div class="chips">${status(m)}${m.cobra ? `<span class="chip cobra">COBRA</span>` : ""}${m.pendingEnd ? `<span class="chip pending" title="Left off a full file; nothing changes until it is approved">Proposed end ${day(m.pendingEnd)}</span>` : ""}<span class="chip mono">${esc(m.card)}</span></div></div>
+            ${track(m.spans)}</div>${history(m)}`).join("")}
+        </td></tr>` : ""}`;
+    }).join("")}
+    </tbody></table></div></div>`;
+  wireRoster();
+}
+// The roster's search: a name, subscriber number or card number.
+const found = (f) => {
+  const q = FIND.trim().toLowerCase();
+  return !q || f.subscriberNumber.toLowerCase().includes(q) || f.members.some((m) => m.name.toLowerCase().includes(q) || m.card.toLowerCase().includes(q));
+};
+function wireRoster() {
+  $("#find").oninput = (e) => {
+    FIND = e.target.value;
+    roster();
+    const box = $("#find");
+    box.focus();
+    box.setSelectionRange(FIND.length, FIND.length);
+  };
+  document.querySelectorAll("tr.fam").forEach((r) => r.onclick = () => {
+    const k = r.dataset.fam;
+    open.has(k) ? open.delete(k) : open.add(k);
+    roster();
+  });
+  document.querySelectorAll("[data-hist]").forEach((b) => b.onclick = async () => {
+    const id = b.dataset.hist;
+    if (histories[id]) delete histories[id];
+    else histories[id] = await get(`api/member?customer=${encodeURIComponent(V.employer.id)}&id=${encodeURIComponent(id)}`);
+    roster();
+  });
+  $("#on").onchange = (e) => { ON = e.target.value === V.now ? "" : e.target.value; load(V.employer.id); };
+  if ($("#today")) $("#today").onclick = () => { ON = ""; load(V.employer.id); };
+}
+
+function files() {
+  if (!V.files.length) { $("#main").innerHTML = head("Files") + `<div class="panel empty">No files received</div>`; return; }
+  $("#main").innerHTML = head("Files", `<span class="end"><a class="btn" href="#/check" style="text-decoration:none">Test a file</a></span>`) + `<div class="panel"><div class="tablewrap"><table>
+    <thead><tr><th>File</th><th>Received</th><th>From</th><th>Result</th><th>Members</th></tr></thead><tbody>
+    ${V.files.map((f) => `<tr class="file fam ${openFiles.has(f.id) ? "open" : ""}" data-file="${esc(f.id)}">
+      <td><span class="mono">${esc(f.filename)}</span>${f.full ? ` <span class="chip full">Full file</span>` : ""}</td>
+      <td class="muted" style="white-space:nowrap">${when(f.received)}</td>
+      <td>${esc(cap(f.from))}</td>
+      <td><span class="chip ${f.status}">${esc(nice(f.status))}</span>${f.exceptions ? ` <span class="chip exception">${f.exceptions} not applied</span>` : ""}</td>
+      <td><div class="acts">${f.actions.map((a) => `<span class="chip"><b class="num">${a.count}</b> ${esc(a.action)}</span>`).join("") || `<span class="muted">–</span>`}</div></td></tr>
+      ${openFiles.has(f.id) ? `<tr class="sub"><td colspan="5">
+        ${f.error ? `<div class="loop" style="grid-template-columns:1fr"><span><span class="chip rejected">Refused</span> ${esc(f.error)}</span></div>` : ""}
+        ${f.errors.map((e) => `<div class="loop" style="grid-template-columns:1fr"><span><span class="chip rejected">Set refused</span> ${esc(e)}</span></div>`).join("")}
+        ${f.loops.map((l) => `<div class="loop"><b>${esc(l.name)}</b><span>${esc(cap(l.action))}</span><span><span class="chip ${l.outcome}">${esc(l.outcome ? cap(l.outcome) : "–")}</span></span><span class="muted">${esc(l.message)}</span></div>`).join("")}
+        ${!f.loops.length && !f.error && !f.errors.length ? `<span class="muted">No member loops loaded</span>` : ""}
+      </td></tr>` : ""}`).join("")}
+    </tbody></table></div></div>`;
+  document.querySelectorAll("tr.file").forEach((r) => r.onclick = () => {
+    const k = r.dataset.file;
+    openFiles.has(k) ? openFiles.delete(k) : openFiles.add(k);
+    files();
+  });
+}
+
+function checkOut() {
+  const c = checkResult;
+  if (!c) return `<div class="panel empty">Nothing is loaded by a test</div>`;
+  const loops = c.sets.reduce((n, s) => n + s.loops.length, 0);
+  return `<div class="panel"><div class="ph">
+      <span class="chip ${c.error ? "rejected" : c.sets.every((s) => s.accepted) ? "accepted" : "partial"}">${c.error ? "Would be refused" : c.sets.every((s) => s.accepted) ? "Would be accepted" : "Some sets refused"}</span>
+      ${c.sender ? `<span class="chip ${c.senderOk ? "" : "rejected"}" title="${c.senderOk ? "Set up to send your enrollment" : "Not set up to send your enrollment"}">${esc(c.sender)}${c.senderOk ? "" : " · not your sender"}</span>` : ""}
+      ${c.full ? `<span class="chip full">Full file</span>` : ""}<span class="end"><b class="num">${loops}</b> member loop${loops === 1 ? "" : "s"}</span></div>
+    ${c.error ? `<div class="terms"><div>${esc(c.error)}</div></div>` : ""}
+    ${c.sets.map((s) => `${s.errors.length ? `<div class="terms">${s.errors.map((e) => `<div><span class="chip rejected">Set ${esc(s.control)}</span>${esc(e)}</div>`).join("")}</div>` : ""}
+      ${s.loops.length ? `<div class="tablewrap"><table><thead><tr><th>Person</th><th>Asks to</th><th>Coverage</th></tr></thead><tbody>
+      ${s.loops.map((l) => `<tr><td><b>${esc(l.name)}</b> <span class="muted">${esc(l.relationship)}</span></td>
+        <td>${esc(l.action ?? "")}${l.reason ? ` <span class="muted">${esc(l.reason)}</span>` : ""}${l.cobra ? ` <span class="chip cobra">COBRA</span>` : ""}${l.unrecognized.map((u) => ` <span class="chip partial" title="A code we don't recognize, kept as sent">${esc(u)}</span>`).join("")}</td>
+        <td class="mono">${l.coverage.map(esc).join("<br>") || `<span class="muted">–</span>`}</td></tr>`).join("")}</tbody></table></div>` : ""}`).join("")}
+  </div>`;
+}
+async function check() {
+  $("#main").innerHTML = head("Test a file", `<span class="end"><select id="sample"><option value="">Try a sample…</option></select><label class="btn">Choose file<input type="file" id="pick" hidden></label><button class="btn primary" id="run">Test</button></span>`) + `<div class="check">
+    <div class="panel"><div class="ph"><b>834</b><span class="end">read as intake would · nothing is loaded</span></div><textarea id="text" spellcheck="false" placeholder="Paste an 834">${esc(checkText)}</textarea></div>
+    <div id="out">${checkOut()}</div></div>`;
+  const run = async () => {
+    checkText = $("#text").value;
+    if (!checkText.trim()) return;
+    try { checkResult = await post("api/check", { Customer: V.employer.id, Text: checkText }); }
+    catch (e) { checkResult = { error: e.message, sets: [] }; }
+    $("#out").innerHTML = checkOut();
+  };
+  $("#run").onclick = run;
+  $("#pick").onchange = async (e) => { if (e.target.files[0]) { $("#text").value = await e.target.files[0].text(); run(); } };
+  const samples = await get("api/samples?customer=" + encodeURIComponent(V.employer.id));
+  const sel = $("#sample");
+  if (!sel) return;
+  sel.innerHTML += samples.map((s, i) => `<option value="${i}">${esc(s.title)}</option>`).join("");
+  sel.onchange = () => { if (sel.value !== "") { $("#text").value = samples[+sel.value].text; run(); } };
+}
+
+function review() {
+  $("#main").innerHTML = head("Full-file review") + (V.proposals.map((p) => `<div class="panel">
+    <div class="ph"><span class="mono">${esc(p.file)}</span><span class="chip">${esc(cap(p.from))}</span>
+      <span class="chip ${p.approved ? "accepted" : "pending"}">${p.approved ? "Approved" + (p.approvedBy ? " by " + esc(p.approvedBy) : "") : "Awaiting review"}</span>
+      <span class="end">effective ${day(p.effective)} · <b class="num">${p.terms.length}</b> left off</span></div>
+    <div class="terms">${p.terms.map((t) => `<div><b>${esc(t.name)}</b>${t.cobra ? `<span class="chip cobra">COBRA</span>` : ""}<span class="end">coverage would end ${day(t.end)}</span></div>`).join("") || `<div class="muted">Everyone on file was in it</div>`}</div>
+  </div>`).join("") || `<div class="panel empty">No full file has left anyone off</div>`);
+}
+
+function fees() {
+  const max = Math.max(1, ...V.months.map((m) => m.employees));
+  const mon = (iso) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+  $("#main").innerHTML = head("Admin fees") + `
+    <div class="panel"><div class="ph"><b>Subscribers covered on the 1st</b><span class="end">${V.now.slice(0, 4)} · lighter months are ahead</span></div>
+      <div class="cols12">${V.months.map((m) => `<div class="c ${m.future ? "future" : ""}" title="${m.members} covered in all · subscribers include COBRA"><b class="num">${m.employees}</b><i style="height:${(m.employees / max) * 100}%"></i></div>`).join("")}</div>
+      <div class="mlab">${V.months.map((m) => `<span>${mon(m.month)}</span>`).join("")}</div></div>
+    <div class="ghost" style="margin-top:14px"><div class="head" style="margin-bottom:10px"><b>Invoices</b><span class="chip stubmark">Not built</span></div>
+      <div class="panel"><div class="tablewrap"><table><thead><tr>${["Month", "Subscribers", "Rate", "Amount", "Status"].map((c) => `<th>${c}</th>`).join("")}</tr></thead>
+      <tbody>${[70, 55].map((w) => `<tr>${[0, 1, 2, 3, 4].map((i) => `<td><div class="bone" style="width:${w - i * 6}%"></div></td>`).join("")}</tr>`).join("")}</tbody></table></div></div></div>`;
+}
+
+function compliance() {
+  $("#main").innerHTML = head("Reporting") + (V.lives.map((l) => `<div class="panel">
+    <div class="ph"><b>Average covered lives</b><span class="chip">${esc(l.plan)}</span><span class="end">for the PCORI fee · actual count · to date</span></div>
+    <div class="big"><span class="n num">${(l.lifeDays / l.days).toFixed(1)}</span><span class="muted">${day(l.from)} – ${day(l.through)} · <span class="num">${l.days}</span> days · <span class="num">${l.lifeDays.toLocaleString("en-US")}</span> covered days</span></div>
+  </div>`).join("") || `<div class="panel empty">No plan period has started</div>`) + `
+    <div class="ghost boxes">${[["1095-C", "Covered individuals by month"], ["Form 5500", "Participant counts · Schedule C"], ["RxDC", "Prescription drug and health care spending"]]
+      .map(([t, d]) => `<div class="panel"><b>${t}</b><span class="chip stubmark">Not built</span><div class="muted" style="margin-top:8px">${d}</div></div>`).join("")}</div>`;
+}
+
+const VIEWS = { overview, roster, files, check, review, benefits, fees, compliance };
+function render() {
+  if (!V) return;
+  let view = location.hash.split("/")[1];
+  if (!entry(view)) view = "overview";
+  $("#place").textContent = V.place;
+  $("#today").textContent = day(V.now);
+  nav(view);
+  document.querySelectorAll("[data-go]").forEach((b) => b.onclick = () => location.hash = b.dataset.go);
+  const [, label, s] = entry(view);
+  s ? stub(label, s) : VIEWS[view]();
+}
+
+async function load(customer) {
+  V = await get("api/view?customer=" + encodeURIComponent(customer) + (ON ? "&on=" + ON : ""));
+  try { localStorage.setItem("employer-portal.customer", customer); } catch {}
+  route();
+}
+
+// #/roster/<subscriber number>[,<subscriber number>...] opens the roster
+// with those families expanded.
+function route() {
+  const [, view, fam] = location.hash.split("/");
+  if (view === "roster" && fam) for (const f of decodeURIComponent(fam).split(",")) open.add(f);
+  render();
+}
+window.onhashchange = route;
+(async () => {
+  const es = await get("api/employers");
+  const sel = $("#who");
+  sel.innerHTML = es.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join("");
+  let saved = null;
+  try { saved = localStorage.getItem("employer-portal.customer"); } catch {}
+  const pick = new URLSearchParams(location.search).get("customer") ?? saved;
+  if (es.some((e) => e.id === pick)) sel.value = pick;
+  sel.onchange = () => { open.clear(); openFiles.clear(); ON = ""; checkResult = null; checkText = ""; for (const k in histories) delete histories[k]; load(sel.value); };
+  if (es.length) await load(sel.value);
+})().catch((e) => { $("#main").innerHTML = `<div class="panel empty">${esc(e.message)}</div>`; });
+</script>
+</body>
+</html>

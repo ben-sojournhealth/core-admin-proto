@@ -12,8 +12,8 @@
 // /claims-lifecycle/api/), and registers its routes from its own file
 // here. Demo state is in the local Postgres, in a schema per sandbox,
 // shared by every browser tab; Reset starts over from the seed data.
-// Journey and Claims Intake share one sandbox, as do Enrollment Intake and
-// Eligibility.
+// Journey and Claims Intake share one sandbox, as do Enrollment Intake,
+// Eligibility and the Employer Portal.
 package main
 
 import (
@@ -43,6 +43,7 @@ var registrations = []func(*http.ServeMux) error{
 	registerLifecycle,
 	registerJourney,
 	registerEnrollment,
+	registerEmployerPortal, // after registerEnrollment: it shows that sandbox
 	registerRemittance,
 	registerProviderIntake,
 	registerServiceDefinitions,

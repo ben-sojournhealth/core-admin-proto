@@ -530,15 +530,18 @@ func (d *deriver) hasSubscriber(unit string) bool {
 
 // customer matches a sponsor to a customer by federal tax id.
 func (d *deriver) customer(sp *eligibilityv1.EnrollmentParty) *customerv1.Customer {
-	if sp.GetIdQualifier() != "FI" {
-		return nil
-	}
 	for _, c := range d.customers {
-		if c.GetEin() == sp.GetId() {
+		if IsSponsor(c, sp) {
 			return c
 		}
 	}
 	return nil
+}
+
+// IsSponsor reports whether an 834's sponsor is the customer: the sponsor
+// is identified by federal tax id, and it is the customer's.
+func IsSponsor(c *customerv1.Customer, sp *eligibilityv1.EnrollmentParty) bool {
+	return sp.GetIdQualifier() == "FI" && sp.GetId() != "" && c.GetEin() == sp.GetId()
 }
 
 func (d *deriver) customerByID(id string) *customerv1.Customer {

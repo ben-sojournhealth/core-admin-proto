@@ -91,12 +91,14 @@ type SpanView struct {
 }
 
 type VersionView struct {
-	Version  int32      `json:"version"`
-	Recorded string     `json:"recorded"`
-	Input    string     `json:"input,omitempty"`
-	Title    string     `json:"title"`
-	Reason   string     `json:"reason,omitempty"`
-	Spans    []SpanView `json:"spans"`
+	Version  int32  `json:"version"`
+	Recorded string `json:"recorded"`
+	Input    string `json:"input,omitempty"`
+	Title    string `json:"title"`
+	// The file the input came in, if it came in one.
+	File   string     `json:"file,omitempty"`
+	Reason string     `json:"reason,omitempty"`
+	Spans  []SpanView `json:"spans"`
 	// What changed from the version before.
 	Changes []string `json:"changes"`
 }
@@ -211,7 +213,7 @@ func (s *Service) Member(ctx context.Context, id string, today time.Time) (*Memb
 		vv := VersionView{Version: v.GetVersion(), Recorded: v.GetRecordedTime().AsTime().Format(time.RFC3339), Input: v.GetInputId(),
 			Reason: v.GetReason(), Spans: spanViews(v.GetMember()), Changes: changes(prev, v.GetMember())}
 		if in := byID[v.GetInputId()]; in != nil {
-			_, vv.Title, _ = s.describeInput(ctx, in)
+			_, vv.Title, vv.File = s.describeInput(ctx, in)
 		} else {
 			vv.Title = "Regenerated"
 		}

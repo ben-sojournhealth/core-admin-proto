@@ -25,6 +25,8 @@ type Sandbox struct {
 	Elig   *eligibility.Service
 	Intake *enrollmentintake.Processor
 	clock  time.Time
+	// How far the clock moves per step: a minute, a second during Load.
+	step time.Duration
 }
 
 // Prepare loads the seed customers, plans and groups into repos, which
@@ -64,7 +66,14 @@ func NewSandboxIn(empty *repo.Repos) (*Sandbox, error) {
 	return s, nil
 }
 
-func (s *Sandbox) tick() time.Time { s.clock = s.clock.Add(time.Minute); return s.clock }
+func (s *Sandbox) tick() time.Time {
+	step := s.step
+	if step == 0 {
+		step = time.Minute
+	}
+	s.clock = s.clock.Add(step)
+	return s.clock
+}
 
 // Now is the sandbox's current time, without moving it.
 func (s *Sandbox) Now() time.Time { return s.clock }
@@ -86,6 +95,19 @@ func (s *Sandbox) send(ctx context.Context, x enrollmentintake.Sample) error {
 	}
 	if job.GetCounts().GetRecordsErrored() > 0 {
 		return fmt.Errorf("%s: %d member loop(s) not loaded", x.Filename, job.GetCounts().GetRecordsErrored())
+	}
+	return nil
+}
+
+// Load loads 834 files, in order. They can be large, so the clock moves a
+// second per step while they load, and the sandbox's date stays put.
+func (s *Sandbox) Load(ctx context.Context, files ...enrollmentintake.Sample) error {
+	s.step = time.Second
+	defer func() { s.step = 0 }()
+	for _, x := range files {
+		if err := s.send(ctx, x); err != nil {
+			return err
+		}
 	}
 	return nil
 }
