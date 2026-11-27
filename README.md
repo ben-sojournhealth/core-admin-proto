@@ -76,7 +76,7 @@ To add a demo: add it to its domain's file in `internal/demos/` (`claims.go`, `e
 
 The tabs read each domain's stores as they stand in the sandbox (`journey.GetAdmin`). What isn't built shows as such in each tab's side menu: disputes, billing & funding, vendor intake, employer funding, bank reconciliation. Stop-loss exposure is empty until paid claims post to it, and releasing a run here doesn't write an 835. Enrollment exceptions and full-file terminations are worked in Eligibility, which has its own sandbox.
 
-It runs its own sandbox (`internal/journey`), pre-loaded with two weeks of claims across four families so the queues start with work in them. Claims Intake loads files into the same sandbox. Reset returns to that starting point.
+It runs its own sandbox (`internal/journey`), pre-loaded with two weeks of claims across four families so the queues start with work in them. The claims arrive as 837 files through Claims Intake, one file per day (`claimsintake.Workload`), so they carry what a provider would send. Claims Intake loads more files into the same sandbox. Reset returns to that starting point.
 
 ## Domains
 

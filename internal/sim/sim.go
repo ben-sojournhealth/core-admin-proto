@@ -2,6 +2,11 @@
 // deterministic clock, a plain-language event log, and one Action type
 // that drives everything. The demo UI and the scenario library both speak
 // Actions, so anything clickable is also scriptable and testable.
+//
+// Every claim the sandbox submits is written as an 837P file of its own
+// and loaded through claims intake, so claims arrive as they would from a
+// clearinghouse: as sent, with nothing matched. No claim is submitted any
+// other way (none through a portal, for now).
 package sim
 
 import (
@@ -21,9 +26,11 @@ import (
 	providerv1 "coreadmin/gen/coreadmin/provider/v1"
 	"coreadmin/internal/claims"
 	"coreadmin/internal/claims/adjudication"
+	"coreadmin/internal/claims/claimsintake"
 	"coreadmin/internal/common/dates"
 	"coreadmin/internal/common/repo"
 	"coreadmin/internal/common/store"
+	"coreadmin/internal/common/x12"
 	"coreadmin/internal/seed"
 	seeddata "coreadmin/seed"
 )
@@ -113,6 +120,9 @@ type LogEntry struct {
 type Sim struct {
 	Repos  *repo.Repos
 	Claims *claims.Service
+	// Intake loads 837 files into the sandbox, and keeps them. Every claim
+	// the sandbox submits arrives through it, in a file of its own.
+	Intake *claimsintake.Processor
 
 	// ShortIDs gives new original claims readable ids (clm_001, ...) and
 	// names later versions clm_001-2, clm_001-3, as the claim number does.
@@ -125,6 +135,26 @@ type Sim struct {
 	log    []*LogEntry
 	cur    *LogEntry
 	nextID int
+	// Files the sandbox has written, for their control numbers.
+	nextFile int
+	// The id to give the claim intake is handing over, and what became
+	// of it (see receiver).
+	assignID     string
+	lastReceived *claimsv1.Claim
+	lastErr      error
+}
+
+// receiver is what intake hands claims to: the claims service, noting the
+// result, and naming the claim when the sandbox has a name for it.
+type receiver struct{ s *Sim }
+
+func (r receiver) Receive(ctx context.Context, c *claimsv1.Claim) (*claimsv1.Claim, error) {
+	if r.s.assignID != "" {
+		c.Id = r.s.assignID
+	}
+	out, err := r.s.Claims.Receive(ctx, c)
+	r.s.lastReceived, r.s.lastErr = out, err
+	return out, err
 }
 
 // NewIn returns a freshly seeded sandbox in repos, which must be empty.
@@ -147,6 +177,10 @@ func NewIn(repos *repo.Repos) (*Sim, error) {
 	ledger := &adjudication.StoreLedger{Records: s.Repos.FamilyAccumulators, Now: s.now}
 	engine := &adjudication.DefaultEngine{Repos: s.Repos, Ledger: ledger, Now: s.now, Version: "sandbox-1"}
 	s.Claims = &claims.Service{Repos: s.Repos, Engine: engine, Ledger: ledger, Now: s.now, Logf: s.logf}
+	s.Intake = &claimsintake.Processor{
+		Repos: s.Repos, Claims: receiver{s}, Now: s.now, Logf: s.logf,
+		Files: map[string][]byte{}, ReceiverID: claimsintake.OurID,
+	}
 	s.UseShortIDs(true)
 	return s, nil
 }
@@ -186,7 +220,7 @@ var versioned = regexp.MustCompile(`^(.+)-(\d+)$`)
 
 // Resolve turns a claim reference into an internal id. A reference is an
 // id, a short name with a version (clm_A-2), or a claim number with or
-// without a version (26075-A-00001-2). Unknown references come back
+// without a version (26075-E-00001-2). Unknown references come back
 // unchanged, so the caller reports "no claim".
 func (s *Sim) Resolve(ref string) string {
 	ctx := context.Background()
@@ -282,13 +316,17 @@ func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result)
 	}
 	switch a.Type {
 	case "process":
-		c, err := s.buildClaim(ctx, a.Claim)
+		sub, err := s.newSubmission(ctx, a.Claim)
 		if err != nil {
 			entry.Title = "Process claim"
 			return err
 		}
 		if a.Preview {
-			entry.Title = "Estimate " + s.claimLabel(c)
+			entry.Title = "Estimate " + s.submissionLabel(sub, nil)
+			c, err := s.parsed(sub)
+			if err != nil {
+				return err
+			}
 			r, err := s.Claims.EstimateClaim(ctx, &claimsv1.EstimateClaimRequest{Claim: c})
 			if err != nil {
 				return err
@@ -296,19 +334,26 @@ func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result)
 			res.Preview = s.claimView(r.GetClaim())
 			return nil
 		}
-		entry.Title = "Process " + s.claimLabel(c)
-		r, err := s.Claims.ProcessClaim(ctx, &claimsv1.ProcessClaimRequest{Claim: c})
+		entry.Title = "Process " + s.submissionLabel(sub, nil)
+		c, err := s.ingest(ctx, sub)
 		if err != nil {
 			return err
 		}
-		entry.Title = "Process " + s.claimLabel(r.GetClaim())
-		res.ClaimID = r.GetClaim().GetId()
+		entry.Title = "Process " + s.submissionLabel(sub, c)
+		res.ClaimID = c.GetId()
 
 	case "race":
 		entry.Title = fmt.Sprintf("Process %d claims at once", len(a.Claims))
 		var cs []*claimsv1.Claim
 		for _, spec := range a.Claims {
-			c, err := s.buildClaim(ctx, spec)
+			sub, err := s.newSubmission(ctx, spec)
+			if err != nil {
+				return err
+			}
+			// Arriving at the same instant is what a file cannot do: these
+			// are the claims as their files would carry them, handed over
+			// together.
+			c, err := s.parsed(sub)
 			if err != nil {
 				return err
 			}
@@ -407,20 +452,20 @@ func (s *Sim) apply(ctx context.Context, a Action, entry *LogEntry, res *Result)
 		if spec == nil {
 			spec = &ClaimSpec{}
 		}
-		c, err := s.correct(ctx, orig, spec)
-		if err != nil {
-			return err
-		}
-		c.Frequency, entry.Title = claimsv1.ClaimFrequency_CLAIM_FREQUENCY_REPLACEMENT, "Provider's corrected claim for "+s.label(a.ClaimID)
+		frequency := "7"
+		entry.Title = "Provider's corrected claim for " + s.label(a.ClaimID)
 		if a.Type == "providerVoid" {
-			c.Frequency, entry.Title = claimsv1.ClaimFrequency_CLAIM_FREQUENCY_VOID, "Provider's void of "+s.label(a.ClaimID)
+			frequency, entry.Title = "8", "Provider's void of "+s.label(a.ClaimID)
 		}
-		c.PayerClaimControlNumber, c.OriginalClaimId, c.OriginalLink = claims.DisplayNumber(orig), "", nil
-		r, err := s.Claims.ProcessClaim(ctx, &claimsv1.ProcessClaimRequest{Claim: c})
+		sub, err := s.resubmission(ctx, orig, spec, frequency)
 		if err != nil {
 			return err
 		}
-		res.ClaimID = r.GetClaim().GetId()
+		c, err := s.ingest(ctx, sub)
+		if err != nil {
+			return err
+		}
+		res.ClaimID = c.GetId()
 
 	case "payment":
 		entry.Title = fmt.Sprintf("Bank: %s %s", s.label(a.ClaimID), a.Event)
@@ -468,8 +513,43 @@ func providerName(p *providerv1.Provider) string {
 	return "Dr. " + p.GetName().GetLast()
 }
 
-// buildClaim expands a ClaimSpec into a full one-line professional claim.
-func (s *Sim) buildClaim(ctx context.Context, spec *ClaimSpec) (*claimsv1.Claim, error) {
+// submission is a claim about to be submitted: the 837 file that carries
+// it, the id the sandbox gives it, and the member it is for.
+type submission struct {
+	file     claimsintake.OneClaim
+	id       string
+	memberID string
+}
+
+// subscriber is who a submission names, as a provider would send them.
+type subscriber struct {
+	number, last, first, born, sex string
+}
+
+func subscriberOf(m *eligibilityv1.Member) subscriber {
+	sex := "U"
+	switch m.GetGender() {
+	case commonv1.Gender_GENDER_FEMALE:
+		sex = "F"
+	case commonv1.Gender_GENDER_MALE:
+		sex = "M"
+	}
+	return subscriber{
+		number: m.GetCardId(), last: strings.ToUpper(m.GetName().GetLast()), first: strings.ToUpper(m.GetName().GetFirst()),
+		born: x12Date(m.GetBirthDate()), sex: sex,
+	}
+}
+
+func x12Date(d *commonv1.Date) string {
+	if d == nil {
+		return ""
+	}
+	return fmt.Sprintf("%04d%02d%02d", d.GetYear(), d.GetMonth(), d.GetDay())
+}
+
+// newSubmission expands a ClaimSpec into a one-line professional claim,
+// as the 837 file a provider's clearinghouse would send.
+func (s *Sim) newSubmission(ctx context.Context, spec *ClaimSpec) (*submission, error) {
 	if spec == nil {
 		return nil, fmt.Errorf("%w: no claim given", claims.ErrRejected)
 	}
@@ -502,18 +582,182 @@ func (s *Sim) buildClaim(ctx context.Context, spec *ClaimSpec) (*claimsv1.Claim,
 	if err != nil {
 		return nil, err
 	}
-	c := &claimsv1.Claim{
-		Id:             sp.ID,
-		CustomerId:     CustomerID,
-		Type:           claimsv1.ClaimType_CLAIM_TYPE_PROFESSIONAL,
-		Frequency:      claimsv1.ClaimFrequency_CLAIM_FREQUENCY_ORIGINAL,
-		MemberCardId:   m.GetCardId(),
-		MemberId:       m.GetId(),
-		Source:         claimsv1.ClaimSource_CLAIM_SOURCE_API,
-		Lines:          []*claimsv1.ClaimLine{{LineNumber: 1, UnitsMilli: 1000, DiagnosisPointers: []int32{1}}},
-		DiagnosisCodes: []string{"M17.11"},
+	return s.write(ctx, &sp, subscriberOf(m), m.GetId(), "", "1", "", "M1711")
+}
+
+// resubmission is a provider's corrected claim (frequency 7) or void (8)
+// of orig: orig's fields with the spec's non-empty ones applied, quoting
+// orig's claim number.
+func (s *Sim) resubmission(ctx context.Context, orig *claimsv1.Claim, spec *ClaimSpec, frequency string) (*submission, error) {
+	line := orig.GetLines()[0]
+	sp := ClaimSpec{
+		ID:        spec.ID,
+		Member:    orig.GetMemberId(),
+		Provider:  orig.GetBillingProvider().GetNpi(),
+		Procedure: line.GetProcedureCode(),
+		POS:       line.GetPlaceOfServiceCode(),
+		DOS:       dates.Format(orig.GetServiceDates().GetStart()),
+		Charge:    line.GetCharge().GetCents(),
 	}
-	return c, s.fill(ctx, c, &sp)
+	if len(orig.GetAuthorizationNumbers()) > 0 {
+		sp.Auth = orig.GetAuthorizationNumbers()[0]
+	}
+	if spec.Member != "" {
+		sp.Member = spec.Member
+	}
+	if spec.Provider != "" {
+		sp.Provider = spec.Provider
+	}
+	if spec.Procedure != "" {
+		sp.Procedure = spec.Procedure
+	}
+	if spec.POS != "" {
+		sp.POS = spec.POS
+	}
+	if spec.DOS != "" {
+		sp.DOS = spec.DOS
+	}
+	if spec.Charge > 0 {
+		sp.Charge = spec.Charge
+	}
+	if spec.Auth != "" {
+		sp.Auth = spec.Auth
+	}
+	// The member as matched or as the spec names; a claim that matched no
+	// one is sent again with the subscriber it named.
+	sent := orig.GetSubmittedSubscriber()
+	who := subscriber{
+		number: orig.GetMemberCardId(), last: sent.GetName().GetLast(), first: sent.GetName().GetFirst(),
+		born: x12Date(sent.GetBirthDate()), sex: sent.GetGenderCode(),
+	}
+	if sp.Member != "" {
+		m, err := s.member(ctx, sp.Member)
+		if err != nil {
+			return nil, err
+		}
+		who = subscriberOf(m)
+	}
+	dx := "M1711"
+	if len(orig.GetDiagnosisCodes()) > 0 {
+		dx = strings.ReplaceAll(orig.GetDiagnosisCodes()[0], ".", "")
+	}
+	return s.write(ctx, &sp, who, sp.Member, orig.GetPatientControlNumber(), frequency, claims.DisplayNumber(orig), dx)
+}
+
+// write is the 837 file for a filled-in spec.
+func (s *Sim) write(ctx context.Context, sp *ClaimSpec, who subscriber, memberID, pcn, frequency, quoted, dx string) (*submission, error) {
+	p, err := s.provider(ctx, sp.Provider)
+	if err != nil {
+		return nil, err
+	}
+	dos, err := dates.Parse(sp.DOS)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", claims.ErrRejected, err)
+	}
+	tin, err := s.tin(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	taxonomy := ""
+	if len(p.GetTaxonomyCodes()) > 0 {
+		taxonomy = p.GetTaxonomyCodes()[0]
+	}
+	s.nextFile++
+	if pcn == "" {
+		pcn = sp.ID
+	}
+	if pcn == "" {
+		pcn = fmt.Sprintf("SIM-%05d", s.nextFile)
+	}
+	f := claimsintake.OneClaim{
+		// Control numbers well clear of the clearinghouse's own files.
+		ICN: fmt.Sprintf("%09d", 500_000_000+s.nextFile), Sent: s.clock, PCN: pcn,
+		MemberNumber: who.number, Last: who.last, First: who.first, Born: who.born, Sex: who.sex,
+		Org: strings.ToUpper(p.GetOrganizationName()), NPI: p.GetNpi(), TIN: tin, Taxonomy: taxonomy,
+		Frequency: frequency, Quoted: quoted, Authorization: sp.Auth, Diagnosis: dx,
+		Procedure: sp.Procedure, PlaceOfService: sp.POS, ServiceDate: x12Date(dos), ChargeCents: sp.Charge,
+	}
+	if f.Org == "" {
+		f.ProviderLast, f.ProviderFirst = strings.ToUpper(p.GetName().GetLast()), strings.ToUpper(p.GetName().GetFirst())
+	}
+	return &submission{file: f, id: sp.ID, memberID: memberID}, nil
+}
+
+// parsed is a submission's claim as intake maps it from the file, without
+// loading it: for an estimate, or to hand several over at once.
+func (s *Sim) parsed(sub *submission) (*claimsv1.Claim, error) {
+	ic, err := x12.Parse([]byte(sub.file.Text()))
+	if err != nil {
+		return nil, err
+	}
+	all := claimsintake.MapFile(ic, "")
+	if len(all) != 1 || len(all[0].Errs) > 0 || len(all[0].Claims) != 1 {
+		msg := "the file does not hold one readable claim"
+		if len(all) == 1 && len(all[0].Errs) > 0 {
+			msg = all[0].Errs[0].Message
+		}
+		return nil, fmt.Errorf("%w: %s", claims.ErrRejected, msg)
+	}
+	c := all[0].Claims[0].Claim
+	// It did not arrive in a stored file.
+	c.Id, c.SourceRecord = sub.id, nil
+	return c, nil
+}
+
+// ingest loads a submission's file through intake and returns the claim
+// it became.
+func (s *Sim) ingest(ctx context.Context, sub *submission) (*claimsv1.Claim, error) {
+	// The file-level events (received, numbers reserved, 999 returned) are
+	// the same for every claim the sandbox submits; leave them out of its
+	// log.
+	quiet := *s.Intake
+	quiet.Logf = nil
+	s.assignID, s.lastReceived, s.lastErr = sub.id, nil, nil
+	defer func() { s.assignID = "" }()
+	job, err := quiet.Ingest(ctx, sub.file.Filename(), []byte(sub.file.Text()))
+	if err != nil {
+		return nil, err
+	}
+	if s.lastErr != nil {
+		return nil, s.lastErr
+	}
+	if s.lastReceived == nil {
+		msg := "the file was not loaded"
+		for _, e := range job.GetErrors() {
+			msg = e.GetMessage()
+		}
+		for _, set := range job.GetTransactionSets() {
+			for _, e := range set.GetErrors() {
+				msg = e.GetMessage()
+			}
+		}
+		return nil, fmt.Errorf("%w: %s", claims.ErrRejected, msg)
+	}
+	return s.lastReceived, nil
+}
+
+// submissionLabel names a submission in the log: by the claim it became
+// (c), or before that by the id the sandbox gave it.
+func (s *Sim) submissionLabel(sub *submission, c *claimsv1.Claim) string {
+	name := sub.id
+	if c != nil {
+		name = s.Claims.Label(c)
+	}
+	return fmt.Sprintf("%s (%s, %s)", name, s.memberName(sub.memberID), sub.file.Procedure)
+}
+
+// tin is the TIN a provider bills under: from its participations, or, for
+// a provider in no network, the one it would put on its claim.
+func (s *Sim) tin(ctx context.Context, p *providerv1.Provider) (string, error) {
+	tin := outOfNetworkTINs[p.GetNpi()]
+	parts, _, err := s.Repos.Participations.List(ctx, store.ListOptions[*providerv1.NetworkParticipation]{PageSize: 1, Where: []store.Cond{store.Eq(p.GetNpi(), "npi")}})
+	if err != nil {
+		return "", err
+	}
+	if len(parts) > 0 {
+		tin = parts[0].GetTin()
+	}
+	return tin, nil
 }
 
 // correct returns a copy of orig with the spec's non-empty fields applied.
@@ -537,6 +781,13 @@ func (s *Sim) correct(ctx context.Context, orig *claimsv1.Claim, spec *ClaimSpec
 			return nil, err
 		}
 		c.MemberId, c.MemberCardId = m.GetId(), m.GetCardId()
+		// The corrected claim names the other member as its subscriber.
+		who := subscriberOf(m)
+		born, _ := dates.Parse(fmt.Sprintf("%s-%s-%s", who.born[:4], who.born[4:6], who.born[6:]))
+		c.SubmittedPatient = nil
+		c.SubmittedSubscriber = &claimsv1.SubmittedPerson{
+			MemberNumber: who.number, Name: &commonv1.PersonName{Last: who.last, First: who.first}, BirthDate: born, GenderCode: who.sex,
+		}
 	}
 	if spec.Provider != "" {
 		sp.Provider = spec.Provider
@@ -564,7 +815,9 @@ func (s *Sim) correct(ctx context.Context, orig *claimsv1.Claim, spec *ClaimSpec
 // simulator's out-of-network providers bill under.
 var outOfNetworkTINs = map[string]string{"1987654321": "452345678"}
 
-// fill sets the provider, dates, line and authorization from a spec.
+// fill sets the provider, dates, line and authorization from a spec, on a
+// corrected claim we write ourselves (an adjustment). A provider that
+// isn't changing stays as it was sent.
 func (s *Sim) fill(ctx context.Context, c *claimsv1.Claim, sp *ClaimSpec) error {
 	p, err := s.provider(ctx, sp.Provider)
 	if err != nil {
@@ -574,22 +827,18 @@ func (s *Sim) fill(ctx context.Context, c *claimsv1.Claim, sp *ClaimSpec) error 
 	if err != nil {
 		return fmt.Errorf("%w: %v", claims.ErrRejected, err)
 	}
-	// The TIN the provider bills under: from its participations, or, for
-	// a provider in no network, the one it would put on its claim.
-	tin := outOfNetworkTINs[p.GetNpi()]
-	parts, _, err := s.Repos.Participations.List(ctx, store.ListOptions[*providerv1.NetworkParticipation]{PageSize: 1, Where: []store.Cond{store.Eq(p.GetNpi(), "npi")}})
-	if err != nil {
-		return err
+	if c.GetBillingProvider().GetNpi() != p.GetNpi() {
+		tin, err := s.tin(ctx, p)
+		if err != nil {
+			return err
+		}
+		taxonomy := ""
+		if len(p.GetTaxonomyCodes()) > 0 {
+			taxonomy = p.GetTaxonomyCodes()[0]
+		}
+		c.BillingProvider = &claimsv1.ProviderRef{Npi: p.GetNpi(), Tin: tin, Name: providerName(p)}
+		c.RenderingProvider = &claimsv1.ProviderRef{Npi: p.GetNpi(), TaxonomyCode: taxonomy}
 	}
-	if len(parts) > 0 {
-		tin = parts[0].GetTin()
-	}
-	taxonomy := ""
-	if len(p.GetTaxonomyCodes()) > 0 {
-		taxonomy = p.GetTaxonomyCodes()[0]
-	}
-	c.BillingProvider = &claimsv1.ProviderRef{Npi: p.GetNpi(), Tin: tin, Name: providerName(p)}
-	c.RenderingProvider = &claimsv1.ProviderRef{Npi: p.GetNpi(), TaxonomyCode: taxonomy}
 	c.ServiceDates = &commonv1.DateRange{Start: dos, End: dos}
 	c.TotalCharge = &commonv1.Money{Cents: sp.Charge}
 	c.AuthorizationNumbers = nil
@@ -602,15 +851,6 @@ func (s *Sim) fill(ctx context.Context, c *claimsv1.Claim, sp *ClaimSpec) error 
 	line.ServiceDates = c.GetServiceDates()
 	line.Charge = c.GetTotalCharge()
 	return nil
-}
-
-func (s *Sim) claimLabel(c *claimsv1.Claim) string {
-	line := c.GetLines()[0]
-	name := c.GetId()
-	if c.GetClaimNumber() != "" {
-		name = s.Claims.Label(c)
-	}
-	return fmt.Sprintf("%s (%s, %s)", name, s.memberName(c.GetMemberId()), line.GetProcedureCode())
 }
 
 func (s *Sim) labels(ids []string) []string {

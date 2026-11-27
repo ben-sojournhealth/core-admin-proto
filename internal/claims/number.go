@@ -42,8 +42,11 @@ func sourceLetter(src claimsv1.ClaimSource) string {
 		return "E"
 	case claimsv1.ClaimSource_CLAIM_SOURCE_PAPER:
 		return "P"
+	case claimsv1.ClaimSource_CLAIM_SOURCE_PORTAL:
+		return "W"
 	}
-	return "A"
+	// No source given.
+	return "X"
 }
 
 // NumberPrefix is the YYJJJ-S- of claim numbers for a receipt time and
@@ -56,7 +59,7 @@ func NumberPrefix(received time.Time, src claimsv1.ClaimSource) string {
 func FormatNumber(prefix string, n int) string { return fmt.Sprintf("%s%05d", prefix, n) }
 
 // assignNumber reserves a block of one for a claim that arrived alone
-// (API, portal, paper, or a claim handed over without a number).
+// (portal, paper, or a claim handed over without a number).
 func (s *Service) assignNumber(ctx context.Context, c *claimsv1.Claim) error {
 	prefix := NumberPrefix(c.GetReceivedTime().AsTime(), c.GetSource())
 	ref := c.GetPatientControlNumber()

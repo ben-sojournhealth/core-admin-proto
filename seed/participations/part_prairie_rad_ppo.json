@@ -1,0 +1,10 @@
+{
+  "id": "part_prairie_rad_ppo",
+  "underlyingNetworkId": "net_ppo",
+  "npi": "1678901234",
+  "tin": "372345678",
+  "contractId": "ctr_ppo_std",
+  "periods": [{"start": {"year": 2025, "month": 1, "day": 1}}],
+  "billingName": "Prairie Radiology Associates SC",
+  "locations": [{"id": "loc_1", "address": {"lines": ["640 W Monroe St"], "city": "Springfield", "state": "IL", "postalCode": "62704"}, "acceptingNewPatients": true}]
+}

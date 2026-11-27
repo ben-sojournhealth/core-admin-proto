@@ -1,0 +1,10 @@
+{
+  "id": "part_prairie_em_ppo",
+  "underlyingNetworkId": "net_ppo",
+  "npi": "1456789012",
+  "tin": "371234567",
+  "contractId": "ctr_ppo_std",
+  "periods": [{"start": {"year": 2025, "month": 1, "day": 1}}],
+  "billingName": "Prairie Emergency Physicians SC",
+  "locations": [{"id": "loc_1", "address": {"lines": ["1 Hospital Plaza"], "city": "Springfield", "state": "IL", "postalCode": "62701"}, "acceptingNewPatients": true}]
+}

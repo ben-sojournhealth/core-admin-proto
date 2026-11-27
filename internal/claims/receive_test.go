@@ -99,17 +99,17 @@ func TestReceiveMatchesAndNumbers(t *testing.T) {
 		original string
 		match    claimsv1.OriginalMatch
 	}{
-		{"original", submitted("RIV-88213", "ACM100101", "99213", 180, 12), "26075-E-00001 APPROVED", "", 0},
-		{"dependent in patient loop", riley, "26075-E-00002 APPROVED", "", 0},
-		{"unknown member", submitted("NGU-30017", "ACM999901", "99213", 180, 13), "26075-E-00003 PENDED MEMBER_NOT_FOUND", "", 0},
-		{"correction quoting an old version", correcting(submitted("RIV-87990", "ACM100101", "99214", 250, 3), replacement, "26063-A-00001"),
-			"26075-E-00004 APPROVED", "26063-A-00001-2", claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER},
+		{"original", submitted("RIV-88213", "ACM100101", "99213", 180, 12), "26075-E-00002 APPROVED", "", 0},
+		{"dependent in patient loop", riley, "26075-E-00003 APPROVED", "", 0},
+		{"unknown member", submitted("NGU-30017", "ACM999901", "99213", 180, 13), "26075-E-00004 PENDED MEMBER_NOT_FOUND", "", 0},
+		{"correction quoting an old version", correcting(submitted("RIV-87990", "ACM100101", "99214", 250, 3), replacement, "26063-E-00001"),
+			"26075-E-00005 APPROVED", "26063-E-00001-2", claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER},
 		{"correction quoting nothing we issued", correcting(submitted("PAT-39002", "ACM200102", "99213", 180, 9), replacement, "26040-E-00417"),
-			"26075-E-00005 PENDED ORIGINAL_NOT_FOUND", "", claimsv1.OriginalMatch_ORIGINAL_MATCH_NONE},
-		{"correction of a pended claim", correcting(submitted("RIV-88102", "ACM100102", "70551", 900, 6), replacement, "26068-A-00001"),
-			"26075-E-00006 PENDED ORIGINAL_NOT_FINALIZED", "26068-A-00001", claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER},
-		{"void of a paid claim", correcting(submitted("PAT-40388", "ACM200101", "99214", 250, 4), void, "26064-A-00001"),
-			"26075-E-00007 VOID", "26064-A-00001", claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER},
+			"26075-E-00006 PENDED ORIGINAL_NOT_FOUND", "", claimsv1.OriginalMatch_ORIGINAL_MATCH_NONE},
+		{"correction of a pended claim", correcting(submitted("RIV-88102", "ACM100102", "70551", 900, 6), replacement, "26068-E-00001"),
+			"26075-E-00007 PENDED ORIGINAL_NOT_FINALIZED", "26068-E-00001", claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER},
+		{"void of a paid claim", correcting(submitted("PAT-40388", "ACM200101", "99214", 250, 4), void, "26064-E-00001"),
+			"26075-E-00008 VOID", "26064-E-00001", claimsv1.OriginalMatch_ORIGINAL_MATCH_QUOTED_NUMBER},
 	}
 	for _, tc := range tests {
 		got := receive(t, s, tc.claim)
@@ -127,21 +127,21 @@ func TestReceiveMatchesAndNumbers(t *testing.T) {
 	}
 
 	// The dependent was matched without rewriting the member id as sent.
-	if d := find(t, s, "26075-E-00002"); d.GetMemberId() != "mem_1003" || d.GetMemberCardId() != "ACM100101" {
+	if d := find(t, s, "26075-E-00003"); d.GetMemberId() != "mem_1003" || d.GetMemberCardId() != "ACM100101" {
 		t.Errorf("dependent: member %q, member id as sent %q", d.GetMemberId(), d.GetMemberCardId())
 	}
 	// The correction matched the current version, not the one quoted. That
 	// version's result was never reported, so it is closed with an answer
 	// of its own, not superseded.
-	if v2 := find(t, s, "26063-A-00001-2"); describe(v2) != "26063-A-00001-2 DENIED" || v2.GetSupersededBy() != nil ||
+	if v2 := find(t, s, "26063-E-00001-2"); describe(v2) != "26063-E-00001-2 DENIED" || v2.GetSupersededBy() != nil ||
 		v2.GetLines()[0].GetAdjudication().GetDenial().GetCode() != "REPLACED_BY_PROVIDER" {
-		t.Errorf("26063-A-00001-2 is %s, superseded by %v", describe(v2), v2.GetSupersededBy())
+		t.Errorf("26063-E-00001-2 is %s, superseded by %v", describe(v2), v2.GetSupersededBy())
 	}
-	if o := find(t, s, "26064-A-00001"); o.GetSupersededBy().GetFrequency() != void {
-		t.Errorf("26064-A-00001 superseded by %v", o.GetSupersededBy())
+	if o := find(t, s, "26064-E-00001"); o.GetSupersededBy().GetFrequency() != void {
+		t.Errorf("26064-E-00001 superseded by %v", o.GetSupersededBy())
 	}
 	// Customer comes from the matched member.
-	if c := find(t, s, "26075-E-00001"); c.GetCustomerId() != sim.CustomerID {
+	if c := find(t, s, "26075-E-00002"); c.GetCustomerId() != sim.CustomerID {
 		t.Errorf("customer %q", c.GetCustomerId())
 	}
 }
@@ -167,7 +167,7 @@ func TestRerunRematchesMember(t *testing.T) {
 		t.Fatal(res.Error)
 	}
 	c = find(t, s, claims.DisplayNumber(c))
-	if describe(c) != "26075-E-00001 APPROVED" || c.GetMemberId() != "mem_5001" || c.GetCustomerId() != sim.CustomerID {
+	if describe(c) != "26075-E-00002 APPROVED" || c.GetMemberId() != "mem_5001" || c.GetCustomerId() != sim.CustomerID {
 		t.Errorf("after: %s member %q customer %q", c.GetStatus(), c.GetMemberId(), c.GetCustomerId())
 	}
 	if got := c.GetAdjudicationHistory()[0].GetMemberId(); got != "" {
@@ -181,12 +181,12 @@ func TestLateLinkKeepsNumber(t *testing.T) {
 	s := sandbox(t)
 	ctx := context.Background()
 	c := receive(t, s, correcting(submitted("OKA-10552", "ACM300101", "99214", 250, 2), replacement, "26040-E-00417"))
-	if describe(c) != "26075-E-00001 PENDED ORIGINAL_NOT_FOUND" {
+	if describe(c) != "26075-E-00002 PENDED ORIGINAL_NOT_FOUND" {
 		t.Fatalf("got %s", describe(c))
 	}
-	// An examiner establishes it corrects 26062-A-00001. Linking by hand
+	// An examiner establishes it corrects 26062-E-00001. Linking by hand
 	// is not an action yet; set the input directly.
-	orig := find(t, s, "26062-A-00001")
+	orig := find(t, s, "26062-E-00001")
 	c.OriginalLink = &claimsv1.ClaimLink{ClaimId: orig.GetId(), LinkedBy: "examiner"}
 	if _, err := s.Repos.Claims.Update(ctx, c); err != nil {
 		t.Fatal(err)
@@ -194,12 +194,12 @@ func TestLateLinkKeepsNumber(t *testing.T) {
 	if res := s.Apply(sim.Action{Type: "reprocess", ClaimID: c.GetId(), Reason: "original confirmed with provider"}); !res.OK {
 		t.Fatal(res.Error)
 	}
-	c = find(t, s, "26075-E-00001")
-	if describe(c) != "26075-E-00001 APPROVED" || c.GetOriginalClaimId() != orig.GetId() ||
+	c = find(t, s, "26075-E-00002")
+	if describe(c) != "26075-E-00002 APPROVED" || c.GetOriginalClaimId() != orig.GetId() ||
 		c.GetAdjudication().GetOriginalMatch() != claimsv1.OriginalMatch_ORIGINAL_MATCH_LINKED {
 		t.Errorf("after link: %s original %q match %s", describe(c), c.GetOriginalClaimId(), c.GetAdjudication().GetOriginalMatch())
 	}
-	if o := find(t, s, "26062-A-00001"); o.GetSupersededBy().GetFrequency() != replacement {
+	if o := find(t, s, "26062-E-00001"); o.GetSupersededBy().GetFrequency() != replacement {
 		t.Errorf("original superseded by %v", o.GetSupersededBy())
 	}
 }
@@ -209,15 +209,15 @@ func TestLateLinkKeepsNumber(t *testing.T) {
 // with an answer of its own. The void has nothing to reverse.
 func TestVoidOfClaimInUnreleasedRun(t *testing.T) {
 	s := sandbox(t)
-	if res := s.Apply(sim.Action{Type: "select", ClaimID: "26065-A-00001"}); !res.OK {
+	if res := s.Apply(sim.Action{Type: "select", ClaimID: "26065-E-00001"}); !res.OK {
 		t.Fatal(res.Error)
 	}
-	v := receive(t, s, correcting(submitted("RIV-88300", "ACM100101", "70551", 900, 5), void, "26065-A-00001"))
-	if describe(v) != "26075-E-00001 VOID" {
+	v := receive(t, s, correcting(submitted("RIV-88300", "ACM100101", "70551", 900, 5), void, "26065-E-00001"))
+	if describe(v) != "26075-E-00002 VOID" {
 		t.Fatalf("got %s", describe(v))
 	}
-	o := find(t, s, "26065-A-00001")
-	if describe(o) != "26065-A-00001 DENIED" || o.GetPayment() != nil || o.GetSupersededBy() != nil ||
+	o := find(t, s, "26065-E-00001")
+	if describe(o) != "26065-E-00001 DENIED" || o.GetPayment() != nil || o.GetSupersededBy() != nil ||
 		o.GetLines()[0].GetAdjudication().GetDenial().GetCode() != "VOIDED_BY_PROVIDER" {
 		t.Errorf("original is %s, payment %v, superseded by %v", describe(o), o.GetPayment(), o.GetSupersededBy())
 	}

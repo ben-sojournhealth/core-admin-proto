@@ -1,0 +1,679 @@
+syntax = "proto3";
+
+package coreadmin.claims.v1;
+
+import "coreadmin/common/v1/common.proto";
+
+// What a professional claim (837P, guide 005010X222A1) carries beyond the
+// fields adjudication reads today. Everything here is as sent: intake does
+// no lookups and no matching, and nothing here is an input to adjudication
+// yet.
+//
+// Most of it is situational: a provider sends a segment only when it
+// applies, and many send less than the guide asks. Treat every field as
+// possibly absent. In particular the claim-level dates (ClaimDates) are
+// sparse; the service date on each line is the one a claim always has.
+//
+// Codes from small fixed sets are enums with the raw code beside them
+// (`*_code`). Codes from long or externally maintained lists, and plain
+// Y/N indicators, are kept as the raw string only.
+
+// SubmittedTransaction is the 837 transaction set a claim arrived in: its
+// BHT segment and the submitter and receiver (loops 1000A, 1000B).
+message SubmittedTransaction {
+  // BHT02: 00 original, 18 reissue.
+  string purpose_code = 1;
+  // BHT03: the submitter's reference for this batch.
+  string reference_id = 2;
+  // BHT06: CH chargeable (a claim), RP reporting (an encounter), 31
+  // subrogation demand.
+  TransactionType type = 3;
+  // BHT06 as sent.
+  string type_code = 4;
+  // Loop 1000A: who sent the file (NM1*41).
+  string submitter_name = 5;
+  // Submitter's ETIN (NM109).
+  string submitter_id = 6;
+  // Submitter's contacts (PER).
+  repeated SubmittedContact submitter_contacts = 7;
+  // Loop 1000B: who it was sent to (NM1*40).
+  string receiver_name = 8;
+  // Receiver's ETIN (NM109).
+  string receiver_id = 9;
+}
+
+// TransactionType is BHT06.
+enum TransactionType {
+  TRANSACTION_TYPE_UNSPECIFIED = 0;
+  TRANSACTION_TYPE_UNKNOWN = 1;
+  // CH: a claim to be paid.
+  TRANSACTION_TYPE_CLAIM = 2;
+  // RP: an encounter, reported with no payment expected.
+  TRANSACTION_TYPE_ENCOUNTER = 3;
+  // 31: a subrogation demand.
+  TRANSACTION_TYPE_SUBROGATION_DEMAND = 4;
+}
+
+// SubmittedContact is a PER segment: a contact name and up to three
+// numbers.
+message SubmittedContact {
+  // PER02.
+  string name = 1;
+  // The numbers, in the order sent.
+  repeated ContactNumber numbers = 2;
+}
+
+// ContactNumber is one qualifier and number pair of a PER.
+message ContactNumber {
+  // TE telephone, FX fax, EM email, EX extension.
+  string qualifier = 1;
+  // The number or address.
+  string value = 2;
+}
+
+// SubmittedId is a secondary identifier (REF): a qualifier and a value.
+// Used where the guide allows several, e.g. a provider's state license
+// (0B), UPIN (1G), commercial number (G2) or location number (LU).
+message SubmittedId {
+  // REF01.
+  string qualifier = 1;
+  // REF02.
+  string value = 2;
+}
+
+// SubmittedCoverage is the SBR segment: the coverage the claim is billed
+// under, as the provider understands it (loop 2000B).
+message SubmittedCoverage {
+  // SBR01: where this payer falls in the order of payers.
+  PayerResponsibility payer_responsibility = 1;
+  // SBR01 as sent.
+  string payer_responsibility_code = 2;
+  // SBR03: the group or policy number.
+  string group_number = 3;
+  // SBR04: the group name, sent when there is no group number.
+  string group_name = 4;
+  // SBR05: insurance type code, for Medicare secondary claims (12, 13,
+  // 14, 15, 16, 41, 42, 43, 47).
+  string insurance_type_code = 5;
+  // SBR09: claim filing indicator, e.g. CI commercial, MB Medicare Part B,
+  // WC workers' compensation.
+  string claim_filing_indicator_code = 6;
+}
+
+// PayerResponsibility is SBR01.
+enum PayerResponsibility {
+  PAYER_RESPONSIBILITY_UNSPECIFIED = 0;
+  PAYER_RESPONSIBILITY_UNKNOWN = 1;
+  // P.
+  PAYER_RESPONSIBILITY_PRIMARY = 2;
+  // S.
+  PAYER_RESPONSIBILITY_SECONDARY = 3;
+  // T.
+  PAYER_RESPONSIBILITY_TERTIARY = 4;
+  // A through H: fourth through eleventh.
+  PAYER_RESPONSIBILITY_FOURTH_OR_LATER = 5;
+  // U: the provider does not know the order.
+  PAYER_RESPONSIBILITY_NOT_KNOWN = 6;
+}
+
+// PatientRelationship is the individual's relationship to the subscriber
+// (SBR02 for the subscriber, PAT01 for a patient).
+enum PatientRelationship {
+  PATIENT_RELATIONSHIP_UNSPECIFIED = 0;
+  PATIENT_RELATIONSHIP_UNKNOWN = 1;
+  // 18.
+  PATIENT_RELATIONSHIP_SELF = 2;
+  // 01.
+  PATIENT_RELATIONSHIP_SPOUSE = 3;
+  // 19.
+  PATIENT_RELATIONSHIP_CHILD = 4;
+  // 20.
+  PATIENT_RELATIONSHIP_EMPLOYEE = 5;
+  // 53.
+  PATIENT_RELATIONSHIP_LIFE_PARTNER = 6;
+  // 39.
+  PATIENT_RELATIONSHIP_ORGAN_DONOR = 7;
+  // 40.
+  PATIENT_RELATIONSHIP_CADAVER_DONOR = 8;
+  // G8.
+  PATIENT_RELATIONSHIP_OTHER = 9;
+  // 21: the provider sent "unknown".
+  PATIENT_RELATIONSHIP_NOT_KNOWN = 10;
+}
+
+// SubmittedPayer is a payer as named on the claim: the destination payer
+// (loop 2010BB), the pay-to plan (2010AC) or another payer (2330B).
+message SubmittedPayer {
+  // NM103.
+  string name = 1;
+  // NM108: PI payor identification, XV health plan id.
+  string id_qualifier = 2;
+  // NM109.
+  string id = 3;
+  // N3, N4.
+  common.v1.Address address = 4;
+  // REF: e.g. 2U payer id, EI tax id, FY claim office number, NF NAIC.
+  repeated SubmittedId secondary_ids = 5;
+}
+
+// ClaimIndicators are the yes/no and code elements of the CLM segment.
+message ClaimIndicators {
+  // CLM06: Y or N, whether the provider's signature is on file.
+  string provider_signature_on_file = 1;
+  // CLM07: whether the provider accepts assignment.
+  AcceptAssignment accept_assignment = 2;
+  // CLM07 as sent.
+  string accept_assignment_code = 3;
+  // CLM08: whether the patient assigned benefits to the provider, i.e.
+  // whether payment goes to the provider.
+  BenefitsAssignment benefits_assignment = 4;
+  // CLM08 as sent.
+  string benefits_assignment_code = 5;
+  // CLM09: I informed consent, Y signed statement on file.
+  string release_of_information_code = 6;
+  // CLM10: P when the signature was generated by the provider.
+  string patient_signature_source_code = 7;
+  // CLM12: special program, e.g. 02 physically handicapped children's
+  // program, 03 special federal funding, 05 disability, 09 second opinion.
+  string special_program_code = 8;
+  // CLM20: why the claim is late, e.g. 1 proof of eligibility unknown,
+  // 7 third party processing delay.
+  string delay_reason_code = 9;
+}
+
+// AcceptAssignment is CLM07.
+enum AcceptAssignment {
+  ACCEPT_ASSIGNMENT_UNSPECIFIED = 0;
+  ACCEPT_ASSIGNMENT_UNKNOWN = 1;
+  // A.
+  ACCEPT_ASSIGNMENT_ASSIGNED = 2;
+  // B: assignment accepted on clinical lab services only.
+  ACCEPT_ASSIGNMENT_CLINICAL_LAB_ONLY = 3;
+  // C.
+  ACCEPT_ASSIGNMENT_NOT_ASSIGNED = 4;
+}
+
+// BenefitsAssignment is CLM08 (and OI03 for another payer).
+enum BenefitsAssignment {
+  BENEFITS_ASSIGNMENT_UNSPECIFIED = 0;
+  BENEFITS_ASSIGNMENT_UNKNOWN = 1;
+  // Y.
+  BENEFITS_ASSIGNMENT_YES = 2;
+  // N.
+  BENEFITS_ASSIGNMENT_NO = 3;
+  // W: not applicable.
+  BENEFITS_ASSIGNMENT_NOT_APPLICABLE = 4;
+}
+
+// RelatedCauses is CLM11: whether the services follow from an accident or
+// the patient's employment.
+message RelatedCauses {
+  // Up to two causes.
+  repeated RelatedCause causes = 1;
+  // The causes as sent, in the same order.
+  repeated string cause_codes = 2;
+  // CLM11-4: the state of an auto accident.
+  string auto_accident_state = 3;
+  // CLM11-5: its country, when not the US.
+  string auto_accident_country_code = 4;
+}
+
+// RelatedCause is one CLM11 code.
+enum RelatedCause {
+  RELATED_CAUSE_UNSPECIFIED = 0;
+  RELATED_CAUSE_UNKNOWN = 1;
+  // AA.
+  RELATED_CAUSE_AUTO_ACCIDENT = 2;
+  // EM.
+  RELATED_CAUSE_EMPLOYMENT = 3;
+  // OA.
+  RELATED_CAUSE_OTHER_ACCIDENT = 4;
+}
+
+// ClaimDates are the claim-level DTP segments of loop 2300. All are
+// situational. A professional claim has no claim-level service date: that
+// is on each line.
+message ClaimDates {
+  // 431: onset of current illness or symptom.
+  common.v1.Date onset = 1;
+  // 454: initial treatment.
+  common.v1.Date initial_treatment = 2;
+  // 304: last seen by the supervising physician.
+  common.v1.Date last_seen = 3;
+  // 453: acute manifestation of a chronic condition.
+  common.v1.Date acute_manifestation = 4;
+  // 439: accident.
+  common.v1.Date accident = 5;
+  // 484: last menstrual period.
+  common.v1.Date last_menstrual_period = 6;
+  // 455: last x-ray.
+  common.v1.Date last_xray = 7;
+  // 471: hearing or vision prescription.
+  common.v1.Date hearing_vision_prescription = 8;
+  // 360 and 361, or 314: when the patient was unable to work.
+  common.v1.DateRange disability = 9;
+  // 297: last day worked.
+  common.v1.Date last_worked = 10;
+  // 296: authorized return to work.
+  common.v1.Date return_to_work = 11;
+  // 435: admission, for services during an inpatient stay.
+  common.v1.Date admission = 12;
+  // 096: discharge.
+  common.v1.Date discharge = 13;
+  // 090: when this provider assumed post-operative care.
+  common.v1.Date assumed_care = 14;
+  // 091: when this provider relinquished it.
+  common.v1.Date relinquished_care = 15;
+  // 444: first contact with a property and casualty payer.
+  common.v1.Date property_casualty_first_contact = 16;
+  // 050: when a repricer received the claim.
+  common.v1.Date repricer_received = 17;
+}
+
+// Attachment is a PWK segment: supporting paperwork and how it is being
+// sent.
+message Attachment {
+  // PWK01: what it is, e.g. OZ support data for claim, 77 support data
+  // for verification, B4 referral form.
+  string report_type_code = 1;
+  // PWK02: how it is sent, e.g. BM by mail, EL electronically, FX by fax,
+  // AA available on request.
+  string transmission_code = 2;
+  // PWK06: the control number that ties the attachment to this claim.
+  string control_number = 3;
+}
+
+// ContractInformation is a CN1 segment: the contract terms the provider
+// says apply.
+message ContractInformation {
+  // CN101: e.g. 01 DRG, 02 per diem, 04 capitated, 05 negotiated.
+  string type_code = 1;
+  // CN102.
+  common.v1.Money amount = 2;
+  // CN103: a percentage, as sent.
+  string percent = 3;
+  // CN104.
+  string code = 4;
+  // CN105: terms discount percentage, as sent.
+  string terms_discount_percent = 5;
+  // CN106.
+  string version = 6;
+}
+
+// ClaimReferences are the claim-level REF segments of loop 2300, beyond
+// those Claim already carries (the quoted payer claim number, F8, and the
+// clearinghouse trace number, D9).
+message ClaimReferences {
+  // G1: prior authorization number. Also in Claim.authorization_numbers.
+  string prior_authorization_number = 1;
+  // 9F: referral number. Also in Claim.authorization_numbers.
+  string referral_number = 2;
+  // 4N: service authorization exception code (1 to 7).
+  string service_authorization_exception_code = 3;
+  // F5: Y or N, whether Medicare must cross the claim over (Medicare
+  // section 4081).
+  string mandatory_medicare_crossover = 4;
+  // EW: mammography certification number.
+  string mammography_certification_number = 5;
+  // X4: CLIA number of the lab.
+  string clia_number = 6;
+  // 9A: repriced claim number.
+  string repriced_claim_number = 7;
+  // 9C: adjusted repriced claim number.
+  string adjusted_repriced_claim_number = 8;
+  // LX: investigational device exemption number.
+  string investigational_device_exemption_number = 9;
+  // EA: the provider's medical record number for the patient.
+  string medical_record_number = 10;
+  // P4: demonstration project identifier.
+  string demonstration_project_id = 11;
+  // 1J: care plan oversight number.
+  string care_plan_oversight_number = 12;
+}
+
+// SubmittedNote is an NTE segment.
+message SubmittedNote {
+  // NTE01: e.g. ADD additional information, CER certification narrative,
+  // DCP goals or discharge plans, TPO third party organization notes.
+  string reference_code = 1;
+  // NTE02.
+  string text = 2;
+}
+
+// AmbulanceTransport is a CR1 segment.
+message AmbulanceTransport {
+  // CR102: patient weight in pounds, as sent.
+  string patient_weight_pounds = 1;
+  // CR104: why an ambulance was needed (A to E).
+  string transport_reason_code = 2;
+  // CR106: distance in miles, as sent.
+  string miles = 3;
+  // CR109: purpose of a round trip.
+  string round_trip_purpose = 4;
+  // CR110: purpose of a stretcher.
+  string stretcher_purpose = 5;
+}
+
+// AmbulanceLocation is a pick-up or drop-off location (loops 2310E and F,
+// 2420G and H).
+message AmbulanceLocation {
+  // NM103: the location's name; drop-off only.
+  string name = 1;
+  // N3, N4.
+  common.v1.Address address = 2;
+}
+
+// SpinalManipulation is a CR2 segment.
+message SpinalManipulation {
+  // CR208: nature of the patient's condition (A acute, C chronic, and
+  // others).
+  string patient_condition_code = 1;
+  // CR210, CR211: descriptions of the condition.
+  repeated string descriptions = 2;
+}
+
+// ConditionInformation is a CRC segment: a category and the conditions
+// that apply within it.
+message ConditionInformation {
+  // CRC01: 07 ambulance certification, E1 to E3 vision (spectacle lenses,
+  // contact lenses, frames), 75 homebound, ZZ EPSDT referral, 70 hospice
+  // employee, 09 durable medical equipment certification.
+  string category_code = 1;
+  // CRC02: Y or N, whether the conditions apply.
+  string applies = 2;
+  // CRC03 to CRC07.
+  repeated string condition_codes = 3;
+}
+
+// Repricing is an HCP segment: what a repricer priced the claim or line
+// at before it reached us.
+message Repricing {
+  // HCP01: pricing methodology (00 to 14).
+  string methodology_code = 1;
+  // HCP02: repriced allowed amount.
+  common.v1.Money allowed = 2;
+  // HCP03: savings.
+  common.v1.Money savings = 3;
+  // HCP04: the repricing organization.
+  string organization_id = 4;
+  // HCP05: per diem or flat rate, as sent.
+  string rate = 5;
+  // HCP06: approved ambulatory patient group code.
+  string approved_apg_code = 6;
+  // HCP07: approved ambulatory patient group amount.
+  common.v1.Money approved_apg_amount = 7;
+  // HCP09, HCP10: the procedure the repricer approved (lines only):
+  // qualifier and code.
+  string approved_procedure_qualifier = 8;
+  // The approved procedure code.
+  string approved_procedure_code = 9;
+  // HCP11: MJ minutes or UN units (lines only).
+  string approved_unit_basis_code = 10;
+  // HCP12: approved units, as sent (lines only).
+  string approved_units = 11;
+  // HCP13: why the repricer rejected it.
+  string reject_reason_code = 12;
+  // HCP14: policy compliance code.
+  string policy_compliance_code = 13;
+  // HCP15: exception code.
+  string exception_code = 14;
+}
+
+// SubmittedAdjustment is one reason and amount from a CAS segment sent
+// with the claim: an adjustment another payer made.
+message SubmittedAdjustment {
+  // CAS01: CO, CR, OA, PI or PR.
+  string group_code = 1;
+  // The CARC reason code.
+  string reason_code = 2;
+  // The amount adjusted.
+  common.v1.Money amount = 3;
+  // The units adjusted, as sent.
+  string quantity = 4;
+}
+
+// OtherInsurance is another payer on the claim (loop 2320 and its 2330
+// loops): its coverage, and what it did with the claim if it has already
+// processed it.
+message OtherInsurance {
+  // SBR01: where that payer falls in the order of payers.
+  PayerResponsibility payer_responsibility = 1;
+  // SBR01 as sent.
+  string payer_responsibility_code = 2;
+  // SBR02: the patient's relationship to that policy's subscriber.
+  PatientRelationship relationship = 3;
+  // SBR02 as sent.
+  string relationship_code = 4;
+  // SBR03.
+  string group_number = 5;
+  // SBR04.
+  string group_name = 6;
+  // SBR05.
+  string insurance_type_code = 7;
+  // SBR09.
+  string claim_filing_indicator_code = 8;
+
+  // CAS: that payer's claim-level adjustments.
+  repeated SubmittedAdjustment adjustments = 9;
+  // AMT*D: what that payer paid.
+  common.v1.Money payer_paid = 10;
+  // AMT*A8: what it did not cover.
+  common.v1.Money non_covered = 11;
+  // AMT*EAF: what the patient still owes after that payer.
+  common.v1.Money remaining_patient_liability = 12;
+
+  // OI03: whether benefits under that policy are assigned to the provider.
+  BenefitsAssignment benefits_assignment = 13;
+  // OI03 as sent.
+  string benefits_assignment_code = 14;
+  // OI04: P when the signature was generated by the provider.
+  string patient_signature_source_code = 15;
+  // OI06: I informed consent, Y signed statement on file.
+  string release_of_information_code = 16;
+
+  // MOA: Medicare outpatient adjudication information.
+  MedicareOutpatientAdjudication medicare_outpatient = 17;
+
+  // Loop 2330A: that policy's subscriber.
+  common.v1.PersonName subscriber_name = 18;
+  // NM109: the subscriber's id with that payer.
+  string subscriber_id = 19;
+  // N3, N4.
+  common.v1.Address subscriber_address = 20;
+  // REF*SY: Social Security number, if sent. Never put it in a log, an
+  // error or a pend message.
+  string subscriber_ssn = 21;
+
+  // Loop 2330B: that payer.
+  SubmittedPayer payer = 22;
+  // DTP*573: when that payer adjudicated or paid the claim.
+  common.v1.Date adjudication_date = 23;
+  // REF*G1: that payer's prior authorization number.
+  string prior_authorization_number = 24;
+  // REF*9F: that payer's referral number.
+  string referral_number = 25;
+  // REF*T4: Y when that payer has adjusted the claim.
+  string claim_adjustment_indicator = 26;
+  // REF*F8: that payer's claim control number.
+  string claim_control_number = 27;
+
+  // Loops 2330C to G: the providers as that payer identifies them.
+  repeated OtherPayerProvider providers = 28;
+}
+
+// MedicareOutpatientAdjudication is an MOA segment.
+message MedicareOutpatientAdjudication {
+  // MOA01: reimbursement rate, as sent.
+  string reimbursement_rate = 1;
+  // MOA02: HCPCS payable amount.
+  common.v1.Money hcpcs_payable = 2;
+  // MOA03 to MOA07: remark codes.
+  repeated string remark_codes = 3;
+  // MOA08: end stage renal disease payment amount.
+  common.v1.Money esrd_payment = 4;
+  // MOA09: non-payable professional component billed amount.
+  common.v1.Money non_payable_professional_component = 5;
+}
+
+// OtherPayerProvider is a provider's identifiers with another payer.
+message OtherPayerProvider {
+  // NM101: DN referring, P3 primary care, 82 rendering, 77 service
+  // facility, DQ supervising, 85 billing.
+  string role_code = 1;
+  // REF segments.
+  repeated SubmittedId ids = 2;
+}
+
+// DurableMedicalEquipment is an SV5 segment: rental or purchase terms.
+message DurableMedicalEquipment {
+  // SV501-2: the HCPCS code.
+  string procedure_code = 1;
+  // SV503: length of medical necessity in days, as sent.
+  string days = 2;
+  // SV504.
+  common.v1.Money rental_price = 3;
+  // SV505.
+  common.v1.Money purchase_price = 4;
+  // SV506: 1 weekly, 4 monthly, 6 daily.
+  string rental_frequency_code = 5;
+}
+
+// DmeCertification is a CR3 segment.
+message DmeCertification {
+  // CR301: I initial, R renewal, S revised.
+  string type_code = 1;
+  // CR303: how long the equipment is needed, in months, as sent.
+  string months = 2;
+}
+
+// LineDates are the line-level DTP segments of loop 2400 other than the
+// service date, which is ClaimLine.service_dates.
+message LineDates {
+  // 471: prescription.
+  common.v1.Date prescription = 1;
+  // 607: certification revision or recertification.
+  common.v1.Date certification_revision = 2;
+  // 463: begin therapy.
+  common.v1.Date begin_therapy = 3;
+  // 461: last certification.
+  common.v1.Date last_certification = 4;
+  // 304: last seen by the supervising physician.
+  common.v1.Date last_seen = 5;
+  // 738: most recent hemoglobin or hematocrit test.
+  common.v1.Date hemoglobin_test = 6;
+  // 739: most recent serum creatinine test.
+  common.v1.Date creatinine_test = 7;
+  // 011: shipped.
+  common.v1.Date shipped = 8;
+  // 455: last x-ray.
+  common.v1.Date last_xray = 9;
+  // 454: initial treatment.
+  common.v1.Date initial_treatment = 10;
+}
+
+// TestResult is a MEA segment.
+message TestResult {
+  // MEA01: OG original, TR test results.
+  string reference_code = 1;
+  // MEA02: HT height, R1 hemoglobin, R2 hematocrit, R3 epoetin starting
+  // dosage, R4 creatinine.
+  string measurement_code = 2;
+  // MEA03, as sent.
+  string value = 3;
+}
+
+// LineReferences are the line-level REF segments of loop 2400.
+message LineReferences {
+  // 6R: the provider's line item control number, echoed on the 835.
+  string line_item_control_number = 1;
+  // G1: prior authorization numbers for this line.
+  repeated string prior_authorization_numbers = 2;
+  // 9F: referral numbers for this line.
+  repeated string referral_numbers = 3;
+  // 9B: repriced line item reference number.
+  string repriced_line_item_number = 4;
+  // 9D: adjusted repriced line item reference number.
+  string adjusted_repriced_line_item_number = 5;
+  // EW: mammography certification number.
+  string mammography_certification_number = 6;
+  // X4: CLIA number of the lab.
+  string clia_number = 7;
+  // F4: CLIA number of the referring lab.
+  string referring_clia_number = 8;
+  // BT: immunization batch number.
+  string immunization_batch_number = 9;
+}
+
+// PurchasedService is a PS1 segment: a service the provider bought from
+// someone else.
+message PurchasedService {
+  // PS101: who it was bought from.
+  string provider_id = 1;
+  // PS102: what the provider paid for it.
+  common.v1.Money charge = 2;
+}
+
+// LineDrug is loop 2410, beyond the NDC in ClaimLine.ndc.
+message LineDrug {
+  // CTP04: quantity, as sent.
+  string quantity = 1;
+  // CTP05-1: F2 international unit, GR gram, ME milligram, ML milliliter,
+  // UN unit.
+  string unit_code = 2;
+  // REF*XZ: prescription number.
+  string prescription_number = 3;
+  // REF*VY: link sequence number, tying the ingredients of a compound.
+  string link_sequence_number = 4;
+}
+
+// OtherPayerLineAdjudication is loop 2430: what another payer did with
+// this line.
+message OtherPayerLineAdjudication {
+  // SVD01: that payer's id, matching OtherInsurance.payer.id.
+  string payer_id = 1;
+  // SVD02: what it paid.
+  common.v1.Money paid = 2;
+  // SVD03: the procedure it adjudicated, which may differ from the one
+  // billed.
+  string procedure_code = 3;
+  // Its modifiers.
+  repeated string modifiers = 4;
+  // SVD03-7: its description.
+  string procedure_description = 5;
+  // SVD05: paid units, as sent.
+  string paid_units = 6;
+  // SVD06: the line this one was bundled into, if any.
+  int32 bundled_line_number = 7;
+  // CAS: its line adjustments.
+  repeated SubmittedAdjustment adjustments = 8;
+  // DTP*573: when it adjudicated or paid the line.
+  common.v1.Date adjudication_date = 9;
+  // AMT*EAF: what the patient still owes on the line after that payer.
+  common.v1.Money remaining_patient_liability = 10;
+}
+
+// FormIdentification is loop 2440: a supporting form and its answers.
+message FormIdentification {
+  // LQ01: AS4 form type, UT CMS durable medical equipment regional
+  // carrier certificate of medical necessity.
+  string qualifier = 1;
+  // LQ02: the form number.
+  string form_number = 2;
+  // FRM segments.
+  repeated FormAnswer answers = 3;
+}
+
+// FormAnswer is a FRM segment: a question number and its answer in one of
+// four forms.
+message FormAnswer {
+  // FRM01.
+  string question = 1;
+  // FRM02: Y or N.
+  string yes_no = 2;
+  // FRM03.
+  string text = 3;
+  // FRM04.
+  common.v1.Date date = 4;
+  // FRM05, as sent.
+  string percent = 5;
+}

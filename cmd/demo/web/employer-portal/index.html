@@ -133,7 +133,7 @@ tr.people td { background: var(--bg); padding: 4px 16px 12px 38px; }
 @media (max-width: 860px) { .person { grid-template-columns: 1fr; } }
 .acts { display: flex; gap: 5px; flex-wrap: wrap; }
 .empty { padding: 48px 20px; text-align: center; color: var(--muted); }
-body.shot .top .right a { display: none; }
+body.capture .top .right a { display: none; }
 .legend { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; margin-left: 8px; }
 .legend i { width: 18px; height: 8px; border-radius: 3px; background: var(--brand); }
 .legend i.cobra { background: var(--blue); margin-left: 8px; }
@@ -202,10 +202,9 @@ const usd = (cents) => "$" + (cents / 100).toLocaleString("en-US", { maximumFrac
 async function get(p) { const r = await fetch(p); if (!r.ok) throw new Error(await r.text()); return r.json(); }
 async function post(p, b) { const r = await fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }); if (!r.ok) throw new Error(await r.text()); return r.json(); }
 
-// ?shot, for a screenshot: the links to the other demos are left out. The
+// ?capture, for a screenshot (docs/demo-checklist.md): the links to the other demos are left out. The
 // menu stays whole, with what isn't built still marked.
-const SHOT = new URLSearchParams(location.search).has("shot");
-if (SHOT) document.body.classList.add("shot");
+if (new URLSearchParams(location.search).has("capture")) document.body.classList.add("capture");
 
 let V = null;             // the signed-in employer's view
 let ON = "";              // the roster's date, when it isn't today

@@ -277,7 +277,7 @@ func (s *Service) ProcessClaim(ctx context.Context, req *claimsv1.ProcessClaimRe
 	if c.GetId() == "" {
 		c.Id = ids.NewV7(s.Now())
 	}
-	// An API submitter that names the original of a replacement or void
+	// A submitter that names the original of a replacement or void by id
 	// links it; the link is an input that adjudication honors.
 	if c.GetOriginalClaimId() != "" && c.GetOriginalLink() == nil {
 		c.OriginalLink = &claimsv1.ClaimLink{ClaimId: c.GetOriginalClaimId(), LinkedBy: store.Actor(ctx), LinkedTime: timestamppb.New(s.Now())}
@@ -345,7 +345,7 @@ func (s *Service) register(ctx context.Context, c *claimsv1.Claim, reason string
 // number makes sure a claim has its number before it is first saved, and
 // returns the original its first run matched, if any.
 //
-// A provider's submission (837, API, portal, paper), corrections and
+// A provider's submission (837, portal, paper), corrections and
 // voids included, is a new claim with a new number: intake reserved it
 // with the rest of the file, or one is reserved now. Only adjustments
 // and voids we create are versions of an existing number, and they
